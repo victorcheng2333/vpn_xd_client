@@ -480,7 +480,9 @@ final class VPNManager {
         }
 
         if line.contains("Got CONNECT response") || line.contains("CSTP connected") {
-            if phase == .tunnel { markConnected(ip: assignedIP) } else { phase = .tunnel }
+            // First connect: wait for "Connected/Configured as <ip>" to report the IP.
+            // Recovery: the session already has its IP, so this alone means we're back.
+            if status == .recovering { markConnected(ip: assignedIP) } else { phase = .tunnel }
         }
         if let ip = Self.firstMatch(#"(?:Connected|Configured) as ([0-9A-Fa-f.:]+)"#, in: line) {
             markConnected(ip: ip)
