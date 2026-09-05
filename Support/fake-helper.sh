@@ -26,9 +26,14 @@ case "$1" in
         echo "Connected as 10.8.0.23, using SSL, with DTLS in progress" >&2
         echo "Configured as 10.8.0.23, with SSL connected and DTLS in progress" >&2
         echo $$ > "$PIDFILE"
+        trap 'echo "Got pause command" >&2; echo "Caller paused the connection" >&2; sleep 0.3; echo "CSTP connected. DPD 30, Keepalive 20" >&2; echo "Connected as 10.8.0.23, using SSL, with DTLS in progress" >&2' USR2
         trap 'echo "User cancelled (SIGINT); exiting." >&2; rm -f "$PIDFILE"; exit 0' INT
         trap 'echo "Session terminated by server; exiting." >&2; rm -f "$PIDFILE"; exit 1' TERM
         while true; do sleep 0.2; done
+        ;;
+    reconnect)
+        pid=$(cat "$PIDFILE" 2>/dev/null)
+        [ -n "$pid" ] && kill -USR2 "$pid" 2>/dev/null
         ;;
     disconnect)
         pid=$(cat "$PIDFILE" 2>/dev/null)

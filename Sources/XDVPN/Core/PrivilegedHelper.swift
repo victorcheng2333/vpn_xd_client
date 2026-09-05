@@ -17,7 +17,7 @@ enum HelperStatus: Equatable {
         case .unknown: return "检查中…"
         case .notInstalled: return "未授权"
         case .notAuthorized: return "授权无效"
-        case .outdated: return "已授权（助手有更新）"
+        case .outdated: return "已授权（助手需更新）"
         case .ready: return "已授权"
         }
     }
@@ -35,7 +35,7 @@ enum PrivilegedHelper {
     static let installPath = "/usr/local/libexec/xd-vpn-helper"
     static let sudoersPath = "/etc/sudoers.d/xd-vpn"
     static let pidFilePath = "/var/run/xd-vpn-openconnect.pid"
-    static let version = 1
+    static let version = 2
 
     // MARK: Helper script (installed verbatim)
 
@@ -46,7 +46,7 @@ enum PrivilegedHelper {
     # Installed to /usr/local/libexec/xd-vpn-helper (root:wheel 0755) and
     # whitelisted in /etc/sudoers.d/xd-vpn so the app can start/stop
     # openconnect without a password prompt. Only the commands below exist.
-    XD_VPN_HELPER_VERSION=1
+    XD_VPN_HELPER_VERSION=2
     PIDFILE=/var/run/xd-vpn-openconnect.pid
 
     find_openconnect() {
@@ -97,8 +97,20 @@ enum PrivilegedHelper {
                 echo "helper: cannot write $PIDFILE" >&2; exit 73
             fi
             # exec keeps our pid, so the pid file now points at openconnect.
+            # --reconnect-timeout: how long openconnect keeps retrying with the
+            # session cookie after a drop before giving up (then the app logs in again).
             exec "$oc" "$server" --protocol=anyconnect --passwd-on-stdin \
-                --user="$user" --non-inter ${extra[@]+"${extra[@]}"}
+                --user="$user" --non-inter --reconnect-timeout 60 ${extra[@]+"${extra[@]}"}
+            ;;
+        reconnect)
+            # SIGUSR2 makes openconnect drop and immediately re-establish the
+            # tunnel with its existing session (same IP, no re-login). Used
+            # after Wi-Fi switches / wake from sleep.
+            if pid=$(running_pid); then
+                kill -USR2 "$pid"
+            else
+                pkill -USR2 -x openconnect 2>/dev/null
+            fi
             ;;
         disconnect)
             sig=INT
@@ -111,7 +123,7 @@ enum PrivilegedHelper {
             rm -f "$PIDFILE"
             ;;
         *)
-            echo "usage: xd-vpn-helper version | connect <server> <user> [servercert] | disconnect [force]" >&2
+            echo "usage: xd-vpn-helper version | connect <server> <user> [servercert] | reconnect | disconnect [force]" >&2
             exit 64
             ;;
     esac
@@ -215,6 +227,13 @@ enum PrivilegedHelper {
     }
 
     // MARK: Runtime commands
+
+    /// Ask the running openconnect to re-establish the tunnel with its session cookie.
+    @discardableResult
+    static func reconnect() async -> ShellResult {
+        let cmd = command(["reconnect"])
+        return await Shell.run(cmd.executable, cmd.arguments, timeout: 10)
+    }
 
     @discardableResult
     static func disconnect(force: Bool = false) async -> ShellResult {

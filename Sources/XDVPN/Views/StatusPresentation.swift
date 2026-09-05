@@ -34,6 +34,12 @@ struct StatusPresentation {
             menuBarSymbol = "checkmark.shield.fill"
             title = "已连接"
             isAnimating = false
+        case .recovering:
+            tint = .orange
+            symbol = "arrow.triangle.2.circlepath"
+            menuBarSymbol = "shield.lefthalf.filled"
+            title = "恢复连接中"
+            isAnimating = true
         case .disconnecting:
             tint = .orange
             symbol = "shield.lefthalf.filled"

@@ -21,6 +21,7 @@ enum Snapshot {
             ("02-disconnected", .disconnected, nil, false),
             ("03-connecting", .connecting, nil, false),
             ("04-connected", .connected, "10.8.0.23", true),
+            ("04b-recovering", .recovering, "10.8.0.23", true),
             ("05-reconnecting", .waitingToReconnect(attempt: 2), nil, true),
             ("06-failed-auth", .failed(.authentication), nil, false),
             ("07-failed-cert", .failed(.certificate(pin: "pin-sha256:AbCdEf0123456789+/=")), nil, false),
@@ -94,5 +95,13 @@ enum ScriptDump {
             print(PrivilegedHelper.installScriptForLinting())
             exit(0)
         }
+    }
+}
+
+extension VPNManager {
+    /// Self-test only: the fake helper never matches the bundled script, so
+    /// pretend it is current to exercise the SIGUSR2 path.
+    func previewForceHelperReady() {
+        previewSet(status: status, ip: assignedIP, paused: autoConnectPaused)
     }
 }

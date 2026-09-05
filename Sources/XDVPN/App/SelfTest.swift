@@ -41,6 +41,18 @@ enum SelfTest {
         vpn.autoConnect = true
         check("auto-connect on → connects", timeout: 10) { vpn.status == .connected }
 
+        // Network change → SIGUSR2 kick keeps the session and comes back quickly.
+        vpn.previewForceHelperReady()
+        vpn.kickTunnel(reason: "test network change")
+        check("kick → recovering", timeout: 2) { vpn.status == .recovering }
+        check("kick → connected again (same session)", timeout: 5) { vpn.status == .connected && vpn.hasActiveSession }
+
+        // Full restart path (used when recovery times out).
+        vpn.restartSession()
+        check("restart → reconnects with a fresh login", timeout: 15) {
+            vpn.status == .connected && vpn.log.contains { $0.text == "重新登录 VPN" }
+        }
+
         // Simulate the server dropping the tunnel.
         if let text = try? String(contentsOfFile: pidFile, encoding: .utf8), let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
             kill(pid, SIGTERM)

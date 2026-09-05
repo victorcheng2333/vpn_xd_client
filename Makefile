@@ -9,10 +9,10 @@ run: app
 	open "$(APP)"
 
 install: app
-	@pkill -x XDVPN 2>/dev/null || true
 	rm -rf "/Applications/XD VPN.app"
 	cp -R "$(APP)" /Applications/
 	@echo "installed to /Applications/XD VPN.app"
+	@pgrep -x XDVPN >/dev/null && echo "(XD VPN is running: quit and reopen it to pick up the new build)" || true
 
 icon:
 	swift Support/make-icon.swift Support/AppIcon.icns

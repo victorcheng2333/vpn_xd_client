@@ -78,6 +78,8 @@ struct MenuPanelView: View {
             } else {
                 Text(vpn.profile.host)
             }
+        case .recovering:
+            Text("网络变化，正在恢复隧道")
         case .disconnecting:
             Text("正在关闭隧道")
         case .waitingToReconnect:
@@ -108,7 +110,7 @@ struct MenuPanelView: View {
         case .connecting, .waitingToReconnect:
             Button("取消") { vpn.disconnect() }
                 .buttonStyle(PillButtonStyle(tint: .orange))
-        case .connected:
+        case .connected, .recovering:
             Button("断开连接") { vpn.disconnect() }
                 .buttonStyle(PillButtonStyle(tint: .red))
         case .disconnecting:
@@ -120,7 +122,7 @@ struct MenuPanelView: View {
 
     @ViewBuilder
     private var statusCards: some View {
-        if vpn.status == .connected {
+        if vpn.status.hasTunnel {
             VStack(spacing: 6) {
                 DetailRow(label: "服务器", value: vpn.profile.server, monospaced: true)
                 DetailRow(label: "账户", value: vpn.profile.username)
@@ -129,6 +131,18 @@ struct MenuPanelView: View {
                 }
                 if vpn.isExternalSession {
                     DetailRow(label: "会话", value: "接管的外部 openconnect 进程")
+                }
+                if vpn.status == .recovering {
+                    HStack {
+                        Text("保持原会话与 IP，最多等 90 秒")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("直接重新登录") { vpn.restartSession() }
+                            .buttonStyle(.link)
+                            .font(.caption)
+                    }
+                    .padding(.top, 2)
                 }
             }
             .padding(12)

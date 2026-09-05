@@ -5,7 +5,8 @@ import Observation
 import ServiceManagement
 
 /// Owns the VPN state machine: connect/disconnect, auto-reconnect ("keep
-/// online"), log collection, helper status and login-item registration.
+/// online"), fast recovery after network changes, log collection, helper
+/// status and login-item registration.
 @MainActor
 @Observable
 final class VPNManager {
@@ -18,16 +19,22 @@ final class VPNManager {
         case disconnected
         case connecting
         case connected
+        /// openconnect is alive but re-establishing the tunnel (network change,
+        /// dead peer). Same session and IP once it comes back.
+        case recovering
         case disconnecting
         case waitingToReconnect(attempt: Int)
         case failed(Failure)
 
         var isBusy: Bool {
             switch self {
-            case .connecting, .disconnecting, .waitingToReconnect: return true
+            case .connecting, .disconnecting, .waitingToReconnect, .recovering: return true
             default: return false
             }
         }
+
+        /// Tunnel is up or being restored by a live openconnect process.
+        var hasTunnel: Bool { self == .connected || self == .recovering }
     }
 
     enum Failure: Equatable {
@@ -123,12 +130,17 @@ final class VPNManager {
     @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var connectTimeoutTask: Task<Void, Never>?
     @ObservationIgnored private var disconnectTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var recoveryTimeoutTask: Task<Void, Never>?
+    @ObservationIgnored private var wakeTask: Task<Void, Never>?
     @ObservationIgnored private var userRequestedDisconnect = false
+    @ObservationIgnored private var restartAfterExit = false
     @ObservationIgnored private var reconnectAttempt = 0
     @ObservationIgnored private var phase: Phase = .idle
     @ObservationIgnored private var detectedFailure: Failure?
     @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private var networkWatcher: NetworkWatcher?
     @ObservationIgnored private var networkWasReachable = true
+    @ObservationIgnored private var lastKick: Date = .distantPast
     @ObservationIgnored private var isSyncingLaunchAtLogin = false
     @ObservationIgnored private var started = false
     /// Test hook: bypasses the keychain (used by `--selftest`).
@@ -136,6 +148,10 @@ final class VPNManager {
 
     private static let maxLogEntries = 600
     private static let connectTimeout: TimeInterval = 90
+    /// If a cookie-based recovery has not produced a tunnel within this time,
+    /// give up on it and log in from scratch.
+    private static let recoveryTimeout: TimeInterval = 90
+    private static let kickCooldown: TimeInterval = 3
 
     // MARK: - Init / lifecycle
 
@@ -152,7 +168,7 @@ final class VPNManager {
         appendLog(.app, "XD VPN 已启动")
         hasStoredPassword = testPasswordOverride != nil || Keychain.exists()
         status = isConfigured ? .disconnected : .setupRequired
-        startNetworkMonitor()
+        startNetworkMonitors()
         observeSystemEvents()
 
         Task {
@@ -194,7 +210,7 @@ final class VPNManager {
 
         guard !hasActiveSession else { return }
         switch status {
-        case .connecting, .connected, .disconnecting: return
+        case .connecting, .connected, .recovering, .disconnecting: return
         default: break
         }
 
@@ -215,6 +231,7 @@ final class VPNManager {
         }
 
         userRequestedDisconnect = false
+        restartAfterExit = false
         detectedFailure = nil
         phase = .starting
         assignedIP = nil
@@ -263,6 +280,9 @@ final class VPNManager {
         nextRetryDate = nil
         connectTimeoutTask?.cancel()
         connectTimeoutTask = nil
+        recoveryTimeoutTask?.cancel()
+        recoveryTimeoutTask = nil
+        restartAfterExit = false
         if autoConnect { autoConnectPaused = true }
 
         guard hasActiveSession else {
@@ -285,6 +305,43 @@ final class VPNManager {
 
     func toggleConnection() {
         if hasActiveSession || status.isBusy { disconnect() } else { connect() }
+    }
+
+    /// Ask the live openconnect to drop and immediately re-establish the tunnel
+    /// with its session cookie (same IP, no re-login). Used after Wi‑Fi
+    /// switches, wake from sleep, or when the network comes back.
+    func kickTunnel(reason: String) {
+        guard phase == .tunnel, hasActiveSession else { return }
+        guard Date().timeIntervalSince(lastKick) > Self.kickCooldown else { return }
+        lastKick = Date()
+
+        guard helperStatus == .ready else {
+            // Old helper without the `reconnect` command: fall back to a full restart.
+            appendLog(.app, "\(reason)，授权助手版本较旧，改为重新登录")
+            restartSession()
+            return
+        }
+        appendLog(.app, "\(reason)，立即恢复隧道")
+        enterRecovering()
+        Task { await PrivilegedHelper.reconnect() }
+    }
+
+    /// Tear the current session down and log in again (new IP).
+    func restartSession() {
+        guard hasActiveSession else { return }
+        appendLog(.app, "重新登录 VPN")
+        restartAfterExit = true
+        userRequestedDisconnect = false
+        recoveryTimeoutTask?.cancel()
+        recoveryTimeoutTask = nil
+        status = .disconnecting
+        Task { await PrivilegedHelper.disconnect() }
+        disconnectTimeoutTask?.cancel()
+        disconnectTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard !Task.isCancelled, let self, self.hasActiveSession else { return }
+            await PrivilegedHelper.disconnect(force: true)
+        }
     }
 
     /// Accept the certificate pin openconnect suggested and try again.
@@ -363,6 +420,7 @@ final class VPNManager {
         let lower = line.lowercased()
         let looksLikeError = line.hasPrefix("sudo:") || line.hasPrefix("helper:")
             || lower.contains("fail") || lower.contains("error") || lower.contains("rejected")
+            || lower.contains("dead peer")
         appendLog(looksLikeError ? .error : .output, line)
 
         if line.hasPrefix("sudo:") {
@@ -409,25 +467,60 @@ final class VPNManager {
         {
             phase = .authenticating
         }
+
+        // Tunnel lost while the process stays alive → openconnect is recovering it.
+        if phase == .tunnel, status == .connected,
+           lower.contains("dead peer") || line.contains("Got pause command")
+            || line.contains("Caller paused the connection")
+            || line.contains("Failed to reconnect")
+            || line.contains("Rehandshake failed")
+        {
+            appendLog(.app, "隧道中断，openconnect 正在恢复")
+            enterRecovering()
+        }
+
         if line.contains("Got CONNECT response") || line.contains("CSTP connected") {
-            phase = .tunnel
+            if phase == .tunnel { markConnected(ip: assignedIP) } else { phase = .tunnel }
         }
         if let ip = Self.firstMatch(#"(?:Connected|Configured) as ([0-9A-Fa-f.:]+)"#, in: line) {
             markConnected(ip: ip)
         }
+        if line.contains("Established DTLS connection"), status == .recovering {
+            markConnected(ip: assignedIP)
+        }
     }
 
-    private func markConnected(ip: String) {
+    private func markConnected(ip: String?) {
         phase = .tunnel
         connectTimeoutTask?.cancel()
         connectTimeoutTask = nil
-        assignedIP = ip
-        if status != .connected {
+        recoveryTimeoutTask?.cancel()
+        recoveryTimeoutTask = nil
+        if let ip { assignedIP = ip }
+        switch status {
+        case .connected:
+            break
+        case .recovering:
+            status = .connected
+            appendLog(.app, "隧道已恢复")
+        default:
             connectedSince = Date()
             status = .connected
             reconnectAttempt = 0
             nextRetryDate = nil
-            appendLog(.app, "已连接，分配 IP \(ip)")
+            appendLog(.app, "已连接，分配 IP \(ip ?? "未知")")
+        }
+    }
+
+    private func enterRecovering() {
+        guard status != .recovering else { return }
+        status = .recovering
+        recoveryTimeoutTask?.cancel()
+        recoveryTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.recoveryTimeout))
+            guard !Task.isCancelled, let self, self.status == .recovering else { return }
+            self.appendLog(.error, "隧道恢复超时，重新登录")
+            self.restartSession()
         }
     }
 
@@ -440,13 +533,17 @@ final class VPNManager {
         connectTimeoutTask = nil
         disconnectTimeoutTask?.cancel()
         disconnectTimeoutTask = nil
+        recoveryTimeoutTask?.cancel()
+        recoveryTimeoutTask = nil
 
         let endedPhase = phase
         let wasConnected = endedPhase == .tunnel
         let wasExternal = isExternalSession
         let failure = detectedFailure
+        let restart = restartAfterExit
         phase = .idle
         detectedFailure = nil
+        restartAfterExit = false
         isExternalSession = false
         connectedSince = nil
         assignedIP = nil
@@ -457,6 +554,12 @@ final class VPNManager {
             userRequestedDisconnect = false
             status = .disconnected
             appendLog(.app, "已断开")
+            return
+        }
+
+        if restart {
+            status = .disconnected
+            connect(trigger: .automatic)
             return
         }
 
@@ -511,6 +614,16 @@ final class VPNManager {
         }
     }
 
+    /// Network became usable again / changed: recover the tunnel or retry right away.
+    private func networkBecameUsable(reason: String) {
+        reconnectAttempt = 0
+        if phase == .tunnel {
+            kickTunnel(reason: reason)
+        } else {
+            reconnectNowIfWaiting(reason: reason)
+        }
+    }
+
     private func autoConnectDidChange() {
         if autoConnect {
             autoConnectPaused = false
@@ -545,6 +658,8 @@ final class VPNManager {
 
     private func adoptExternalSessionIfAny() async {
         guard session == nil, externalPID == nil else { return }
+        // Never adopt real processes while running against a fake helper (--selftest).
+        guard PrivilegedHelper.overridePath == nil else { return }
         guard let pid = await Self.findRunningOpenConnect() else { return }
         externalPID = pid
         isExternalSession = true
@@ -608,7 +723,8 @@ final class VPNManager {
 
     // MARK: - System events
 
-    private func startNetworkMonitor() {
+    private func startNetworkMonitors() {
+        // Coarse reachability (any usable path at all).
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
             let reachable = path.status == .satisfied
@@ -618,26 +734,50 @@ final class VPNManager {
         }
         monitor.start(queue: DispatchQueue(label: "xdvpn.network"))
         pathMonitor = monitor
+
+        // Fine-grained: which physical network we are on (Wi‑Fi switch etc.).
+        let watcher = NetworkWatcher()
+        watcher.onChange = { [weak self] reason in
+            self?.networkBecameUsable(reason: reason)
+        }
+        watcher.start()
+        networkWatcher = watcher
     }
 
     private func networkChanged(reachable: Bool) {
         let cameBack = reachable && !networkWasReachable
         networkWasReachable = reachable
         if cameBack {
-            reconnectAttempt = 0
-            reconnectNowIfWaiting(reason: "网络已恢复")
+            networkBecameUsable(reason: "网络已恢复")
+        } else if !reachable, phase == .tunnel, status == .connected {
+            appendLog(.app, "网络不可用，等待恢复")
         }
     }
 
     private func observeSystemEvents() {
-        NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                MainActor.assumeIsolated {
-                    self?.reconnectAttempt = 0
-                    self?.reconnectNowIfWaiting(reason: "系统已唤醒")
-                }
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.systemDidWake() }
+            }
+        }
+        center.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.appendLog(.app, "系统进入睡眠") }
+            }
+        }
+    }
+
+    private func systemDidWake() {
+        appendLog(.app, "系统已唤醒")
+        wakeTask?.cancel()
+        wakeTask = Task { [weak self] in
+            // Give the Wi‑Fi a moment to re-associate. If the path monitor
+            // reports the network coming back first, that already triggers recovery.
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled, let self else { return }
+            if self.networkWasReachable {
+                self.networkBecameUsable(reason: "系统已唤醒")
             }
         }
     }
@@ -666,7 +806,7 @@ final class VPNManager {
     func previewSet(status: Status, ip: String?, paused: Bool) {
         self.status = status
         assignedIP = ip
-        connectedSince = status == .connected ? Date().addingTimeInterval(-754) : nil
+        connectedSince = status.hasTunnel ? Date().addingTimeInterval(-754) : nil
         nextRetryDate = {
             if case .waitingToReconnect = status { return Date().addingTimeInterval(6) }
             return nil
