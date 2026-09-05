@@ -4,6 +4,10 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         VPNManager.shared.start()
+        // Pop the panel when the user opens the app; stay quiet at login.
+        if !Self.launchedAsLoginItem {
+            MenuBarPanel.openAfterLaunch()
+        }
         ensureEditMenu()
     }
 
@@ -41,5 +45,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = app.mainMenu ?? NSMenu()
         menu.addItem(item)
         app.mainMenu = menu
+    }
+    private static var launchedAsLoginItem: Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              event.eventID == kAEOpenApplication,
+              let prop = event.paramDescriptor(forKeyword: keyAEPropData)
+        else { return false }
+        return prop.enumCodeValue == keyAELaunchedAsLogInItem
     }
 }
