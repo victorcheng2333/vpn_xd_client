@@ -220,12 +220,13 @@ struct DashboardView: View {
                     Text("自动连接").font(.system(size: 13, weight: .semibold))
                     Text("AUTO CONNECT").font(.system(size: 8, weight: .medium, design: .monospaced)).tracking(0.8).foregroundStyle(Palette.muted)
                 }
-                Text("启动时连接，唤醒或切换 Wi-Fi 后自动恢复。") .font(.system(size: 10)).foregroundStyle(Palette.muted)
+                Text("启动时连接、掉线后重试；手动断开后保持断开。") .font(.system(size: 10)).foregroundStyle(Palette.muted)
             }
             Spacer(minLength: 5)
             Toggle("自动连接", isOn: Binding(get: { model.autoConnect }, set: { model.setAutoConnect($0) }))
                 .labelsHidden().toggleStyle(.switch).tint(Palette.green).controlSize(.regular)
-                .disabled(model.state == .disconnecting).accessibilityLabel("Auto Connect 自动连接")
+                .accessibilityLabel("Auto Connect 自动连接")
+                .help("仅修改自动连接配置。手动断开后，需再次点击连接或重启应用才会连接。")
         }.padding(19).background(Color(hex: 0xEDF1E9), in: RoundedRectangle(cornerRadius: 17))
             .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color(hex: 0xE1E8DD)))
     }

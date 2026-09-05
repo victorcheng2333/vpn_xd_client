@@ -50,6 +50,9 @@ struct ActivityEntry: Identifiable {
     private var retryTask: Task<Void, Never>?
     private var connectTask: Task<Void, Never>?
     private var generation = UUID()
+    // Current-session intent is independent of the saved Auto Connect preference.
+    // Manual cancellation and terminal errors suspend it until another connect
+    // action or the next application launch.
     private var desiredConnection = false
     private var observers: [NSObjectProtocol] = []
     private var sleeping = false
@@ -105,10 +108,10 @@ struct ActivityEntry: Identifiable {
         }
         log("XD VPN 已就绪。")
         if autoConnect && resumeAutomatically {
+            let startupGeneration = generation
             Task { @MainActor [weak self] in
-                guard let self else { return }
-                if self.readyToConnect { self.connect() }
-                else { self.setAutoConnect(false) }
+                guard let self, self.autoConnect, self.generation == startupGeneration else { return }
+                self.connect()
             }
         }
     }
@@ -137,7 +140,7 @@ struct ActivityEntry: Identifiable {
     func forgetPassword() throws {
         guard canEdit, let profile else { return }
         try credentials.delete(profile.credentialAccount)
-        hasPassword = false; setAutoConnect(false)
+        hasPassword = false
         toast = "已删除保存的密码"
         log("已从钥匙串删除 VPN 密码。")
     }
@@ -145,17 +148,17 @@ struct ActivityEntry: Identifiable {
     func refreshEngine() { engineAvailable = engineLocator() != nil }
 
     func setAutoConnect(_ enabled: Bool) {
-        if enabled && !readyToConnect { page = .profile; toast = "先保存 VPN 配置，即可开启自动连接"; return }
+        guard autoConnect != enabled else { return }
         autoConnect = enabled
         defaults.set(enabled, forKey: "autoConnect")
         if enabled {
-            log("Auto Connect 已开启。应用运行时将自动保持连接。")
-            connect()
+            log("Auto Connect 已开启。下次启动时自动连接，连接中掉线后自动重试；手动断开后保持断开。")
             if state == .reconnecting { enterRecovering() }
         }
         else {
             retryTask?.cancel(); cancelRecoveryDeadline(); retryAt = nil
             if state == .waiting { state = .idle; desiredConnection = false }
+            if restartAfterStop { desiredConnection = false; cancelRecovery() }
         }
     }
 
@@ -193,10 +196,8 @@ struct ActivityEntry: Identifiable {
         desiredConnection = false; generation = UUID()
         connectTask?.cancel(); retryTask?.cancel(); retryAt = nil
         cancelRecovery()
-        // An explicit disconnect also turns off Auto Connect, so it stays off.
-        autoConnect = false; defaults.set(false, forKey: "autoConnect")
         if wasAuthorizing { bridge.shutdown(); resetConnection(); return }
-        if bridge.isReady && [.connected, .connecting, .reconnecting].contains(state) {
+        if bridge.isReady && [.connected, .connecting, .reconnecting, .disconnecting].contains(state) {
             state = .disconnecting
             do { try bridge.send(.init(.disconnect)) }
             catch { bridge.shutdown(); resetConnection() }
@@ -220,10 +221,24 @@ struct ActivityEntry: Identifiable {
         case .reconnecting:
             enterRecovering()
         case .failure:
+            if desiredConnection, autoConnect, tunnelEstablished,
+               state == .reconnecting || restartAfterStop,
+               event.message == EngineOutput.networkConfigurationFailureMessage {
+                // A previously working tunnel can lose its interface/routes on
+                // Wi-Fi change. Version 2 helpers stop it as a fatal error, but
+                // a fresh login can rebuild the configuration. Wait for their
+                // stopped event even when it carries retryable: false.
+                issue = nil
+                retryTask?.cancel(); retryAt = nil
+                recoveryTask?.cancel(); recoveryTask = nil
+                cancelRecoveryDeadline()
+                restartAfterStop = true; state = .disconnecting
+                log("恢复现有会话时网络配置失败，等待旧进程清理后立即重新登录。")
+                break
+            }
             issue = event.message
             desiredConnection = false
             cancelRecovery()
-            autoConnect = false; defaults.set(false, forKey: "autoConnect")
             retryTask?.cancel(); retryAt = nil
             // Keep controls locked until OpenConnect has actually exited.
             state = .disconnecting
@@ -384,7 +399,6 @@ struct ActivityEntry: Identifiable {
     private func fail(_ message: String) {
         issue = message; state = .failed; desiredConnection = false
         cancelRecovery(); tunnelEstablished = false
-        autoConnect = false; defaults.set(false, forKey: "autoConnect")
         retryTask?.cancel(); retryAt = nil; connectedAt = nil; address = nil
         log(message, error: true)
     }
@@ -437,7 +451,6 @@ struct ActivityEntry: Identifiable {
         do {
             bridge.shutdown()
             try await PrivilegeManager.uninstall()
-            setAutoConnect(false)
             await refreshPrivileges()
             toast = "已移除系统授权"
             log("已移除本客户端的系统授权。")

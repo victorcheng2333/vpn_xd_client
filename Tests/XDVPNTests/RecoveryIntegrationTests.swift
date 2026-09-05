@@ -59,6 +59,7 @@ import VPNCore
                              startMonitoring: false, recoveryTimeout: .milliseconds(150), engineLocator: { executable })
         try model.save(VPNProfile(server: "vpn.example.invalid", username: "test"), password: "")
         model.setAutoConnect(true)
+        model.connect()
         let relogged = await waitUntil { model.state == .connected && model.address == "10.8.0.2" }
         XCTAssertTrue(relogged, "Expected a fresh login after the first child's spontaneous recovery timed out")
         guard relogged else { return }
@@ -70,7 +71,8 @@ import VPNCore
         model.physicalNetworkChanged(); model.systemDidWake()
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertEqual(try String(contentsOfFile: folder + "/count", encoding: .utf8), "2\n")
-        XCTAssertFalse(model.autoConnect)
+        XCTAssertTrue(model.autoConnect)
+        XCTAssertTrue(defaults.bool(forKey: "autoConnect"))
     }
 
     private func waitUntil(_ condition: () -> Bool) async -> Bool {

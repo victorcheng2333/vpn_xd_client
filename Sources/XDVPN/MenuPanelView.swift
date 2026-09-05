@@ -46,13 +46,12 @@ struct MenuPanelView: View {
                 Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Palette.green)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("自动连接").font(.system(size: 12, weight: .semibold))
-                    Text("掉线和唤醒后自动恢复").font(.system(size: 10)).foregroundStyle(Palette.muted)
+                    Text("启动时连接，手动断开后保持断开").font(.system(size: 10)).foregroundStyle(Palette.muted)
                 }
                 Spacer()
-                Toggle("自动连接", isOn: Binding(get: { model.autoConnect }, set: {
-                    if model.privilegeStatus != .ready { show(.authorization) }
-                    else { model.setAutoConnect($0); if !model.readyToConnect { show(.profile) } }
-                })).labelsHidden().toggleStyle(.switch).tint(Palette.green).controlSize(.small)
+                Toggle("自动连接", isOn: Binding(get: { model.autoConnect }, set: { model.setAutoConnect($0) }))
+                    .labelsHidden().toggleStyle(.switch).tint(Palette.green).controlSize(.small)
+                    .help("仅修改自动连接配置。手动断开后，需再次点击连接或重启应用才会连接。")
             }.padding(15).background(Palette.mint.opacity(0.35), in: RoundedRectangle(cornerRadius: 13))
             HStack {
                 Button { show(.authorization) } label: {
