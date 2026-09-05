@@ -40,6 +40,7 @@ brew install openconnect
 - 选择「退出并断开」或按 Cmd-Q，会立即移除本应用菜单栏图标并退出。权限助手收到 shutdown／通道关闭后独立清理自己启动的 OpenConnect，完成后退出；不依赖 UI 等待最后一条状态回执。保留 Auto Connect 偏好供下次启动使用。
 - 关闭窗口（红色 ×）继续留在菜单栏；这与退出应用不同。应用有单实例保护，重复打开同一客户端不会再创建菜单图标。其他 bundle ID 的同名 VPN 应用独立运行。
 - Auto Connect 不是开机启动功能；本版未添加登录启动开关。
+- 偏好与本次连接意图分离的设计说明见 [docs/design/2026-09-05-auto-connect-preference.md](docs/design/2026-09-05-auto-connect-preference.md)。
 
 ## 配置与密码
 
