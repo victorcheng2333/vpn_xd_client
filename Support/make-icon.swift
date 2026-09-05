@@ -1,4 +1,4 @@
-// Generates AppIcon.icns: a gradient squircle with a white shield.
+// Generates AppIcon.icns: deep-blue squircle, layered brand shield, check mark.
 // Usage: swift Support/make-icon.swift Support/AppIcon.icns
 import AppKit
 
@@ -7,70 +7,117 @@ let iconset = URL(fileURLWithPath: output).deletingPathExtension().appendingPath
 try? FileManager.default.removeItem(at: iconset)
 try FileManager.default.createDirectory(at: iconset, withIntermediateDirectories: true)
 
-func draw(size: CGFloat) {
-    let rect = NSRect(x: 0, y: 0, width: size, height: size)
-    NSColor.clear.setFill()
-    rect.fill()
+func rgb(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
+    NSColor(calibratedRed: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
+}
 
-    // macOS-style rounded square inset like Apple's template.
-    let inset = size * 0.085
-    let square = rect.insetBy(dx: inset, dy: inset)
-    let radius = square.width * 0.225
-    let path = NSBezierPath(roundedRect: square, xRadius: radius, yRadius: radius)
+/// Brand shield in y-up coordinates (same geometry as ShieldShape in the app).
+func shieldPath(_ rect: NSRect) -> NSBezierPath {
+    let p = NSBezierPath()
+    let w = rect.width, h = rect.height
+    let top = rect.maxY, bottom = rect.minY, left = rect.minX, right = rect.maxX, midX = rect.midX
+    let r = w * 0.16
+    p.move(to: NSPoint(x: left + r, y: top))
+    p.line(to: NSPoint(x: right - r, y: top))
+    p.curve(to: NSPoint(x: right, y: top - r), controlPoint1: NSPoint(x: right, y: top), controlPoint2: NSPoint(x: right, y: top))
+    p.line(to: NSPoint(x: right, y: top - h * 0.50))
+    p.curve(to: NSPoint(x: midX, y: bottom),
+            controlPoint1: NSPoint(x: right, y: top - h * 0.80),
+            controlPoint2: NSPoint(x: midX + w * 0.24, y: bottom + h * 0.05))
+    p.curve(to: NSPoint(x: left, y: top - h * 0.50),
+            controlPoint1: NSPoint(x: midX - w * 0.24, y: bottom + h * 0.05),
+            controlPoint2: NSPoint(x: left, y: top - h * 0.80))
+    p.line(to: NSPoint(x: left, y: top - r))
+    p.curve(to: NSPoint(x: left + r, y: top), controlPoint1: NSPoint(x: left, y: top), controlPoint2: NSPoint(x: left, y: top))
+    p.close()
+    return p
+}
 
-    let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.28)
-    shadow.shadowBlurRadius = size * 0.035
-    shadow.shadowOffset = NSSize(width: 0, height: -size * 0.012)
+func withShadow(color: NSColor, blur: CGFloat, offset: NSSize, _ body: () -> Void) {
     NSGraphicsContext.saveGraphicsState()
+    let shadow = NSShadow()
+    shadow.shadowColor = color
+    shadow.shadowBlurRadius = blur
+    shadow.shadowOffset = offset
     shadow.set()
-    NSColor.black.setFill()
-    path.fill()
+    body()
     NSGraphicsContext.restoreGraphicsState()
+}
 
-    let gradient = NSGradient(colors: [
-        NSColor(calibratedRed: 0.20, green: 0.55, blue: 1.00, alpha: 1),
-        NSColor(calibratedRed: 0.13, green: 0.30, blue: 0.92, alpha: 1),
-        NSColor(calibratedRed: 0.36, green: 0.16, blue: 0.80, alpha: 1),
-    ])!
-    gradient.draw(in: path, angle: -65)
-
-    // Soft highlight in the top-left.
+func clipped(to path: NSBezierPath, _ body: () -> Void) {
     NSGraphicsContext.saveGraphicsState()
     path.addClip()
-    let glow = NSGradient(colors: [NSColor.white.withAlphaComponent(0.28), NSColor.white.withAlphaComponent(0)])!
-    glow.draw(fromCenter: NSPoint(x: square.minX + square.width * 0.25, y: square.maxY - square.height * 0.15),
-              radius: 0,
-              toCenter: NSPoint(x: square.minX + square.width * 0.25, y: square.maxY - square.height * 0.15),
-              radius: square.width * 0.9,
-              options: [])
+    body()
     NSGraphicsContext.restoreGraphicsState()
+}
 
-    // Shield symbol, tinted white.
-    let symbolSize = size * 0.50
-    let config = NSImage.SymbolConfiguration(pointSize: symbolSize, weight: .semibold)
-    guard let symbol = NSImage(systemSymbolName: "lock.shield.fill", accessibilityDescription: nil)?
-        .withSymbolConfiguration(config) else { return }
-    let symbolRect = NSRect(
-        x: rect.midX - symbol.size.width / 2,
-        y: rect.midY - symbol.size.height / 2,
-        width: symbol.size.width,
-        height: symbol.size.height
-    )
-    let tinted = NSImage(size: symbol.size, flipped: false) { dst in
-        symbol.draw(in: dst)
-        NSColor.white.set()
-        dst.fill(using: .sourceAtop)
-        return true
+func draw(size: CGFloat) {
+    let k = size / 1024
+    NSColor.clear.setFill()
+    NSRect(x: 0, y: 0, width: size, height: size).fill()
+
+    // Squircle (Apple's 824pt grid inside the 1024 canvas): light, glassy.
+    let square = NSRect(x: 100 * k, y: 100 * k, width: 824 * k, height: 824 * k)
+    let squircle = NSBezierPath(roundedRect: square, xRadius: 184 * k, yRadius: 184 * k)
+
+    withShadow(color: NSColor.black.withAlphaComponent(0.22), blur: 24 * k, offset: NSSize(width: 0, height: -10 * k)) {
+        NSColor.white.setFill()
+        squircle.fill()
     }
-    let symbolShadow = NSShadow()
-    symbolShadow.shadowColor = NSColor.black.withAlphaComponent(0.25)
-    symbolShadow.shadowBlurRadius = size * 0.02
-    symbolShadow.shadowOffset = NSSize(width: 0, height: -size * 0.01)
-    NSGraphicsContext.saveGraphicsState()
-    symbolShadow.set()
-    tinted.draw(in: symbolRect)
-    NSGraphicsContext.restoreGraphicsState()
+    NSGradient(colorsAndLocations:
+        (rgb(0xFFFFFF), 0.0), (rgb(0xF4F6FA), 0.55), (rgb(0xE3E8F0), 1.0))!
+        .draw(in: squircle, angle: -90)
+    clipped(to: squircle) {
+        // Soft light from the top-left and a faint cool wash at the bottom.
+        NSGradient(colors: [NSColor.white.withAlphaComponent(0.9), NSColor.white.withAlphaComponent(0)])!
+            .draw(fromCenter: NSPoint(x: 330 * k, y: 840 * k), radius: 0,
+                  toCenter: NSPoint(x: 330 * k, y: 840 * k), radius: 640 * k, options: [])
+        NSGradient(colors: [rgb(0x9FB6DA, 0.28), rgb(0x9FB6DA, 0)])!
+            .draw(in: NSRect(x: square.minX, y: square.minY, width: square.width, height: square.height * 0.42), angle: 90)
+    }
+    // Hairline edge for definition on light backgrounds.
+    let edge = NSBezierPath(roundedRect: square.insetBy(dx: 1.5 * k, dy: 1.5 * k), xRadius: 182 * k, yRadius: 182 * k)
+    edge.lineWidth = 3 * k
+    NSColor.black.withAlphaComponent(0.06).setStroke()
+    edge.stroke()
+
+    // Shield: blue gradient, glossy top, soft blue shadow.
+    let shield = NSRect(x: 262 * k, y: 206 * k, width: 500 * k, height: 590 * k)
+    let shieldPathOuter = shieldPath(shield)
+    withShadow(color: rgb(0x1A4FD6, 0.35), blur: 36 * k, offset: NSSize(width: 0, height: -18 * k)) {
+        rgb(0x2A6BF2).setFill()
+        shieldPathOuter.fill()
+    }
+    NSGradient(colorsAndLocations: (rgb(0x62A8FF), 0.0), (rgb(0x2E71F5), 0.55), (rgb(0x1B4FD8), 1.0))!
+        .draw(in: shieldPathOuter, angle: -90)
+    clipped(to: shieldPathOuter) {
+        NSGradient(colors: [NSColor.white.withAlphaComponent(0.30), NSColor.white.withAlphaComponent(0)])!
+            .draw(in: NSRect(x: shield.minX, y: shield.maxY - shield.height * 0.48, width: shield.width, height: shield.height * 0.48), angle: -90)
+        NSGradient(colors: [NSColor.black.withAlphaComponent(0.16), NSColor.black.withAlphaComponent(0)])!
+            .draw(in: NSRect(x: shield.minX, y: shield.minY, width: shield.width, height: shield.height * 0.4), angle: 90)
+        // Inner rim highlight.
+        let rim = shieldPath(shield.insetBy(dx: 5 * k, dy: 5 * k))
+        rim.lineWidth = 8 * k
+        NSColor.white.withAlphaComponent(0.22).setStroke()
+        rim.stroke()
+    }
+
+    // Check mark.
+    let box = NSRect(x: shield.minX + shield.width * 0.17, y: shield.minY + shield.height * 0.30,
+                     width: shield.width * 0.66, height: shield.height * 0.48)
+    let check = NSBezierPath()
+    check.move(to: NSPoint(x: box.minX + box.width * 0.12, y: box.minY + box.height * 0.50))
+    check.line(to: NSPoint(x: box.minX + box.width * 0.40, y: box.minY + box.height * 0.22))
+    check.line(to: NSPoint(x: box.minX + box.width * 0.90, y: box.minY + box.height * 0.80))
+    check.lineWidth = 54 * k
+    check.lineCapStyle = .round
+    check.lineJoinStyle = .round
+    withShadow(color: rgb(0x0B2F8A, 0.35), blur: 12 * k, offset: NSSize(width: 0, height: -6 * k)) {
+        NSColor.white.setStroke()
+        check.stroke()
+    }
 }
 
 func png(pixels: Int) -> Data {
@@ -97,6 +144,8 @@ let entries: [(String, Int)] = [
 for (name, pixels) in entries {
     try png(pixels: pixels).write(to: iconset.appendingPathComponent("\(name).png"))
 }
+// Keep a 256px preview next to the icns for quick inspection.
+try png(pixels: 256).write(to: URL(fileURLWithPath: output).deletingLastPathComponent().appendingPathComponent("AppIcon-preview.png"))
 
 let iconutil = Process()
 iconutil.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")

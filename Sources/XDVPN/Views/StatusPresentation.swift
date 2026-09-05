@@ -11,49 +11,49 @@ struct StatusPresentation {
     init(status: VPNManager.Status) {
         switch status {
         case .setupRequired:
-            tint = .secondary
+            tint = Theme.idle
             symbol = "shield"
             menuBarSymbol = "shield.slash"
             title = "需要设置"
             isAnimating = false
         case .disconnected:
-            tint = Color(nsColor: .secondaryLabelColor)
+            tint = Theme.idle
             symbol = "shield.slash"
             menuBarSymbol = "shield.slash"
             title = "未连接"
             isAnimating = false
         case .connecting:
-            tint = .orange
+            tint = Theme.transitional
             symbol = "shield.lefthalf.filled"
             menuBarSymbol = "shield.lefthalf.filled"
             title = "正在连接"
             isAnimating = true
         case .connected:
-            tint = .green
+            tint = Theme.connected
             symbol = "checkmark.shield.fill"
             menuBarSymbol = "checkmark.shield.fill"
             title = "已连接"
             isAnimating = false
         case .recovering:
-            tint = .orange
+            tint = Theme.transitional
             symbol = "arrow.triangle.2.circlepath"
             menuBarSymbol = "shield.lefthalf.filled"
             title = "恢复连接中"
             isAnimating = true
         case .disconnecting:
-            tint = .orange
+            tint = Theme.transitional
             symbol = "shield.lefthalf.filled"
             menuBarSymbol = "shield.lefthalf.filled"
             title = "正在断开"
             isAnimating = true
         case .waitingToReconnect(let attempt):
-            tint = .orange
+            tint = Theme.transitional
             symbol = "arrow.triangle.2.circlepath"
             menuBarSymbol = "shield.lefthalf.filled"
             title = "等待重连（第 \(attempt) 次）"
             isAnimating = true
         case .failed:
-            tint = .red
+            tint = Theme.danger
             symbol = "exclamationmark.shield.fill"
             menuBarSymbol = "exclamationmark.shield.fill"
             title = "连接失败"

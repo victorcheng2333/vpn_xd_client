@@ -145,6 +145,8 @@ final class VPNManager {
     @ObservationIgnored private var started = false
     /// Test hook: bypasses the keychain (used by `--selftest`).
     @ObservationIgnored var testPasswordOverride: String?
+    /// Preview hook (`--snapshot`): state is set directly, never act on it.
+    @ObservationIgnored var isPreview = false
 
     private static let maxLogEntries = 600
     private static let connectTimeout: TimeInterval = 90
@@ -200,6 +202,7 @@ final class VPNManager {
     // MARK: - Public actions
 
     func connect(trigger: Trigger = .user) {
+        guard !isPreview else { return }
         reconnectTask?.cancel()
         reconnectTask = nil
         nextRetryDate = nil
@@ -627,6 +630,7 @@ final class VPNManager {
     }
 
     private func autoConnectDidChange() {
+        guard !isPreview else { return }
         if autoConnect {
             autoConnectPaused = false
             appendLog(.app, "自动连接已开启")
@@ -660,6 +664,8 @@ final class VPNManager {
 
     private func adoptExternalSessionIfAny() async {
         guard session == nil, externalPID == nil else { return }
+        // Never grab a real openconnect while running against the fake helper.
+        guard PrivilegedHelper.overridePath == nil else { return }
         // Never adopt real processes while running against a fake helper (--selftest).
         guard PrivilegedHelper.overridePath == nil else { return }
         guard let pid = await Self.findRunningOpenConnect() else { return }

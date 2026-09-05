@@ -4,12 +4,15 @@
 底层还是 [openconnect](https://www.infradead.org/openconnect/)，只是把“记住账号密码、一键连接、掉线自动重连”做成了一个原生 SwiftUI 应用。
 
 <p align="center">
-  <img src="docs/panel-connected.png" width="300" alt="已连接">
-  <img src="docs/panel-disconnected.png" width="300" alt="未连接">
+  <img src="docs/app-icon.png" width="96" alt="图标"><br>
+  <img src="docs/window-connected.png" width="300" alt="主窗口">
+  <img src="docs/panel-connected.png" width="260" alt="菜单栏面板">
+  <img src="docs/panel-disconnected.png" width="260" alt="未连接">
 </p>
 
 ## 功能
 
+- **主窗口 + 菜单栏**：手动打开应用时显示连接窗口；开机自启时安静地待在菜单栏。菜单栏图标是自绘的盾牌（未连接描边 / 连接中呼吸点 / 已连接勾 / 失败叹号），点开是同一套面板。
 - **一个 profile**：服务器、用户名保存在应用配置里，密码只存 macOS 钥匙串。
 - **连接 / 断开**：菜单栏图标随状态变化（未连接 / 连接中 / 已连接 / 失败），面板显示 VPN IP 和在线时长。
 - **自动连接（保持在线）**：开启后启动即连；隧道断开、网络恢复、系统唤醒都会自动重连（3s → 6s → … → 60s 退避）。
@@ -65,6 +68,10 @@ helper 脚本内嵌在应用里；应用升级后如果脚本有变化，「系�
 | 手动点「断开」 | 自动重连暂停，点「连接」后恢复 |
 | 密码错误 | 停下并提示，不重试 |
 
+## 设计
+
+遵循 macOS HIG：系统材质（菜单栏面板用系统 popover 材质，主窗口用 `NSVisualEffectView`）、白色半透明模块加发丝线与柔和投影、语义色（系统绿 / 橙 / 红、跟随用户强调色）、SF 字体与原生开关。所有颜色都是语义色，深色模式自动适配。
+
 ## 项目结构
 
 ```
@@ -77,7 +84,7 @@ Sources/XDVPN
 │   ├── PrivilegedHelper.swift   内嵌的 root helper 脚本、安装 / 卸载、状态检查
 │   ├── Keychain.swift           钥匙串读写
 │   └── VPNProfile.swift
-└── Views/         菜单栏面板、设置窗口（账户 / 系统授权 / 日志 / 关于）
+└── Views/         StatusPanelView（面板 / 主窗口共用）、ConnectionOrb、Theme、MenuBarIcon、设置窗口
 Support/           Info.plist、图标生成脚本、fake-helper.sh（测试用）
 ```
 
