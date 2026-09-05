@@ -386,6 +386,9 @@ final class VPNManager {
 
     func clearLog() { log.removeAll() }
 
+    /// Record an app-level event in the log.
+    func note(_ text: String) { appendLog(.app, text) }
+
     // MARK: - Helper
 
     func refreshHelperStatus() async {
