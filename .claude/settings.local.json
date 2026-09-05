@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(./build.sh)",
-      "Bash(rm -rf \"/Applications/XD VPN.app\")",
-      "Bash(pkill -x XDVPN)"
-    ]
-  }
-}

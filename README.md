@@ -1,94 +1,97 @@
 # XD VPN
 
-一个好看一点的 macOS 菜单栏 VPN 客户端，用来替代每天敲密码的 Cisco AnyConnect / `xd-vpn` 脚本。
-底层还是 [openconnect](https://www.infradead.org/openconnect/)，只是把“记住账号密码、一键连接、掉线自动重连”做成了一个原生 SwiftUI 应用。
+一个为日常办公设计的原生 macOS VPN 客户端。SwiftUI 界面，OpenConnect 连接引擎，兼容 Cisco AnyConnect 用户名／密码认证。
 
-<p align="center">
-  <img src="docs/panel-connected.png" width="300" alt="已连接">
-  <img src="docs/panel-disconnected.png" width="300" alt="未连接">
-</p>
+## 直接使用
 
-## 功能
+本项目已构建的应用位于 **`dist/XD VPN 1.1.1.app`**。双击打开即可，也可以把整个 `.app` 拖到「应用程序」文件夹。
 
-- **一个 profile**：服务器、用户名保存在应用配置里，密码只存 macOS 钥匙串。
-- **连接 / 断开**：菜单栏图标随状态变化（未连接 / 连接中 / 已连接 / 失败），面板显示 VPN IP 和在线时长。
-- **自动连接（保持在线）**：开启后启动即连；隧道断开、网络恢复、系统唤醒都会自动重连（3s → 6s → … → 60s 退避）。
-  手动断开会暂停自动重连，点“连接”后恢复，不会和你抢。
-- **切 Wi‑Fi / 唤醒立刻恢复**：监听物理网络（en* 的 IP、网关、链路）变化和系统唤醒，一旦网络可用就给 openconnect 发 `SIGUSR2`，
-  用原会话 cookie 立即重建隧道（IP 不变、不用重新登录），不必等 30 秒的 DPD 超时。90 秒内恢复不了就自动重新登录。
-- **认证失败不重试**：密码错误直接停下来提示，避免把公司账号锁了。
-- **证书不受信任时一键信任**：解析 openconnect 给出的 `--servercert pin-sha256:…` 并可以一键采用。
-- **开机启动**：登录后静默待在菜单栏。
-- **接管孤儿进程**：如果发现已有 openconnect 在跑（脚本启动的或上次应用崩溃留下的），直接接管显示并可断开。
-- **日志窗口**：openconnect 的完整输出，方便排查。
+1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`，认证组通常可留空。
+2. 点击「保存配置」。密码存入 macOS 登录钥匙串，普通配置中不包含密码。
+3. 进入「系统授权」，点击「安装授权」，按 macOS 提示完成一次管理员确认。此处使用 **Mac 管理员密码**，与 **VPN 密码** 不同；应用不保存管理员密码。授权完成后，普通启动、连接和自动重连都使用已安装助手，无需重复管理员弹窗。
+4. 点击「连接 VPN」。连接成功后显示真实分配的 VPN 地址和本次连接时长。点击「断开连接」结束连接。
 
-## 安装
+本机已安装 OpenConnect。如在其他 Mac 使用，先执行：
 
 ```bash
-brew install openconnect     # 如果还没装
-git clone <this repo> && cd vpn_xd_client
-make install                 # 编译并拷贝到 /Applications/XD VPN.app
-open "/Applications/XD VPN.app"
+brew install openconnect
 ```
 
-需要 Xcode 26（Swift 5.10+ 工具链）。`make app` 只编译到 `build/`，`make run` 编译并启动。
+支持 macOS 14 或更新版本。当前打包文件为 Apple Silicon 版本；Intel Mac 可用同一份源码在本机编译。
 
-## 第一次使用
+## Auto Connect 的行为
 
-1. 点菜单栏的盾牌图标 → 「开始设置」，填服务器（默认 `vpn.xindong.com:8443`）、用户名、密码，保存。
-   之前用过 `xd-vpn` 脚本的话，会出现「从 xd-vpn 脚本导入密码」按钮，可以直接导入钥匙串里已有的密码。
-2. 切到「系统授权」→「安装授权…」，输入一次 **macOS 管理员密码**（不是 VPN 密码）。
-3. 回到面板点「连接」。想要保持在线就把「自动连接」打开。
+- 菜单栏图标：未连接为带叉盾牌，已连接为带勾实心盾牌，连接／恢复中为循环箭头，失败为带感叹号盾牌。使用单色模板图标，自动适应系统菜单栏外观。
+- 开启时立即连接；之后应用启动时自动连接。
+- 连接存活由 OpenConnect 的 DPD 探测，配置间隔为 20 秒（`--force-dpd=20`）。这是隧道存活探测，不是每 20 秒重新登录；实际失联判定还取决于最近收到的数据和探测回应。客户端没有额外定时 ping 公司业务网站。
+- 暂时断网时优先由 OpenConnect 恢复现有会话；进程退出后由客户端以 3、6、12、24、48、60 秒间隔重试，最长间隔 60 秒。
+- 系统唤醒、Wi-Fi SSID／链路变化、物理网卡 IP／网关变化会主动触发恢复，不等待 20 秒 DPD。用 NWPathMonitor 判断网络可用，CoreWLAN 与 SystemConfiguration 接收变化通知；不读取 Wi-Fi 名称。
+- 网络就绪后约 1 秒防抖合并连续通知，向已建立的 OpenConnect 会话发送 SIGUSR2，立即重新建立隧道。Wi-Fi 切换时即使网络一直显示可用，也会触发；等待中的重试跳过原有退避时间。
+- 同一个 VPN 进程的两次主动恢复命令至少间隔 3 秒。冷却期间收到的新网络变化会保留，等防抖和冷却都结束后处理；单调时钟保证系统时间调整不会影响这个间隔。
+- 主动切网与 OpenConnect 自己报告的掉线统一进入恢复流程。网络可用且 Auto Connect 开启时，从本轮恢复开始计时 10 秒；仍未成功则先停止旧进程、等其清理，再重新登录。重复掉线消息、重复网络通知和后续恢复命令不会延长本轮期限。初次登录期间切换网络，也会清理旧握手后重试。
+- 网络恢复、物理网络变化或系统唤醒会重置重试次数。新网络上的首次尝试若仍失败，从 3 秒重新等待，不沿用旧网络累计到的 60 秒退避。
+- 忽略 utun 等 VPN 虚拟网卡、全局 DNS 和额外路由变化，避免 VPN 修改自己的网络配置引发重连循环。
+- 睡眠或离线时暂停重试；网络恢复后再开始。1 秒是启动恢复的等待时间，不是保证 1 秒内连接完成，实际仍取决于 Wi-Fi、DHCP、VPN 服务端及认证。
+- 密码错误、证书错误、需要额外认证或权限助手失联时停止自动重试，并显示可操作的错误提示。
+- **手动断开会同时关闭 Auto Connect**，因此不会刚断开又被自动连上。
+- 单独关闭 Auto Connect 不会断开当前连接。
+- 关闭窗口后应用仍保留在菜单栏，连接与自动重连继续运行。菜单栏弹出紧凑面板，可查看状态／地址／时长，连接、断开、切换 Auto Connect，或打开配置、授权及日志。
+- 选择「退出并断开」或按 Cmd-Q，会立即移除本应用菜单栏图标并退出。权限助手收到 shutdown／通道关闭后独立清理自己启动的 OpenConnect，完成后退出；不依赖 UI 等待最后一条状态回执。保留 Auto Connect 偏好供下次启动使用。
+- 关闭窗口（红色 ×）继续留在菜单栏；这与退出应用不同。应用有单实例保护，重复打开同一客户端不会再创建菜单图标。其他 bundle ID 的同名 VPN 应用独立运行。
+- Auto Connect 不是开机启动功能；本版未添加登录启动开关。
 
-> 注意：和脚本一样，XD VPN 在公司办公网络内连不上，只在外网使用。
+## 配置与密码
 
-## 为什么要“系统授权”，它做了什么
+- 只保存一个 profile，可以修改名称、服务器、账号及认证组。
+- 修改同一账号的配置时，密码留空会保留已保存的密码；更换服务器、账号或认证组必须重新填写密码。
+- 「忘记已保存密码」从钥匙串删除该 profile 的密码。连接期间不允许修改配置。
+- 密码使用 Security.framework 存入 `com.xd.vpn.credentials` 服务，本机钥匙串解锁时可读取，不同步到 iCloud。
+- 服务器证书正常验证，没有跳过 TLS 校验的开关。企业根证书应按公司 IT 的要求安装。
 
-`openconnect` 建隧道必须是 root。脚本方案每次 `sudo` 输密码；一个要自动重连的 GUI 应用没法每次弹密码框，所以这里做了一次性授权：
+## 编译与测试
 
-- `/usr/local/libexec/xd-vpn-helper`：root 拥有、0755 的小脚本，只接受 `connect <server> <user> [servercert]` / `disconnect [force]` / `version` 三个命令，参数做了白名单校验，密码通过标准输入传给 openconnect。
-- `/etc/sudoers.d/xd-vpn`：`<你的用户名> ALL=(root) NOPASSWD: /usr/local/libexec/xd-vpn-helper`，只对这一个文件免密。
-
-之后应用通过 `sudo -n xd-vpn-helper connect …` 启动 openconnect（前台子进程，实时读它的输出判断状态），`reconnect` 发 SIGUSR2 让它原地重建隧道，`disconnect` 发 SIGINT 结束。
-helper 脚本内嵌在应用里；应用升级后如果脚本有变化，「系统授权」页会显示「助手需更新」，再点一次「更新授权助手…」即可（需要管理员密码）。
-「系统授权」页里有「移除授权」，会把上面两个文件删掉。
-
-## 掉线 / 重连行为
-
-| 情形 | 行为 |
-| --- | --- |
-| 切换 Wi‑Fi、插拔网线、IP 变化 | 1.5 秒内检测到，发 SIGUSR2，openconnect 用原会话立刻重连（IP 不变） |
-| 睡眠唤醒 | 网络一可用就发 SIGUSR2；面板显示「恢复连接中」 |
-| 网络彻底断开再恢复 | 恢复时发 SIGUSR2；期间 openconnect 自己最多重试 60 秒 |
-| 服务器踢掉会话 / 进程退出 | 3s → 6s → 12s → … → 60s 退避后重新登录 |
-| 「恢复连接中」超过 90 秒 | 放弃原会话，重新登录 |
-| 手动点「断开」 | 自动重连暂停，点「连接」后恢复 |
-| 密码错误 | 停下并提示，不重试 |
-
-## 项目结构
-
-```
-Sources/XDVPN
-├── App/           入口、AppDelegate（退出时断开）、--snapshot / --selftest 开发模式
-├── Core/
-│   ├── VPNManager.swift         状态机：连接 / 断开 / 自动重连 / 网络变化恢复 / 日志 / 登录项
-│   ├── NetworkWatcher.swift     SCDynamicStore 监听物理网络（IP / 网关 / 链路）变化
-│   ├── OpenConnectSession.swift openconnect 子进程与逐行输出
-│   ├── PrivilegedHelper.swift   内嵌的 root helper 脚本、安装 / 卸载、状态检查
-│   ├── Keychain.swift           钥匙串读写
-│   └── VPNProfile.swift
-└── Views/         菜单栏面板、设置窗口（账户 / 系统授权 / 日志 / 关于）
-Support/           Info.plist、图标生成脚本、fake-helper.sh（测试用）
-```
-
-## 开发
+需要 Xcode 或支持 Swift 6 的 Command Line Tools，不需要第三方 Swift 依赖。
 
 ```bash
-swift build                                   # 编译
-.build/debug/XDVPN --snapshot /tmp/snap        # 把面板各状态渲染成 PNG，不用点菜单栏
-XDVPN_FAKE_PIDFILE=/tmp/f.pid \
-  .build/debug/XDVPN --selftest Support/fake-helper.sh   # 无 root 冒烟测试状态机
-.build/debug/XDVPN --print-helper | bash -n    # 检查内嵌 helper 脚本语法
+bash scripts/test.sh
+bash scripts/build.sh
 ```
 
-应用是 ad-hoc 签名的。重新编译后第一次读取密码时，钥匙串会弹一次“允许访问”，点「始终允许」即可。
+`scripts/build.sh` 编译两个可执行文件、生成图标、组装 `.app` 并做本地 ad-hoc 签名。开发时也可以在 Xcode 中打开 `Package.swift`；真实连接应运行打包后的 `.app`，因为权限助手位于其内部。
+
+当前 1.1.1 另存为 `dist/XD VPN 1.1.1.app`。断开并退出旧版后打开新版，原 com.xd.vpn 配置和钥匙串密码沿用。1.1.1 与 1.1.0 使用相同的版本 2 权限助手，已有授权可继续使用，无需为本次重试逻辑更新重新安装助手。可通过 `APP_OUTPUT` 环境变量指定构建位置，避免覆盖正在运行的应用。
+
+不同作者的同名客户端配置及系统助手独立，不能同时建立两个 VPN 隧道来验收。这个版本的授权助手路径与 Claude 版本不同，不会更新或移除 Claude 版本的系统文件。
+
+个人本机版本没有 Apple 公证。重新编译后钥匙串可能要求重新允许访问。若向其他人分发，需要自行完成 Developer ID 签名及 Apple 公证；当前构建脚本的签名选项本身不等于完成分发流程。
+
+## 实现结构
+
+```text
+Sources/
+  XDVPN/          SwiftUI 页面、菜单栏、钥匙串、连接状态管理
+  XDVPNHelper/    按需启动的管理员权限助手
+  VPNCore/        输入校验、OpenConnect 进程管理、通信及重试策略
+Tests/
+  VPNCoreTests/   命令参数、通信、凭据边界与进程清理测试
+  XDVPNTests/     Auto Connect、取消授权、网络恢复与退出状态测试
+scripts/          编译、测试、矢量图标生成
+```
+
+仅「安装／更新／移除授权」通过 macOS 管理员确认。安装器将校验过摘要与签名的助手复制到 root 所有的 `/Library/PrivilegedHelperTools/com.xd.vpn.helper`，将当前用户的专用免密规则写入 `/private/etc/sudoers.d/xd-vpn-astra`，并用 visudo 检查规则语法；不修改主 sudoers，不放开任意命令。正常运行使用 `sudo -n`，没有交互式提权入口，授权缺失时展示安装入口。
+
+助手只接受版本查询，或 `--session <socket>`，后者只以 sudo 提供的 SUDO_UID 为会话用户身份。助手进程按需运行，无常驻 root daemon；安装文件会持久保留，可以在「系统授权」移除。UI 创建权限为 `0700` 的随机目录及 `0600` 的 Unix socket，双方校验内核提供的 peer UID。权限助手仅接收固定的连接／断开／恢复／退出指令，并仅启动已知 Homebrew 路径中的 OpenConnect。
+
+OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 stdin 传递，不放入命令行、环境变量、日志或临时文件。root 会话锁避免上次退出清理与下次启动重叠。助手仅停止自己创建的子进程；应用关闭通信或崩溃时，会向该子进程发出 SIGINT，等待其运行网络清理脚本。日志只转换一小组已知状态，不转发原始认证响应，最多在内存保留 300 条。
+
+这是个人本机客户端的权限模型：信任本机用户管理的应用、Homebrew OpenConnect 及其 vpnc-script。正式多用户分发应改为有稳定代码签名约束的 ServiceManagement/XPC 特权服务，并独立审计。
+
+## 验收与限制
+
+自动化测试覆盖输入边界、密码传输、不可信参数不经 shell 执行、套接字身份检查、连接建立识别、错误分类、子进程正常清理、Auto Connect 取消／恢复、睡眠／同为在线的 Wi-Fi 切换、网络通知合并、恢复超时后顺序重建、路由变化过滤、权限安装脚本解析、退出偏好等。测试使用本地替身进程；另有已安装 OpenConnect 对 `127.0.0.1:1` 的失败路径测试，不访问公司 VPN。
+
+自动化恢复测试使用假助手和事件注入；另有一条串起状态机与真实进程引擎的集成测试，运行本地替身脚本，验证自然掉线、恢复超时、进程清理后重新登录及手动断开后不再连接。测试不切换本机 Wi-Fi、不使 Mac 进入睡眠。本次重试逻辑更新尚需真实睡眠、切网及公司 VPN 路由／DNS 恢复验收。详细记录见 `VERIFICATION.md`。
+
+该版本针对示例中的用户名／密码认证。需要短信验证码、交互式 MFA、浏览器 SSO、设备证书或 CSD/HostScan 的服务器不在当前支持范围；不会把公司二次认证绕过去。日志遇到额外认证要求会停止重试。示例脚本也提示，公司 VPN 可能无法在办公网络内使用。
+
+开发参考：[公司示例脚本](https://git.tapsvc.com/-/snippets/92/raw/master/bin/xd-vpn)、[OpenConnect 官方手册](https://www.infradead.org/openconnect/manual.html)。

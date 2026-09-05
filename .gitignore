@@ -1,7 +1,5 @@
 .build/
-build/
 .swiftpm/
-*.xcodeproj/
+dist/
 .DS_Store
-Support/AppIcon.icns
-Support/AppIcon.iconset/
+*.xcuserstate
