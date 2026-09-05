@@ -13,7 +13,7 @@ struct XDVPNApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            StatusPanelView(layout: .popover)
+            MenuPanelView()
                 .environment(vpn)
         } label: {
             MenuBarLabel()
@@ -27,3 +27,12 @@ struct XDVPNApp: App {
     }
 }
 
+/// Separate view so the menu bar icon re-renders when the status changes.
+private struct MenuBarLabel: View {
+    private let vpn = VPNManager.shared
+
+    var body: some View {
+        Image(systemName: vpn.status.menuBarSymbol)
+            .accessibilityLabel("XD VPN: \(StatusPresentation(status: vpn.status).title)")
+    }
+}
