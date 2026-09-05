@@ -39,14 +39,14 @@ private struct MenuBarLabel: View {
 }
 
 /// Menu bar glyphs: the status SF Symbol rendered larger than the default
-/// label size (16×18pt instead of 14×15pt), as a template image.
+/// label size (17×19pt instead of 14×15pt), as a template image.
 enum MenuBarIcon {
     private static var cache: [String: NSImage] = [:]
 
     static func image(for status: VPNManager.Status) -> NSImage {
         let name = status.menuBarSymbol
         if let cached = cache[name] { return cached }
-        let config = NSImage.SymbolConfiguration(pointSize: 14.5, weight: .medium)
+        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
         let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(config) ?? NSImage()
         image.isTemplate = true
