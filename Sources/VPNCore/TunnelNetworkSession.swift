@@ -9,6 +9,7 @@ struct NetworkStateAccess {
     var write: (String, [String: Any]) throws -> Void
     var remove: ([String]) throws -> Void
     var interfaceExists: (String) -> Bool
+    var routes: TunnelRouteAccess? = nil
 
     static func live() throws -> Self {
         guard let store = SCDynamicStoreCreate(nil, "XD VPN Network Cleanup" as CFString, nil, nil) else {
@@ -31,7 +32,7 @@ struct NetworkStateAccess {
             guard SCDynamicStoreSetMultiple(store, nil, keys as CFArray, nil) else {
                 throw VPNError.system(EngineOutput.networkCleanupFailureMessage)
             }
-        }, interfaceExists: { if_nametoindex($0) != 0 })
+        }, interfaceExists: { if_nametoindex($0) != 0 }, routes: .live(store: store))
     }
 }
 
@@ -55,6 +56,199 @@ public final class TunnelNetworkSession {
     private let owner: uid_t
     private let lease: Int32
     private var recordPath: String { directory + "/tunnel.json" }
+    private var routePath: String { directory + "/route.json" }
+
+    private struct RouteRecord: Codable {
+        var processID: Int32
+        var server: String
+        var external: Bool
+        var owned: IPv4Route?
+        // Persist intent BEFORE the kernel mutation, so a crash can be recovered.
+        var pending: IPv4Route?
+    }
+
+    private func readRouteRecord() throws -> RouteRecord? {
+        try validateDirectory()
+        var info = stat()
+        guard lstat(routePath, &info) == 0 else {
+            if errno == ENOENT { return nil }
+            throw RouteFailure.invalid
+        }
+        guard info.st_uid == owner, info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
+              info.st_size < 8192, info.st_mode & 0o077 == 0 else { throw RouteFailure.invalid }
+        let record = try JSONDecoder().decode(RouteRecord.self, from: Data(contentsOf: URL(fileURLWithPath: routePath)))
+        guard record.processID > 1, RouteSocket.usableIPv4(record.server) else { throw RouteFailure.invalid }
+        for route in [record.owned, record.pending].compactMap({ $0 }) {
+            guard route.destination == record.server, route.isHost, route.scope == 0,
+                  route.gateway.map(RouteSocket.usableIPv4) == true, route.source.map(RouteSocket.usableIPv4) == true,
+                  route.interfaceIndex > 0 else { throw RouteFailure.invalid }
+        }
+        return record
+    }
+
+    private func saveRouteRecord(_ record: RouteRecord) throws {
+        try JSONEncoder().encode(record).write(to: URL(fileURLWithPath: routePath), options: .atomic)
+        guard chmod(routePath, 0o600) == 0 else { throw RouteFailure.invalid }
+    }
+
+    private func serverRoute(_ server: String, routes: TunnelRouteAccess, diagnostic: (String) -> Void) throws -> IPv4Route? {
+        let all = try routes.hostRoutes(server)
+        diagnostic("XDVPN route inventory server=\(server): \(all.map(\.description).joined(separator: "; "))")
+        let exact = all.filter { $0.destination == server && $0.isHost && $0.scope == 0 }
+        guard exact.count <= 1 else { throw RouteFailure.conflict("multiple unscoped host entries for \(server)") }
+        return exact.first
+    }
+
+    func prepareServerRoute(environment: [String: String], diagnostic: (String) -> Void) throws {
+        guard let routes = state.routes else { return } // Injected non-network tests.
+        guard let tunnel = try readRecord(), let rawPID = environment["VPNPID"], Int32(rawPID) == tunnel.processID,
+              let server = environment["VPNGATEWAY"], RouteSocket.usableIPv4(server) else { throw RouteFailure.invalid }
+        let physical = try routes.physical()
+        let target = physical.host(server)
+        let selected = try serverRoute(server, routes: routes, diagnostic: diagnostic)
+        var current = selected
+        diagnostic("XDVPN route before \(selected?.description ?? "none"); desired \(target.description)")
+        var record: RouteRecord
+        if let previous = try readRouteRecord() {
+            guard previous.processID == tunnel.processID, previous.server == server else { throw RouteFailure.invalid }
+            record = previous
+        } else {
+            // A kernel-generated clone of the physical default is a cache,
+            // not an independently installed host route. RTM_ADD replaces it.
+            if let route = current, route.isKernelClone,
+               route.gateway == physical.gateway, route.source == physical.address, route.interfaceIndex == physical.index {
+                current = nil
+            }
+            record = RouteRecord(processID: tunnel.processID, server: server, external: current != nil, owned: nil, pending: nil)
+            try saveRouteRecord(record)
+        }
+        if record.external {
+            // An existing, independently configured route is never adopted or removed.
+            guard let current, current.interfaceIndex == physical.index, current.source == physical.address,
+                  current.gateway == physical.gateway else { throw RouteFailure.conflict(selected?.description ?? "none") }
+            diagnostic("XDVPN route preserve external \(current.description)")
+            return
+        }
+        // A link transition may prune our static route, after which traffic
+        // creates a fresh physical-default clone. Replace only a verified
+        // current physical clone; do not mistake it for a foreign static route.
+        if let route = current, route.isKernelClone,
+           route.gateway == physical.gateway, route.source == physical.address, route.interfaceIndex == physical.index {
+            current = nil
+        }
+        if let current {
+            guard [record.owned, record.pending].compactMap({ $0 }).contains(where: current.matches) else {
+                throw RouteFailure.conflict(current.description)
+            }
+            if current.matches(target) {
+                record.owned = current; record.pending = nil; try saveRouteRecord(record)
+                diagnostic("XDVPN route verified unchanged \(current.description)")
+                return
+            }
+        }
+        if let current { record.owned = current }
+        record.pending = target; try saveRouteRecord(record)
+        if let current {
+            diagnostic("XDVPN route replace: delete requested \(current.description)")
+            try routes.update(.delete, current)
+            if let remaining = try serverRoute(server, routes: routes, diagnostic: diagnostic), !remaining.isKernelClone {
+                throw RouteFailure.system("verify replacement delete", EIO)
+            }
+        }
+        diagnostic("XDVPN route add requested \(target.description)")
+        try routes.update(.add, target)
+        guard let installed = try serverRoute(server, routes: routes, diagnostic: diagnostic), installed.matches(target) else {
+            throw RouteFailure.system("verify add", EIO)
+        }
+        record.owned = installed; record.pending = nil; try saveRouteRecord(record)
+        diagnostic("XDVPN route add verified \(installed.description)")
+    }
+
+    private func cleanupServerRoute(processID: Int32, diagnostic: (String) -> Void) throws {
+        guard let record = try readRouteRecord() else { return }
+        guard record.processID == processID, let routes = state.routes else { throw RouteFailure.invalid }
+        if !record.external, let selected = try serverRoute(record.server, routes: routes, diagnostic: diagnostic), !selected.isKernelClone {
+            guard [record.owned, record.pending].compactMap({ $0 }).contains(where: selected.matches) else {
+                throw RouteFailure.conflict(selected.description)
+            }
+            diagnostic("XDVPN route delete requested \(selected.description)")
+            try routes.update(.delete, selected)
+            if let remaining = try serverRoute(record.server, routes: routes, diagnostic: diagnostic), !remaining.isKernelClone {
+                throw RouteFailure.system("verify delete \(remaining.description)", EIO)
+            }
+        }
+        diagnostic("XDVPN route cleanup verified server=\(record.server) external=\(record.external)")
+        guard unlink(routePath) == 0 else { throw RouteFailure.invalid }
+    }
+
+    func configureIPv4Service(environment: [String: String]) throws {
+        guard state.routes != nil else { return }
+        guard let record = try readRecord() else { throw RouteFailure.invalid }
+        let prefix = "State:/Network/Service/\(record.interface)/"
+        guard try state.read(prefix + "XDVPN")?["SessionID"] as? String == token else { throw RouteFailure.invalid }
+        let count: Int
+        if let raw = environment["CISCO_SPLIT_INC"], !raw.isEmpty {
+            guard let value = Int(raw), (0...4096).contains(value) else { throw RouteFailure.invalid }
+            count = value
+        } else { count = 0 }
+        let fullTunnel = count == 0 || (0..<count).contains {
+            environment["CISCO_SPLIT_INC_\($0)_ADDR"] == "0.0.0.0" && environment["CISCO_SPLIT_INC_\($0)_MASKLEN"] == "0"
+        }
+        var ipv4 = try state.read(prefix + "IPv4") ?? ["InterfaceName": record.interface, "Addresses": [record.ipv4], "SubnetMasks": ["255.255.255.255"]]
+        guard ipv4["InterfaceName"] as? String == record.interface, ipv4["Addresses"] as? [String] == [record.ipv4] else { throw RouteFailure.invalid }
+        if fullTunnel { ipv4["Router"] = record.ipv4; ipv4["OverridePrimary"] = 1 }
+        try state.write(prefix + "IPv4", ipv4)
+        guard let verified = try state.read(prefix + "IPv4"), NSDictionary(dictionary: verified).isEqual(to: ipv4) else {
+            throw RouteFailure.system("verify IPv4 service", EIO)
+        }
+    }
+
+    // A server's "Configured as" line precedes script execution. Confirm the
+    // private ownership record and actual network state before publishing it.
+    func verifyConfiguration(processID: Int32) throws {
+        guard let record = try readRecord(), record.processID == processID else { throw RouteFailure.invalid }
+        let prefix = "State:/Network/Service/\(record.interface)/"
+        guard try state.read(prefix + "XDVPN")?["SessionID"] as? String == token,
+              let ipv4 = try state.read(prefix + "IPv4"), ipv4["InterfaceName"] as? String == record.interface,
+              ipv4["Addresses"] as? [String] == [record.ipv4] else { throw RouteFailure.invalid }
+        if !record.dns.isEmpty {
+            guard try state.read(prefix + "DNS")?["ServerAddresses"] as? [String] == record.dns else {
+                throw RouteFailure.system("verify tunnel DNS", EIO)
+            }
+        }
+        if let routes = state.routes {
+            guard let route = try readRouteRecord(), route.processID == processID, route.pending == nil,
+                  let current = try serverRoute(route.server, routes: routes, diagnostic: { _ in }) else { throw RouteFailure.invalid }
+            if !route.external {
+                guard let owned = route.owned, current.matches(owned) else { throw RouteFailure.invalid }
+            }
+        }
+    }
+
+    /// Keep the packaged vpnc implementation for tunnel/DNS/split routes, but
+    /// take its IPv4 server host route and stale default restoration out of play.
+    func managedScript(source: String) throws -> String {
+        guard state.routes != nil else { return source }
+        let text = try String(contentsOfFile: source, encoding: .utf8)
+        guard text.components(separatedBy: "#### Main").count == 2 else { throw RouteFailure.invalid }
+        let overrides = """
+        # XD VPN owns and verifies the IPv4 VPN server route through PF_ROUTE.
+        set_vpngateway_route() { :; }
+        del_vpngateway_route() { :; }
+        set_ipv4_default_route() { :; }
+        # configd restores the current physical default when our service is removed.
+        # Never restore the gateway saved on a previous Wi-Fi network.
+        reset_ipv4_default_route() { rm -f -- "$DEFAULT_ROUTE_FILE"; }
+        # The tunnel's dynamic-store DNS must not become persistent Wi-Fi DNS
+        # while configd asynchronously changes the primary interface.
+        networksetup() { :; }
+        """
+        let path = directory + "/vpnc-managed-script"
+        try text.replacingOccurrences(of: "#### Main", with: overrides + "\n#### Main")
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        guard chmod(path, 0o700) == 0 else { throw RouteFailure.invalid }
+        return path
+    }
 
     public static func create() throws -> TunnelNetworkSession {
         let state = try NetworkStateAccess.live()
@@ -165,7 +359,8 @@ public final class TunnelNetworkSession {
             let prefix = "State:/Network/Service/\(record.interface)/"
             detail = "记录进程：\(record.processID)；接口：\(record.interface)；检查键：\(prefix)IPv4、\(prefix)DNS、\(prefix)XDVPN。"
         } else { detail = "无法读取有效的隧道身份记录。" }
-        return "\(EngineOutput.networkCleanupFailureMessage) \(detail)记录：\(directory)。再次连接会先重试清理；归属不匹配时不会删除。"
+        let route = (try? readRouteRecord()).map { "服务器路由：\($0.server)；归属：\($0.external ? "外部配置" : "本连接")；记录：\(routePath)。" } ?? ""
+        return "\(EngineOutput.networkCleanupFailureMessage) \(detail)\(route)记录：\(directory)。再次连接会先重试清理；归属不匹配时不会删除。"
     }
 
     var hasTunnelRecord: Bool { (try? readRecord()) != nil }
@@ -227,10 +422,14 @@ public final class TunnelNetworkSession {
     /// Returns the number of residual service keys removed. A mismatched owner,
     /// changed configuration, or reused live interface is never deleted.
     @discardableResult public func cleanup(processID: Int32, afterExit: Bool = true,
-                                          keepMarker: Bool = false, interfaceWait: TimeInterval = 2) throws -> Int {
+                                          keepMarker: Bool = false, interfaceWait: TimeInterval = 2,
+                                          diagnostic: (String) -> Void = { _ in }) throws -> Int {
         let deadline = ProcessInfo.processInfo.systemUptime + interfaceWait
         while true {
-            if let removed = try cleanupPass(processID: processID, afterExit: afterExit, keepMarker: keepMarker) { return removed }
+            if let removed = try cleanupPass(processID: processID, afterExit: afterExit, keepMarker: keepMarker) {
+                if !keepMarker { try cleanupServerRoute(processID: processID, diagnostic: diagnostic) }
+                return removed
+            }
             guard ProcessInfo.processInfo.systemUptime < deadline else {
                 throw VPNError.system(EngineOutput.networkCleanupFailureMessage)
             }
@@ -275,6 +474,8 @@ public final class TunnelNetworkSession {
 
     public func finish() throws {
         try validateDirectory()
+        guard try readRouteRecord() == nil else { throw RouteFailure.system("server route cleanup incomplete", EBUSY) }
+        if unlink(directory + "/vpnc-managed-script") != 0 && errno != ENOENT { throw RouteFailure.invalid }
         if unlink(recordPath) != 0 && errno != ENOENT { throw VPNError.system(EngineOutput.networkCleanupFailureMessage) }
         if unlink(directory + "/lease") != 0 && errno != ENOENT { throw VPNError.system(EngineOutput.networkCleanupFailureMessage) }
         guard rmdir(directory) == 0 else { throw VPNError.system(EngineOutput.networkCleanupFailureMessage) }

@@ -1,10 +1,10 @@
 import Foundation
 import Darwin
+import VPNCore
 
-/// Receives app diagnostics and the helper's already-normalized events only.
-/// There is no connection to OpenConnect's raw stdout/stderr or credentials.
+/// Receives app diagnostics and sanitized helper/engine output, never credentials.
 final class RollingActivityLog {
-    enum Source: String, Codable { case app, physical, helper, recovery, lifecycle }
+    enum Source: String, Codable { case app, physical, helper, recovery, lifecycle, quality }
     struct Record: Codable {
         let timestamp: String
         let session: String
@@ -16,6 +16,11 @@ final class RollingActivityLog {
         let autoConnect: Bool
         let isError: Bool
         let message: String
+        var schemaVersion: Int? = nil
+        var build: String? = nil
+        var osVersion: String? = nil
+        var quality: QualityEvent? = nil
+        var diagnostic: EngineDiagnostic? = nil
     }
 
     static let defaultDirectory = FileManager.default.homeDirectoryForCurrentUser
@@ -37,7 +42,7 @@ final class RollingActivityLog {
     }
 
     func append(_ message: String, date: Date, source: Source, event: String, state: String,
-                connection: String, autoConnect: Bool, isError: Bool) {
+                connection: String, autoConnect: Bool, isError: Bool, quality: QualityEvent? = nil, diagnostic: EngineDiagnostic? = nil) {
         // Bound the message before capturing it on the asynchronous writer queue.
         let message = Self.safeMessage(message)
         queue.async {
@@ -46,7 +51,9 @@ final class RollingActivityLog {
                 formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
                 let record = Record(timestamp: formatter.string(from: date), session: self.session, version: self.version,
                     source: source, event: event, stateBefore: state, connection: connection,
-                    autoConnect: autoConnect, isError: isError, message: message)
+                    autoConnect: autoConnect, isError: isError, message: message, schemaVersion: 2,
+                    build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development",
+                    osVersion: ProcessInfo.processInfo.operatingSystemVersionString, quality: quality, diagnostic: diagnostic)
                 var data = try JSONEncoder().encode(record)
                 data.append(10)
                 guard data.count <= self.maxBytes else { throw LogError.oversized }
@@ -56,12 +63,76 @@ final class RollingActivityLog {
         }
     }
 
+    struct History {
+        var events: [QualityEvent] = []
+        var uncleanSession: String?
+        var incomplete = false
+    }
+
+    /// Call before app.started is appended. Read on the same queue as rotation;
+    /// reject special files and bound reads so diagnostics cannot block startup.
+    func loadHistory(completion: @escaping (History) -> Void) {
+        queue.async {
+            var history = History()
+            var last: Record?
+            for index in (0..<self.fileCount).reversed() {
+                do {
+                    guard let data = try self.readFile(index) else { continue }
+                    for line in data.split(separator: 10) {
+                        guard let record = try? JSONDecoder().decode(Record.self, from: Data(line)) else {
+                            history.incomplete = true; continue
+                        }
+                        last = record
+                        if let event = record.quality { history.events.append(event) }
+                    }
+                } catch { history.incomplete = true }
+            }
+            // Missing shutdown evidence is not proof of a crash. On damaged
+            // storage the previous session's outcome is unknown.
+            if !history.incomplete, let last, last.event != "app.quitting" {
+                history.uncleanSession = last.session
+            }
+            let result = history
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    private func readFile(_ index: Int) throws -> Data? {
+        let directoryFD = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard directoryFD >= 0 else {
+            if errno == ENOENT { return nil }
+            throw LogError.invalidPath
+        }
+        defer { close(directoryFD) }
+        var directoryInfo = stat()
+        guard fstat(directoryFD, &directoryInfo) == 0, directoryInfo.st_uid == geteuid() else { throw LogError.invalidPath }
+        let fd = openat(directoryFD, file(index).lastPathComponent, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard fd >= 0 else {
+            if errno == ENOENT { return nil }
+            throw LogError.invalidPath
+        }
+        defer { close(fd) }
+        var info = stat()
+        guard fstat(fd, &info) == 0, info.st_uid == geteuid(), info.st_mode & S_IFMT == S_IFREG,
+              info.st_nlink == 1, info.st_size <= maxBytes else { throw LogError.invalidPath }
+        var data = Data(), buffer = [UInt8](repeating: 0, count: 8192)
+        while data.count <= maxBytes {
+            let count = Darwin.read(fd, &buffer, buffer.count)
+            if count < 0 && errno == EINTR { continue }
+            guard count >= 0 else { throw LogError.writeFailed }
+            if count == 0 { return data }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        throw LogError.oversized
+    }
+
     // Extra defense against accidentally passing common raw auth output in a
-    // future caller. The primary boundary remains normalized messages at source.
+    // future caller. Engine output is also sanitized before leaving the helper.
     static func safeMessage(_ message: String) -> String {
         let pattern = #"(?i)(?:password|passwd|cookie|authorization|token|secret)[\s\"']*[:=]|bearer\s+|<\s*(?:password|token|cookie)\b|https?://[^\s/]+:[^\s/]+@"#
         if message.range(of: pattern, options: .regularExpression) != nil { return "[已省略含认证字段的诊断文本]" }
-        return String(message.prefix(2048)).components(separatedBy: .controlCharacters).joined(separator: " ")
+        let suffix = message.count > 2048 ? " [内容已截断，较长记录见助手日志]" : ""
+        return String(message.prefix(2048 - suffix.count)).components(separatedBy: .controlCharacters).joined(separator: " ") + suffix
     }
 
     private enum LogError: Error { case invalidPath, writeFailed, oversized }

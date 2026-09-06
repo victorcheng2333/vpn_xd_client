@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 
 public enum PrivilegePolicy {
-    public static let version = "4"
+    public static let version = "6"
     public static let helperPath = "/Library/PrivilegedHelperTools/com.xd.vpn.helper"
     public static let rulePath = "/private/etc/sudoers.d/xd-vpn-astra"
 

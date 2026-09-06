@@ -16,13 +16,15 @@ public struct HelperEvent: Codable, Equatable {
     public var message: String
     public var address: String?
     public var retryable: Bool
-    public init(_ kind: Kind, _ message: String, address: String? = nil, retryable: Bool = false) {
+    public var diagnostic: EngineDiagnostic?
+    public init(_ kind: Kind, _ message: String, address: String? = nil, retryable: Bool = false, diagnostic: EngineDiagnostic? = nil) {
         self.kind = kind; self.message = message; self.address = address; self.retryable = retryable
+        self.diagnostic = diagnostic
     }
 }
 
-/// Translate a small allowlist of engine messages. Raw server responses, cookies,
-/// passwords and authentication form contents are never forwarded or persisted.
+/// Translate a small allowlist into connection state. Separate sanitized
+/// diagnostics preserve other engine lines without turning errors into commands.
 public enum EngineOutput {
     public static let networkCleanupFailureMessage = "VPN 网络配置未能确认清理完成，已停止自动重连。请在连接日志中查看具体记录；再次连接会先重试清理。"
     // Keep this normalized category stable: installed version 2 helpers send
@@ -31,7 +33,7 @@ public enum EngineOutput {
 
     public static func isTransportFailure(_ line: String) -> Bool {
         let text = line.lowercased()
-        return ["failed to connect to host", "failed to connect to proxy", "getaddrinfo failed", "name or service not known", "nodename nor servname provided", "connection timed out", "network is unreachable", "no route to host", "connection refused", "temporary failure in name resolution"]
+        return ["failed to connect to host", "failed to connect to proxy", "getaddrinfo failed", "name or service not known", "nodename nor servname provided", "connection timed out", "network is unreachable", "no route to host", "connection refused", "temporary failure in name resolution", "can't assign requested address", "cannot assign requested address"]
             .contains { text.contains($0) }
     }
     public static func event(for line: String, tunnelConfigured: Bool = false) -> HelperEvent? {

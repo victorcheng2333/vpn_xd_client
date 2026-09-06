@@ -1,6 +1,52 @@
 # 验证记录
 
-## 当前交付：1.1.8
+## 当前交付：1.1.11
+
+2026-09-06，修复 1.1.10 在首次连接时路由校验失败、漏清理却报成功，以及提前显示已连接的回归。系统助手要求 **6**。
+
+- 服务器主机路由改用 NET_RT_DUMP 完整枚举，区分同一地址的作用域缓存与无作用域静态条目，记录实际候选结果。修改自己的旧路由使用精确 RTM_DELETE + RTM_ADD；RTM_CHANGE 与普通 RTM_GET 都可能选中作用域缓存，不再用于本次静态路由的修改／核验。读表或核验失败保留预写记录，不能以查到缓存条目作为静态路由已清除的证明。
+- 初次 Configured as 消息只暂存；网络脚本完成后，助手核对本次归属、IPv4、DNS 及路由，再发出 connected。脚本失败或仅有伪造完成消息不会显示已连接。
+- 完整 `bash scripts/test.sh -c release`：**162 项通过，0 失败，无跳过**，记录 `.build/hotfix-release-tests.log`。新回归覆盖多条同地址路由共存下的连接／重复恢复／换网／清理、读表失败保留记录、完整／截断二进制快照，以及脚本成功／失败／没有实际配置时的连接状态。实际 macOS NET_RT_DUMP 中的源地址读取及 configd／RTM_GET 只读检查已通过；网络写入仍使用替身。
+- 定向测试 `.build/hotfix-route-tests.log` 的 20 项路由检查通过。初轮普通沙箱中既有 configd 读取被拒绝，最终完整回归在获准的环境通过，未删改该检查。连接状态测试最初使用了会被密码脱敏替换的测试标记，修正测试密码后原断言通过。
+- Release 构建及 App／助手严格签名验证通过，交付 `dist/XD VPN 1.1.11.app` 和 `dist/XD-VPN-1.1.11-macOS-arm64.zip`，build 14，内置助手 6。ZIP 完整性、无特权脚本入口拒绝、`git diff --check` 通过。构建／打包记录 `.build/hotfix-build.log`、`.build/hotfix-package-verified.json`；源码摘要 `.build/hotfix-source-hashes.json`。打包时已安装助手为 5；用户随后已升级到 6。
+
+2026-09-06 11:32–11:36（北京时间），用户从 AnyConnect 切回 1.1.11 后完成只读验收：已安装助手为 6；11:32:38 真实服务器路由添加成功，完整枚举同时发现作用域缓存与本次无作用域静态条目，读回核对通过。connect 脚本于 11:32:38.797 成功结束，配置核对后才于 11:32:38.807 报告 connected。同一 OpenConnect 进程持续运行约 3 分半，期间无重连或退出；App 本地日志保存了完整过程。
+
+当前服务器主机路由走 en0 物理网关，默认路由走 utun4。实测百度 HTTPS 返回 200，VPN 下发的 DNS 对服务器域名查询正常响应（6 ms）。上述结果验证首次真实连接和 RTM_ADD／枚举核验；没有主动切换 Wi-Fi 或断开 VPN，真实切网恢复、断开清理和内网业务长连接仍待验收。
+
+## 历史交付：1.1.10（已确认回归，停止使用）
+
+2026-09-06。针对 09:54 切换 Wi-Fi 后 OpenConnect 连续 `EADDRNOTAVAIL`（49）的事故修复服务器 IPv4 主机路由，并补全引擎、助手的本地诊断。保留工作区已有的 1.1.9 连接质量功能。
+
+- 依据统一日志区分已证实的 TCP 地址不可用与推断的旧路由／源地址残留。旧隧道退出后 en0 已恢复主位，新连接 DNS 查询成功；本次不能继续认定为幽灵 DNS 键。故障时没有 RTM_GET 快照，没有把重复 ADD 的日志当成原有路由内容。
+- 服务器路由读取当前物理接口的作用域默认出口，修改时同时带网关与源地址，读回验证。预写 route.json 保护修改后崩溃的清理；只管理本次记录匹配的静态路由，处理切网期间正常内核克隆，保留其他来源静态路由。PF_ROUTE 忽略同时到达的接口通知。
+- 私有 vpnc-script 副本不再猜服务器路由、恢复切网前默认网关或经 networksetup 写物理服务的持久 DNS。由 configd 管理本次 IPv4 默认服务，退出时清理自己的服务键和主机路由。安装的 Homebrew 脚本未修改。
+- OpenConnect 每行输出经脱敏后独立记录，包括未知错误、DTLS 失败、脚本预算、路由前后状态、信号与退出。App 保持 4 × 1 MiB；助手新增 root 私有的 4 × 4 MiB 滚动日志，App 退出后仍可保留清理结果。错误和停止刷盘；写失败有明确报告，诊断严重级别不直接触发断开。
+
+验证：
+
+- 最终 `bash scripts/test.sh -c release`：**157 项通过，0 失败，无跳过**。记录 `.build/route-fix-complete-release-tests.log`。包含替身路由／动态存储、实际安装脚本的隔离重放、真实父子进程、持久日志与脱敏，以及既有连接质量、恢复和授权回归。真实系统仅作 configd 和 PF_ROUTE GET 查询，当前物理出口与源地址的读取已通过。
+- 早期全量测试发现新增截断提示超出日志行长度限制，已将提示计入 2048 字符预算。后续一次测试暴露原自动启动测试依赖固定次数 Task.yield 的竞态，改为有上限地等待实际连接命令；保留原断言，未修改产品自动启动逻辑。最终全量通过，不合并多轮测试数量。
+- 本机已安装助手仍为 **4**，只读摘要 `ff9ef65eec35f1ecf26f1b5be4ce56f6020362a2f7a8dfe04b0a0fdf3843e114`。没有升级系统助手、重启活动 VPN、使用真实 VPN 凭据或切换 Wi-Fi。
+- `APP_OUTPUT="$PWD/dist/XD VPN 1.1.10.app" bash scripts/build.sh` 构建成功，Info.plist 为 **1.1.10 / build 13**，内置助手 **5**。App／助手严格签名检查、无特权脚本入口拒绝、ZIP 完整性与 `git diff --check` 通过。记录 `.build/route-fix-build.log`、`.build/route-fix-package-verified.json`；最终 Sources／Tests／Resources 摘要保存在 `.build/route-fix-source-hashes.json`。
+
+交付：`dist/XD VPN 1.1.10.app`、`dist/XD-VPN-1.1.10-macOS-arm64.zip`。ZIP SHA256：`f55002fe32af6f447911afb4c776ef7dbd5142323cd48cb27921bd77c657d8df`。
+
+本轮内核 RTM_ADD／CHANGE／DELETE 均使用替身验证；真实切网、IPMonitor 默认路由恢复及公司业务连通性仍待新版运行验收。使用 1.1.10 需先断开并退出旧版，在新版「系统授权」点击「升级系统助手」安装 **5**；现有专用授权规则和配置沿用。修复范围为当前 IPv4 VPN 服务器和 en 物理接口，未接管没有归属记录的旧版或其他 VPN 静态路由。详见 [服务器路由恢复设计](docs/design/2026-09-06-server-route-recovery.md)。
+
+## 历史交付：1.1.9
+
+2026-09-06。增加结构化质量事件、原生「连接质量」Dashboard 和本地告警。系统助手仍为版本 4，未改认证、恢复和网络清理策略。
+
+- 完成一次完整 `bash scripts/test.sh`：136 项通过，0 失败，包含连接取消、离线重复 connected 去重、恢复失败不重复计入登录、单调耗时、P95 分母、告警样本门槛/过期/去重，以及旧日志兼容、损坏尾行、FIFO 拒绝。
+- 随后补充正常/异常退出后的跨启动恢复测试，并完成最终定向验证：`bash scripts/test.sh --filter 'ConnectionQualityTests|RollingActivityLogTests|VPNModelTests.testQuality'`，19 项通过，0 失败。此时套件共 137 项；未将两轮测试相加计数。
+- 用隔离 UserDefaults、替身助手和模拟事件渲染原生界面，检查无数据、成功样本及连续失败告警状态，覆盖最小 990 × 720 窗口和较高窗口。确认无样本不显示虚假成功率，多条告警可滚动查看，24 小时图表时间轴正常。没有启动真实 VPN 连接。
+- `APP_OUTPUT="$PWD/dist/XD VPN 1.1.9.app" bash scripts/build.sh`：最终 Release 打包及 `codesign --verify --deep --strict` 通过，Info.plist 为 1.1.9 / build 12。
+- `git diff --check` 通过。原有未跟踪文件保持原样。
+
+本轮验证不覆盖团队日志上报、远程 Dashboard、消息投递、业务探测或崩溃堆栈。异常退出仅根据退出记录缺失提供线索，未通过制造真实崩溃或中断当前 VPN 验收。详见 [质量监控设计](docs/design/2026-09-06-quality-monitoring.md)。
+
+## 1.1.8
 
 2026-09-06。根据 Claude 运行质量报告修复 CoreWLAN 重复通知触发恢复，并增加 App 滚动文件日志。本轮不修改 VPNCore／系统助手，保留助手要求 4。
 

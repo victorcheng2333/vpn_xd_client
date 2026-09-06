@@ -65,6 +65,107 @@ import VPNCore
         await letConnectRun()
     }
 
+    func testQualityTracksCancelledAttemptAndPreservesConnectionIDUntilCleanup() async {
+        model.connect(); await letConnectRun()
+        let connection = model.qualityEvents.first?.connection
+        model.disconnect()
+        helper.onEvent?(.init(.stopped, "stopped", retryable: true))
+        XCTAssertEqual(model.qualityEvents.map(\.kind), [.attemptStarted, .attemptCancelled])
+        XCTAssertTrue(model.qualityEvents.allSatisfy { $0.connection == connection })
+        model.connect(); await letConnectRun()
+        XCTAssertNotEqual(model.qualityEvents.last?.connection, connection)
+    }
+
+    func testEngineDiagnosticsPersistErrnoAndRouteDetailsWithoutChangingConnectionState() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("xdvpn-engine-log-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let log = RollingActivityLog(directory: folder)
+        model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+                         resumeAutomatically: false, activityLog: log, engineLocator: { "/fake/openconnect" })
+        model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        let state = model.state, commands = helper.commands.count
+        let error = EngineDiagnostic(source: .openconnect, code: "transport.addressUnavailable", phase: "reconnect",
+                                     processID: 42424, errorNumber: 49, level: .error)
+        helper.onEvent?(.init(.info, "Failed to connect: Can't assign requested address", diagnostic: error))
+        helper.onEvent?(.init(.info, "XDVPN route change verified source=192.168.124.36 gateway=192.168.124.1",
+            diagnostic: .init(source: .route, code: "route.operation", phase: "reconnect", processID: 42424)))
+        XCTAssertEqual(model.state, state)
+        XCTAssertEqual(helper.commands.count, commands)
+        XCTAssertTrue(model.entries.contains { $0.isError && $0.message.contains("assign requested address") })
+        log.flush()
+        let rows = try Data(contentsOf: folder.appendingPathComponent("activity.jsonl")).split(separator: 10).map {
+            try JSONDecoder().decode(RollingActivityLog.Record.self, from: Data($0))
+        }
+        XCTAssertEqual(rows.first { $0.event == error.code }?.diagnostic, error)
+        XCTAssertTrue(rows.contains { $0.diagnostic?.source == .route && $0.message.contains("192.168.124.36") })
+        helper.onEvent?(.init(.stopped, "stopped"))
+        await withCheckedContinuation { continuation in model.quit { continuation.resume() } }
+        log.flush()
+    }
+
+    func testQualityOfflineMessagesAreDeduplicatedAndRecoveryIsNotAnotherLogin() async {
+        model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false)
+        for _ in 0..<5 { helper.onEvent?(.init(.connected, "late connected")) }
+        XCTAssertEqual(model.qualityEvents.filter { $0.kind == .recoveryStarted }.count, 1)
+        XCTAssertEqual(model.qualityEvents.filter { $0.kind == .recoverySucceeded }.count, 0)
+        model.networkChanged(true); await letRecoveryRun()
+        helper.onEvent?(.init(.reconnecting, "recovering"))
+        helper.onEvent?(.init(.connected, "recovered"))
+        XCTAssertEqual(model.qualityEvents.filter { $0.kind == .attemptSucceeded }.count, 1)
+        XCTAssertEqual(model.qualityEvents.filter { $0.kind == .recoverySucceeded }.count, 1)
+        XCTAssertEqual(model.qualityEvents.first { $0.kind == .recoveryStarted }?.reason, .offline)
+    }
+
+    func testQualityFailureCategoryAndAlertDeduplicationAndResolution() async {
+        for _ in 0..<3 {
+            model.connect(); await letConnectRun()
+            helper.onEvent?(EngineOutput.event(for: "login failed")!)
+            helper.onEvent?(.init(.stopped, "stopped"))
+        }
+        XCTAssertEqual(model.qualityEvents.filter { $0.kind == .attemptFailed }.count, 3)
+        XCTAssertTrue(model.qualityEvents.filter { $0.kind == .attemptFailed }.allSatisfy { $0.reason == .authentication })
+        let triggered = model.entries.filter { $0.message.contains("连续连接失败：") }.count
+        XCTAssertEqual(triggered, 1)
+        model.refreshQualityAlerts(); model.refreshQualityAlerts()
+        XCTAssertEqual(model.entries.filter { $0.message.contains("连续连接失败：") }.count, 1)
+        model.refreshQualityAlerts(now: Date().addingTimeInterval(601))
+        XCTAssertEqual(model.entries.filter { $0.message.contains("本地告警已解除") }.count, 1)
+    }
+
+    func testQualityHistoryLoadsAcrossLaunchesAndOnlyMissingQuitProducesExitHint() async throws {
+        for clean in [false, true] {
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("xdvpn-quality-relaunch-" + UUID().uuidString)
+            let previous = RollingActivityLog(directory: folder)
+            let sample = QualityEvent(kind: .attemptSucceeded, connection: "previous-attempt", durationMS: 2000)
+            previous.append("sample", date: Date(), source: .quality, event: "quality.attemptSucceeded", state: "connected",
+                            connection: sample.connection, autoConnect: false, isError: false, quality: sample)
+            if clean {
+                previous.append("quit", date: Date(), source: .lifecycle, event: "app.quitting", state: "connected",
+                                connection: sample.connection, autoConnect: false, isError: false)
+            }
+            previous.flush()
+            let next = RollingActivityLog(directory: folder)
+            model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+                             resumeAutomatically: false, activityLog: next, engineLocator: { "/fake/openconnect" })
+            for _ in 0..<100 {
+                if model.qualityHistoryLoaded { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            XCTAssertTrue(model.qualityHistoryLoaded)
+            XCTAssertEqual(model.qualityEvents.first, sample)
+            XCTAssertEqual(model.qualityEvents.filter { $0.kind == .uncleanExit }.count, clean ? 0 : 1)
+            await withCheckedContinuation { continuation in model.quit { continuation.resume() } }
+            next.flush()
+            let lines = try Data(contentsOf: folder.appendingPathComponent("activity.jsonl")).split(separator: 10)
+            let last = try JSONDecoder().decode(RollingActivityLog.Record.self, from: Data(try XCTUnwrap(lines.last)))
+            XCTAssertEqual(last.event, "app.quitting")
+            try FileManager.default.removeItem(at: folder)
+        }
+    }
+
     func testRepeatedUnchangedLinkEventsAcrossRecoveryWindowsNeverReconnect() async {
         let values: NSDictionary = ["State:/Network/Interface/en0/Link": ["Active": true],
             "State:/Network/Interface/en0/IPv4": ["Addresses": ["192.168.1.8"], "Router": "192.168.1.1"]]
@@ -306,7 +407,12 @@ import VPNCore
         model.disconnect()
         helper.onEvent?(.init(.stopped, "stopped"))
         relaunch()
-        await letConnectRun()
+        // Launch schedules a task which then schedules prepare/connect. A fixed
+        // number of yields is not evidence that both tasks have run under load.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
+        while !helper.commands.contains(where: { $0.kind == .connect }) && ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
         XCTAssertTrue(model.autoConnect)
         XCTAssertEqual(model.state, .connecting)
         XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)

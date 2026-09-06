@@ -120,8 +120,8 @@ final class NetworkCleanupTests: XCTestCase {
                     try NetworkScriptRunner.run(executable: executable, environment: ["PATH": "/usr/bin:/bin"], timeout: 0.05)
                 }, diagnostic: { diagnostics.append($0) })
             XCTAssertEqual(result, 0, "A nonzero exit would make OpenConnect print Script returned error")
-            XCTAssertEqual(diagnostics.count, 1)
-            XCTAssertEqual(EngineOutput.event(for: diagnostics[0], tunnelConfigured: true)?.kind, .info)
+            XCTAssertTrue(diagnostics.contains { $0.contains("hook timeout") })
+            XCTAssertEqual(diagnostics.compactMap { EngineOutput.event(for: $0, tunnelConfigured: true)?.kind }, [.info])
             XCTAssertNotNil(store.get(prefix + "IPv4")); XCTAssertNotNil(store.get(prefix + "DNS"))
         }
     }
@@ -141,7 +141,8 @@ final class NetworkCleanupTests: XCTestCase {
             }, diagnostic: { diagnostics.append($0) })
         XCTAssertEqual(code, 0)
         XCTAssertNil(store.get(prefix + "DNS")); XCTAssertNil(store.get(prefix + "XDVPN"))
-        XCTAssertTrue(diagnostics.allSatisfy { EngineOutput.event(for: $0)?.kind == .info })
+        XCTAssertFalse(diagnostics.contains { EngineOutput.event(for: $0)?.kind == .failure })
+        XCTAssertTrue(diagnostics.contains { $0.contains("route and service cleanup verified") })
     }
 
     func testConnectTimeoutRemainsFailureAndCleansPartialConfiguration() throws {
@@ -182,8 +183,8 @@ final class NetworkCleanupTests: XCTestCase {
         var diagnostics: [String] = []
         XCTAssertNotEqual(ManagedNetworkScript.execute(reason: .connect, session: session, environment: environment(), processID: 12345,
             parentExited: { false }, runScript: { XCTFail("Do not overwrite a conflicting service"); return 0 }, diagnostic: { diagnostics.append($0) }), 0)
-        XCTAssertEqual(diagnostics, ["XDVPN claim conflict utun99999"])
-        let event = try XCTUnwrap(EngineOutput.event(for: diagnostics[0]))
+        XCTAssertTrue(diagnostics.contains("XDVPN claim conflict utun99999"))
+        let event = try XCTUnwrap(diagnostics.compactMap { EngineOutput.event(for: $0) }.first)
         XCTAssertEqual(event.kind, .failure)
         XCTAssertTrue(event.message.contains("utun99999")); XCTAssertFalse(event.message.contains("vpnc-script 安装"))
         XCTAssertNil(EngineOutput.event(for: "XDVPN claim conflict utun1\nsecret"))
@@ -333,6 +334,59 @@ final class NetworkCleanupTests: XCTestCase {
         try exerciseEngine(mode: "stop-error")
     }
 
+    func testConnectedRequiresCompletedScriptAndVerifiedOwnedNetworkState() throws {
+        for mode in ["success", "script-error", "unverified"] {
+            let store = TestNetworkStore(), session = try session(store)
+            defer { removeFixture(session) }
+            let path = "/private/tmp/xdvpn-configured-test-" + UUID().uuidString
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            try """
+            #!/usr/bin/python3
+            import os, sys, time
+            sys.stdin.readline()
+            print('Configured as 10.8.0.2, with SSL connected', flush=True)
+            print('fixture-before-script', flush=True)
+            time.sleep(0.05)
+            if '\(mode)' == 'script-error':
+                print("Script 'fixture' returned error 1", flush=True)
+            else:
+                print('fixture-install-state pid=' + str(os.getpid()), flush=True)
+                print('XDVPN IPv4 service verified pid=' + str(os.getpid()), flush=True)
+            time.sleep(0.05)
+            """.write(toFile: path, atomically: true, encoding: .utf8)
+            chmod(path, 0o700)
+            let stopped = expectation(description: mode)
+            var connections = 0, failures = 0, completionSeen = false
+            var messages: [String] = []
+            let engine = TunnelEngine(executable: path, networkSessionFactory: { session }) { event in
+                messages.append(event.message)
+                if event.diagnostic != nil {
+                    if event.message == "fixture-before-script" { XCTAssertEqual(connections, 0) }
+                    if event.message.hasPrefix("fixture-install-state pid="), mode == "success" {
+                        do {
+                            let pid = Int32(event.message.split(separator: "=").last!)!
+                            try session.claim(environment: self.environment(pid: pid))
+                            store.installTunnel()
+                        } catch { XCTFail(error.localizedDescription) }
+                    }
+                    if event.message.hasPrefix("XDVPN IPv4 service verified pid=") { completionSeen = true }
+                }
+                if event.kind == .connected {
+                    XCTAssertTrue(completionSeen)
+                    XCTAssertEqual(event.address, "10.8.0.2")
+                    connections += 1
+                }
+                if event.kind == .failure { failures += 1 }
+                if event.kind == .stopped { stopped.fulfill() }
+            }
+            engine.start(profile: .init(username: "fixture"), password: "private-password-for-gate-test")
+            wait(for: [stopped], timeout: 4)
+            XCTAssertEqual(connections, mode == "success" ? 1 : 0, messages.joined(separator: "\n"))
+            XCTAssertNil(store.get(prefix + "IPv4"))
+            XCTAssertEqual(failures, mode == "success" ? 0 : 1)
+        }
+    }
+
     func testEngineCanRetryFailedCleanupBeforeStartingAnotherTunnel() throws {
         let store = TestNetworkStore()
         let folder = "/private/tmp/xdvpn-retry-test-" + UUID().uuidString
@@ -345,6 +399,7 @@ final class NetworkCleanupTests: XCTestCase {
         sys.stdin.readline()
         open('\(folder)/pid', 'w').write(str(os.getpid()))
         print('Configured as 10.8.0.2, with SSL connected', flush=True)
+        print('XDVPN IPv4 service verified pid=' + str(os.getpid()), flush=True)
         time.sleep(0.15)
         os._exit(9)
         """.write(toFile: path, atomically: true, encoding: .utf8)
@@ -358,7 +413,7 @@ final class NetworkCleanupTests: XCTestCase {
             current = try self.session(store); sessions.append(current)
             return current
         }) { event in
-            if event.kind == .connected {
+            if event.diagnostic != nil && event.message.hasPrefix("Configured as ") {
                 started += 1
                 do {
                     let pid = Int32(try String(contentsOfFile: folder + "/pid", encoding: .utf8))!
@@ -406,6 +461,7 @@ final class NetworkCleanupTests: XCTestCase {
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, lambda *_: None)
         print('Configured as 10.8.0.2, with SSL connected and DTLS in progress', flush=True)
+        print('XDVPN IPv4 service verified pid=' + str(os.getpid()), flush=True)
         if '\(mode)' == 'crash':
             time.sleep(0.1)
             os._exit(9)
@@ -417,15 +473,15 @@ final class NetworkCleanupTests: XCTestCase {
         var failures = 0, stopCount = 0
         let engine = TunnelEngine(executable: path, networkSessionFactory: { session }, stopGrace: 0.08,
                                   killGrace: mode == "unresponsive" ? 0.18 : 2) { event in
-            if event.kind == .connected {
+            if event.diagnostic != nil && event.message.hasPrefix("Configured as ") {
                 do {
                     let pid = Int32(try String(contentsOfFile: folder + "/pid", encoding: .utf8))!
                     try session.claim(environment: self.environment(pid: pid))
                     store.installTunnel()
                     if mode == "cleanup-failure" { store.refuseRemoval = true }
                 } catch { XCTFail(error.localizedDescription) }
-                connected.fulfill()
             }
+            if event.kind == .connected { connected.fulfill() }
             if event.kind == .failure { failures += 1 }
             if event.kind == .stopped {
                 if mode == "cleanup-failure" {

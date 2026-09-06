@@ -2,8 +2,8 @@ import SwiftUI
 import Network
 import VPNCore
 
-enum Page: String, CaseIterable { case connection = "连接", profile = "VPN 配置", authorization = "系统授权", activity = "连接日志"
-    var icon: String { switch self { case .connection: "square.grid.2x2"; case .profile: "slider.horizontal.3"; case .authorization: "checkmark.shield"; case .activity: "text.alignleft" } }
+enum Page: String, CaseIterable { case connection = "连接", quality = "连接质量", profile = "VPN 配置", authorization = "系统授权", activity = "连接日志"
+    var icon: String { switch self { case .connection: "square.grid.2x2"; case .quality: "chart.xyaxis.line"; case .profile: "slider.horizontal.3"; case .authorization: "checkmark.shield"; case .activity: "text.alignleft" } }
 }
 enum ConnectionState: Equatable {
     case idle, authorizing, connecting, connected, reconnecting, waiting, disconnecting, failed
@@ -42,6 +42,14 @@ struct ActivityEntry: Identifiable {
     @Published private(set) var privilegeIssue: String?
     @Published private(set) var isQuitting = false
     @Published private(set) var logFileIssue: String?
+    @Published private(set) var qualityEvents: [QualityEvent] = []
+    @Published private(set) var qualityHistoryIncomplete = false
+    @Published private(set) var qualityHistoryLoaded = false
+    private var quality = ConnectionQuality()
+    private var qualityAlertIDs = Set<String>()
+    private var qualityAlertTask: Task<Void, Never>?
+    // Cancellation invalidates tasks, but must not change the tunnel's log ID.
+    private var connectionID = ""
     let activityLog: RollingActivityLog?
     private let defaults: UserDefaults
     private let bridge: any HelperControlling
@@ -100,7 +108,27 @@ struct ActivityEntry: Identifiable {
                 self.logFileIssue = available ? nil : "文件日志暂不可用，连接不受影响；仍可查看本次会话日志。"
             }
         }
+        if let activityLog {
+            activityLog.loadHistory { [weak self] history in
+                guard let self else { return }
+                self.qualityEvents = history.events + self.qualityEvents
+                self.qualityHistoryIncomplete = history.incomplete
+                self.qualityHistoryLoaded = true
+                if let session = history.uncleanSession, !self.isQuitting {
+                    self.recordQuality([QualityEvent(kind: .uncleanExit, connection: "")])
+                    self.log("上次应用会话缺少正常退出记录（\(session)）；尚不能确认是崩溃、强制退出还是断电。", source: .lifecycle, event: "app.previous_exit_unclean")
+                }
+                self.refreshQualityAlerts()
+            }
+        } else { qualityHistoryLoaded = true }
         if startMonitoring {
+        qualityAlertTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                guard let self, !self.isQuitting else { return }
+                self.refreshQualityAlerts()
+            }
+        }
         Task { [weak self] in await self?.refreshPrivileges() }
         monitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async { self?.fallbackNetworkChanged(path.status == .satisfied) }
@@ -188,6 +216,8 @@ struct ActivityEntry: Identifiable {
         retryTask?.cancel(); retryAt = nil
         guard networkAvailable && !sleeping else { state = .waiting; return }
         generation = UUID(); let attempt = generation
+        connectionID = attempt.uuidString
+        recordQuality(quality.begin(connection: connectionID))
         log("开始新连接尝试。", source: .recovery, event: "connect.begin")
         // Until the command is sent there is no child to stop or acknowledge
         // cleanup. Offline cancellation must invalidate this pending task.
@@ -203,6 +233,7 @@ struct ActivityEntry: Identifiable {
                 self.state = .connecting
             } catch {
                 guard self.generation == attempt else { return }
+                self.recordQuality(self.quality.end(reason: .preparation, cancelled: false))
                 self.fail(error.localizedDescription)
                 await self.refreshPrivileges()
                 guard self.generation == attempt else { return }
@@ -214,6 +245,7 @@ struct ActivityEntry: Identifiable {
     func disconnect() {
         guard !isQuitting else { return }
         log("用户请求断开或取消连接。", event: "disconnect.requested")
+        recordQuality(quality.end(reason: .user, cancelled: true))
         let wasAuthorizing = state == .authorizing
         desiredConnection = false; generation = UUID()
         connectTask?.cancel(); retryTask?.cancel(); retryAt = nil
@@ -229,6 +261,16 @@ struct ActivityEntry: Identifiable {
 
     private func receive(_ event: HelperEvent) {
         guard !isQuitting else { return }
+        if let diagnostic = event.diagnostic {
+            let isError = diagnostic.level == .error
+            activityLog?.append(event.message, date: Date(), source: .helper, event: diagnostic.code, state: state.title,
+                                connection: connectionID, autoConnect: autoConnect, isError: isError, diagnostic: diagnostic)
+            if isError {
+                entries.append(ActivityEntry(message: event.message, isError: true))
+                if entries.count > 300 { entries.removeFirst(entries.count - 300) }
+            }
+            return // Diagnostic severity is not a command to tear down a session.
+        }
         log(event.message, error: event.kind == .failure, source: .helper, event: event.kind.rawValue)
         switch event.kind {
         case .ready, .info: break
@@ -236,6 +278,10 @@ struct ActivityEntry: Identifiable {
         case .connected:
             guard state != .disconnecting else { return }
             guard desiredConnection else { try? bridge.send(.init(.disconnect)); return }
+            recordQuality(quality.connected(canRecover: networkAvailable && !sleeping))
+            if !networkAvailable || sleeping {
+                recordQuality(quality.recovering(reason: sleeping ? .sleep : .offline))
+            }
             tunnelEstablished = true; cancelRecoveryDeadline()
             state = networkAvailable && !sleeping ? .connected : .reconnecting
             issue = nil; retry.reset(); retryAt = nil
@@ -246,6 +292,7 @@ struct ActivityEntry: Identifiable {
         case .reconnecting:
             enterRecovering()
         case .failure:
+            recordQuality(quality.end(reason: qualityFailureReason(event.message), cancelled: false))
             if desiredConnection, autoConnect, tunnelEstablished,
                state == .reconnecting || restartAfterStop,
                event.message == EngineOutput.networkConfigurationFailureMessage {
@@ -268,6 +315,7 @@ struct ActivityEntry: Identifiable {
             // Keep controls locked until OpenConnect has actually exited.
             state = .disconnecting
         case .stopped:
+            recordQuality(quality.end(reason: .transport, cancelled: false))
             connectedAt = nil; address = nil; tunnelEstablished = false
             cancelRecoveryDeadline(); lastRecoveryKick = nil
             if restartAfterStop && desiredConnection {
@@ -313,6 +361,7 @@ struct ActivityEntry: Identifiable {
             switch state {
             case .connected, .connecting, .reconnecting:
                 if tunnelEstablished {
+                    recordQuality(quality.recovering(reason: .offline))
                     if state == .connected { log("物理网络已断开，暂停主动恢复，等待网络重新就绪。") }
                     state = .reconnecting
                 } else {
@@ -321,6 +370,7 @@ struct ActivityEntry: Identifiable {
                     stopTunnelForRecovery(restart: true)
                 }
             case .authorizing:
+                recordQuality(quality.end(reason: .offline, cancelled: true))
                 generation = UUID(); connectTask?.cancel(); bridge.shutdown()
                 state = .waiting
             case .waiting, .disconnecting, .idle, .failed:
@@ -392,7 +442,7 @@ struct ActivityEntry: Identifiable {
         switch state {
         case .connected,
              .reconnecting where tunnelEstablished:
-            enterRecovering()
+            enterRecovering(reason: .networkChange)
             do {
                 try bridge.send(.init(.reconnect))
                 log("已向助手请求恢复现有 VPN 会话；原因：\(reason)。", source: .recovery, event: "reconnect.requested")
@@ -405,6 +455,7 @@ struct ActivityEntry: Identifiable {
             log("网络变化发生在首次登录期间，清理后重试；原因：\(reason)。", source: .recovery, event: "login.restart")
             restartTunnelAfterCleanup()
         case .authorizing:
+            recordQuality(quality.end(reason: .networkChange, cancelled: true))
             generation = UUID(); connectTask?.cancel(); bridge.shutdown()
             state = .waiting; connect()
         case .waiting:
@@ -419,9 +470,10 @@ struct ActivityEntry: Identifiable {
 
     /// Every established-tunnel recovery uses the same bounded episode, whether
     /// triggered by a network notification or by OpenConnect's own DPD output.
-    private func enterRecovering() {
+    private func enterRecovering(reason: QualityEvent.Reason = .transport) {
         guard desiredConnection, !isQuitting,
               [.connected, .connecting, .reconnecting].contains(state) else { return }
+        recordQuality(quality.recovering(reason: reason))
         state = .reconnecting
         guard tunnelEstablished, networkAvailable, !sleeping,
               recoveryDeadline == nil else { return }
@@ -432,6 +484,7 @@ struct ActivityEntry: Identifiable {
             guard self.desiredConnection, self.state == .reconnecting,
                   self.networkAvailable, !self.sleeping, !self.isQuitting else { return }
             self.log(self.autoConnect ? "原会话未能及时恢复，清理旧隧道后重新登录。" : "原会话未能及时恢复，清理旧隧道并恢复系统网络。", source: .recovery, event: "recovery.deadline")
+            self.recordQuality(self.quality.end(reason: .recoveryTimeout, cancelled: false))
             self.stopTunnelForRecovery(restart: self.autoConnect)
         }
     }
@@ -445,6 +498,8 @@ struct ActivityEntry: Identifiable {
     }
 
     private func stopTunnelForRecovery(restart: Bool) {
+        // Interrupted initial handshakes are not failed authentication attempts.
+        recordQuality(quality.end(reason: networkAvailable ? .networkChange : .offline, cancelled: true))
         recoveryTask?.cancel(); recoveryTask = nil
         cancelRecoveryDeadline()
         restartAfterStop = restart
@@ -463,6 +518,7 @@ struct ActivityEntry: Identifiable {
 
     func systemWillSleep() {
         log("系统即将睡眠，暂停主动恢复。", source: .lifecycle, event: "system.sleep")
+        recordQuality(quality.recovering(reason: .sleep))
         sleeping = true; retryTask?.cancel(); retryAt = nil
         recoveryTask?.cancel(); cancelRecoveryDeadline()
         if desiredConnection { pendingRecovery = true }
@@ -482,6 +538,7 @@ struct ActivityEntry: Identifiable {
     private func helperClosed() {
         guard !isQuitting else { return }
         if state.isActive {
+            recordQuality(quality.end(reason: .helperUnavailable, cancelled: false))
             fail("权限助手已退出。请重新连接；若持续失败，请在「系统授权」中重新检测。")
         }
     }
@@ -500,7 +557,39 @@ struct ActivityEntry: Identifiable {
     }
     private func persist(_ message: String, date: Date, source: RollingActivityLog.Source, event: String, error: Bool = false) {
         activityLog?.append(message, date: date, source: source, event: event, state: state.title,
-                            connection: generation.uuidString, autoConnect: autoConnect, isError: error)
+                            connection: connectionID, autoConnect: autoConnect, isError: error)
+    }
+    private func recordQuality(_ events: [QualityEvent]) {
+        guard !events.isEmpty else { return }
+        qualityEvents.append(contentsOf: events)
+        let cutoff = Date().addingTimeInterval(-86400).timeIntervalSince1970
+        qualityEvents = Array(qualityEvents.filter { $0.timestamp >= cutoff }.suffix(10_000))
+        for event in events {
+            activityLog?.append(event.kind.rawValue, date: Date(timeIntervalSince1970: event.timestamp),
+                source: .quality, event: "quality." + event.kind.rawValue, state: state.title,
+                connection: event.connection, autoConnect: autoConnect, isError: event.isFailure, quality: event)
+        }
+        refreshQualityAlerts()
+    }
+    func refreshQualityAlerts(now: Date = Date()) {
+        guard qualityHistoryLoaded, !isQuitting else { return }
+        let alerts = QualitySnapshot(events: qualityEvents, now: now).alerts
+        let nextIDs = Set(alerts.map(\.id))
+        for alert in alerts where !qualityAlertIDs.contains(alert.id) {
+            log(alert.title + "：" + alert.detail, error: true, source: .quality, event: "alert.triggered." + alert.id)
+        }
+        for id in qualityAlertIDs.subtracting(nextIDs).sorted() {
+            log("本地告警已解除（\(id)），当前窗口未再触发该规则。", source: .quality, event: "alert.resolved." + id)
+        }
+        qualityAlertIDs = nextIDs
+    }
+    private func qualityFailureReason(_ message: String) -> QualityEvent.Reason {
+        // Version 4 helpers carry normalized messages, not structured codes.
+        // Only exact allowlisted categories are mapped; unknown failures stay unknown.
+        if message == EngineOutput.networkConfigurationFailureMessage { return .networkConfiguration }
+        if message == EngineOutput.event(for: "server certificate verify failed")?.message { return .certificate }
+        if message == EngineOutput.event(for: "login failed")?.message { return .authentication }
+        return .helperFailure
     }
     func showLogFolder() {
         guard let activityLog, NSWorkspace.shared.open(activityLog.directory) else {
@@ -521,10 +610,12 @@ struct ActivityEntry: Identifiable {
             else { completion() }
             return
         }
+        recordQuality(quality.end(reason: .appQuit, cancelled: true))
         log("退出应用，已请求助手独立完成断开清理。", source: .lifecycle, event: "app.quitting")
         // Remove the menu item immediately. The root helper owns cleanup after
         // receiving shutdown/EOF, so a lost stopped event cannot hang the app.
         isQuitting = true; desiredConnection = false; generation = UUID()
+        qualityAlertTask?.cancel()
         retryTask?.cancel(); connectTask?.cancel(); retryAt = nil
         cancelRecovery()
         monitor.cancel(); physicalMonitor?.stop()

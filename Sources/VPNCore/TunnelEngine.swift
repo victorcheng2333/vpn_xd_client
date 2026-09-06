@@ -19,6 +19,10 @@ public final class TunnelEngine {
     private var fatalFailure = false
     private var established = false
     private var transportFailure = false
+    private var sanitizer = DiagnosticSanitizer()
+    private var phase = "idle"
+    private var pendingConnected: HelperEvent?
+    private var configurationConfirmed = false
     private var stopCallbacks: [() -> Void] = []
 
     public init(executable: String, networkSessionFactory: (() throws -> TunnelNetworkSession)? = nil,
@@ -38,11 +42,14 @@ public final class TunnelEngine {
         if cleanupBlocked {
             guard let session = networkSession, let pid = cleanupProcessID else { return }
             do {
-                try session.cleanup(processID: pid)
+                try session.cleanup(processID: pid, diagnostic: {
+                    self.diagnose($0, code: "route.cleanupRetry", source: .route, processID: pid)
+                })
                 try session.finish()
                 networkSession = nil; cleanupProcessID = nil; cleanupBlocked = false
                 emit(.init(.info, "上次网络清理已通过核对，继续连接。"))
             } catch {
+                diagnose(error.localizedDescription, code: "cleanup.retryFailed", source: .route, processID: pid, level: .error)
                 emit(.init(.failure, session.cleanupFailureMessage()))
                 emit(.init(.stopped, "未启动新隧道：上次网络清理尚未通过核对。"))
                 return
@@ -50,6 +57,9 @@ public final class TunnelEngine {
         }
         do {
             try OpenConnect.validatePassword(password)
+            sanitizer = DiagnosticSanitizer(secrets: [password])
+            phase = "login"
+            pendingConnected = nil; configurationConfirmed = false
             var args = try OpenConnect.arguments(profile: profile)
             networkSession = try networkSessionFactory?()
             if networkSession != nil {
@@ -71,24 +81,36 @@ public final class TunnelEngine {
             try child.run()
             process = child
             emit(.init(.connecting, "正在验证身份并建立加密隧道。"))
-            // Only stdin receives the password. It is never retained by the engine.
+            diagnose("OpenConnect started pid=\(child.processIdentifier)", code: "process.started", processID: child.processIdentifier)
+            // Only stdin receives the password; a temporary redaction copy is
+            // retained until exit so an unexpected echo cannot reach file logs.
             do { try input.fileHandleForWriting.write(contentsOf: Data((password + "\n").utf8)) }
             catch { /* The child's output and exit status explain early rejection. */ }
             try? input.fileHandleForWriting.close()
 
             DispatchQueue.global(qos: .utility).async {
                 var pending = Data()
+                var discardingLongLine = false
                 while true {
-                    let chunk = output.fileHandleForReading.availableData
+                    var chunk = output.fileHandleForReading.availableData
                     if chunk.isEmpty { break }
+                    if discardingLongLine {
+                        guard let end = chunk.firstIndex(of: 10) else { continue }
+                        chunk.removeSubrange(...end); discardingLongLine = false
+                    }
                     pending.append(chunk)
                     while let end = pending.firstIndex(of: 10) {
-                        let line = String(decoding: pending.prefix(upTo: end), as: UTF8.self)
+                        let raw = pending.prefix(upTo: end)
+                        let line = String(decoding: raw.prefix(16_384), as: UTF8.self) + (raw.count > 16_384 ? " [line truncated]" : "")
                         pending.removeSubrange(...end)
                         self.queue.sync { if self.process === child { self.consume(line, child: child) } }
                     }
                     // Don't retain arbitrary, unbounded server responses.
-                    if pending.count > 16_384 { pending.removeAll(keepingCapacity: true) }
+                    if pending.count > 16_384 {
+                        let line = String(decoding: pending.prefix(16_384), as: UTF8.self) + " [line truncated]"
+                        self.queue.sync { if self.process === child { self.consume(line, child: child) } }
+                        pending.removeAll(keepingCapacity: true); discardingLongLine = true
+                    }
                 }
                 if !pending.isEmpty {
                     let line = String(decoding: pending, as: UTF8.self)
@@ -107,10 +129,32 @@ public final class TunnelEngine {
             try? networkSession?.finish(); networkSession = nil
             emit(.init(.failure, error.localizedDescription))
             emit(.init(.stopped, "连接未启动。"))
+            sanitizer = DiagnosticSanitizer(); phase = "idle"
         }
     }
 
     private func consume(_ line: String, child: Process) {
+        var diagnostic = EngineDiagnostic.classify(line, phase: phase, processID: child.processIdentifier)
+        if line.hasPrefix("XDVPN route") { diagnostic.source = .route; diagnostic.code = "route.operation" }
+        let safe = sanitizer.sanitize(line)
+        emit(.init(.info, safe, diagnostic: diagnostic))
+        if line == "XDVPN IPv4 service verified pid=\(child.processIdentifier)", let networkSession,
+           !requestedStop, !stopSignalled, !fatalFailure {
+            do {
+                try networkSession.verifyConfiguration(processID: child.processIdentifier)
+                configurationConfirmed = true
+                if let event = pendingConnected {
+                    pendingConnected = nil; established = true; transportFailure = false; phase = "connected"
+                    emit(event)
+                }
+            } catch {
+                diagnose("Network configuration confirmation failed: \(error.localizedDescription)", code: "configuration.confirmationFailed", level: .error)
+                fatalFailure = true
+                emit(.init(.failure, EngineOutput.networkConfigurationFailureMessage))
+                signalStop(child)
+            }
+            return
+        }
         if EngineOutput.isTransportFailure(line) { transportFailure = true }
         // OpenConnect also prints this generic authentication epilogue after DNS
         // or TCP failure. Known transport errors remain retryable, while unknown
@@ -132,21 +176,30 @@ public final class TunnelEngine {
             emit(event)
             signalStop(child)
         } else if !requestedStop && !stopSignalled && !fatalFailure {
-            if event.kind == .connected { established = true; transportFailure = false }
+            if event.kind == .connected, networkSession != nil, !configurationConfirmed {
+                pendingConnected = event
+                return
+            }
+            if event.kind == .connected { established = true; transportFailure = false; phase = "connected" }
             emit(event)
         }
     }
 
     private func finished(_ child: Process) {
         guard process === child else { return }
+        phase = "cleanup"
+        diagnose("OpenConnect exited pid=\(child.processIdentifier) status=\(child.terminationStatus) reason=\(child.terminationReason.rawValue) requestedStop=\(requestedStop)", code: "process.exited", processID: child.processIdentifier)
         let hadRecord = networkSession?.hasTunnelRecord == true
         if let networkSession {
             do {
-                let removed = try networkSession.cleanup(processID: child.processIdentifier)
+                let removed = try networkSession.cleanup(processID: child.processIdentifier, diagnostic: {
+                    self.diagnose($0, code: "route.cleanup", source: .route, processID: child.processIdentifier)
+                })
                 try networkSession.finish()
                 self.networkSession = nil; cleanupProcessID = nil
                 if removed > 0 { emit(.init(.info, "权限助手已清除本次隧道残留的路由服务与 DNS 配置。")) }
             } catch {
+                diagnose(error.localizedDescription, code: "cleanup.failed", source: .route, processID: child.processIdentifier, level: .error)
                 cleanupBlocked = true; fatalFailure = true
                 cleanupProcessID = child.processIdentifier
                 emit(.init(.failure, networkSession.cleanupFailureMessage()))
@@ -157,6 +210,8 @@ public final class TunnelEngine {
         let message = cleanupBlocked ? "VPN 进程已退出，但网络清理核对失败。" :
             "VPN 进程已结束（\(child.terminationStatus)）。" + (hadRecord ? "本次隧道的 IPv4/DNS 状态已清理。" : "")
         emit(.init(.stopped, message, retryable: !normal && !fatalFailure))
+        sanitizer = DiagnosticSanitizer(); phase = "idle"
+        pendingConnected = nil; configurationConfirmed = false
         let callbacks = stopCallbacks; stopCallbacks.removeAll()
         callbacks.forEach { $0() }
     }
@@ -164,16 +219,17 @@ public final class TunnelEngine {
     private func signalStop(_ child: Process) {
         guard child.isRunning, !stopSignalled else { return }
         stopSignalled = true
+        phase = "stopping"
         // Process.interrupt/terminate can signal the entire process group on
         // macOS. Send only to our OpenConnect PID, preserving its script tree.
-        kill(child.processIdentifier, SIGINT)
+        sendSignal(SIGINT, to: child)
         queue.asyncAfter(deadline: .now() + stopGrace) {
-            if self.process === child && child.isRunning { kill(child.processIdentifier, SIGTERM) }
+            if self.process === child && child.isRunning { self.sendSignal(SIGTERM, to: child) }
         }
         queue.asyncAfter(deadline: .now() + killGrace) {
             if self.process === child && child.isRunning {
                 self.emit(.init(.info, "VPN 进程未响应停止，将结束该进程并核对本次网络配置。"))
-                kill(child.processIdentifier, SIGKILL)
+                self.sendSignal(SIGKILL, to: child)
             }
         }
     }
@@ -191,8 +247,21 @@ public final class TunnelEngine {
         queue.async {
             guard let child = self.process, child.isRunning, self.established,
                   !self.requestedStop, !self.stopSignalled, !self.fatalFailure else { return }
-            kill(child.processIdentifier, SIGUSR2)
+            self.phase = "reconnect"
+            self.sendSignal(SIGUSR2, to: child)
             self.emit(.init(.reconnecting, "网络已变化，正在重新建立隧道。", retryable: true))
         }
+    }
+
+    private func sendSignal(_ signal: Int32, to child: Process) {
+        let result = kill(child.processIdentifier, signal)
+        let error = result == 0 ? 0 : errno
+        diagnose("signal=\(signal) pid=\(child.processIdentifier) result=\(result) errno=\(error)", code: "process.signal",
+                 processID: child.processIdentifier, level: result == 0 ? .info : .error)
+    }
+
+    private func diagnose(_ message: String, code: String, source: EngineDiagnostic.Source = .helper,
+                          processID: Int32? = nil, level: EngineDiagnostic.Level = .info) {
+        emit(.init(.info, sanitizer.sanitize(message), diagnostic: .init(source: source, code: code, phase: phase, processID: processID, level: level)))
     }
 }

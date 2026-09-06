@@ -67,10 +67,10 @@ public enum ManagedNetworkScript {
             }
             return execute(reason: reason, session: session, environment: environment, processID: pid,
                 parentExited: { kill(pid, 0) != 0 && errno == ESRCH },
-                runScript: { try NetworkScriptRunner.run(executable: script, environment: environment) },
+                runScript: { try NetworkScriptRunner.run(executable: session.managedScript(source: script), environment: environment) },
                 diagnostic: { try? FileHandle.standardError.write(contentsOf: Data(($0 + "\n").utf8)) })
         } catch {
-            try? FileHandle.standardError.write(contentsOf: Data("XDVPN network script failed\n".utf8))
+            try? FileHandle.standardError.write(contentsOf: Data("XDVPN network script failed: \(error.localizedDescription)\n".utf8))
             return 1
         }
     }
@@ -81,6 +81,7 @@ public enum ManagedNetworkScript {
                         processID: Int32, parentExited: () -> Bool, runScript: () throws -> Int32,
                         diagnostic: (String) -> Void) -> Int32 {
         defer { withExtendedLifetime(session) {} } // Hold the script's journal lease through the watchdog and final verification.
+        diagnostic("XDVPN hook begin phase=\(reason.rawValue) pid=\(processID)")
         if reason == .connect {
             do { try session.claim(environment: environment) }
             catch let conflict as TunnelNetworkSession.ClaimConflict {
@@ -91,29 +92,55 @@ public enum ManagedNetworkScript {
                 return 1
             }
         }
+        if reason == .connect || reason == .attemptReconnect || reason == .reconnect {
+            do { try session.prepareServerRoute(environment: environment, diagnostic: diagnostic) }
+            catch RouteFailure.unavailable where reason != .connect {
+                diagnostic("XDVPN route deferred phase=\(reason.rawValue): physical route unavailable")
+                return 0
+            } catch {
+                diagnostic("XDVPN route configuration failed phase=\(reason.rawValue): \(error.localizedDescription)")
+                return 1
+            }
+        }
         if reason == .disconnect {
             // Release the dead resolver before route(8) can block on DNS.
             // Keep our ownership marker until all script writers have stopped.
             // A failed first pass must not prevent the normal script cleanup.
-            _ = try? session.cleanup(processID: processID, afterExit: parentExited(), keepMarker: true)
+            do { try session.cleanup(processID: processID, afterExit: parentExited(), keepMarker: true, diagnostic: diagnostic) }
+            catch { diagnostic("XDVPN preliminary cleanup failed: \(error.localizedDescription)") }
         }
         var code: Int32 = 1
-        do { code = try runScript() }
+        do {
+            code = try runScript()
+            diagnostic("XDVPN hook exited phase=\(reason.rawValue) status=\(code)")
+        }
         catch NetworkScriptRunner.Failure.timedOut {
+            diagnostic("XDVPN hook timeout phase=\(reason.rawValue) budget=15s")
             if reason == .attemptReconnect || reason == .reconnect {
                 // OpenConnect can continue its own reconnect loop. Returning an
                 // error here produces a generic fatal-looking "Script ... error".
                 diagnostic("XDVPN hook deferred " + reason.rawValue)
                 return 0
             }
-        } catch { /* Native disconnect cleanup still runs after launch failure. */ }
+        } catch { diagnostic("XDVPN hook launch failed phase=\(reason.rawValue): \(error.localizedDescription)") }
+        if reason == .connect && code == 0 {
+            do {
+                try session.configureIPv4Service(environment: environment)
+                diagnostic("XDVPN IPv4 service verified pid=\(processID)")
+            } catch {
+                diagnostic("XDVPN IPv4 service configuration failed: \(error.localizedDescription)")
+                code = 1
+            }
+        }
         if reason == .disconnect || (reason == .connect && code != 0) {
-            do { try session.cleanup(processID: processID, afterExit: parentExited()) }
+            do { try session.cleanup(processID: processID, afterExit: parentExited(), diagnostic: diagnostic) }
             catch {
+                diagnostic("XDVPN cleanup detail: \(error.localizedDescription)")
                 diagnostic("XDVPN cleanup verification failed")
                 return 1
             }
             if reason == .disconnect {
+                diagnostic("XDVPN route and service cleanup verified pid=\(processID)")
                 if code != 0 { diagnostic("XDVPN disconnect cleanup confirmed") }
                 return 0
             }

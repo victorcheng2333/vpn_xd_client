@@ -77,6 +77,7 @@ final class RollingActivityLogTests: XCTestCase {
         XCTAssertEqual(rows.count, 8)
         XCTAssertEqual(rows[6].message, "普通诊断 forged line end")
         XCTAssertEqual(rows[7].message.count, 2048)
+        XCTAssertTrue(rows[7].message.contains("内容已截断"))
     }
 
     func testSymlinkAndHardlinkTargetsAreNeverWrittenAndFailureIsReported() throws {
@@ -106,5 +107,53 @@ final class RollingActivityLogTests: XCTestCase {
         append("fixture", to: log)
         log.flush { flushed.fulfill() }
         wait(for: [failed, flushed], timeout: 2)
+    }
+
+    func testHistoryReplaysQualityAndDistinguishesShutdownFromMissingExitEvidence() throws {
+        let log = RollingActivityLog(directory: folder)
+        let sample = QualityEvent(kind: .attemptSucceeded, connection: "attempt", durationMS: 1200)
+        log.append("quality", date: Date(), source: .quality, event: "quality.attemptSucceeded", state: "connecting",
+                   connection: "attempt", autoConnect: false, isError: false, quality: sample)
+        log.flush()
+        let missing = expectation(description: "missing exit")
+        log.loadHistory { history in
+            XCTAssertEqual(history.events, [sample]); XCTAssertNotNil(history.uncleanSession)
+            XCTAssertFalse(history.incomplete); missing.fulfill()
+        }
+        wait(for: [missing], timeout: 2)
+        log.append("quit", date: Date(), source: .lifecycle, event: "app.quitting", state: "idle",
+                   connection: "attempt", autoConnect: false, isError: false)
+        let clean = expectation(description: "normal exit")
+        log.loadHistory { history in
+            XCTAssertEqual(history.events, [sample]); XCTAssertNil(history.uncleanSession); clean.fulfill()
+        }
+        wait(for: [clean], timeout: 2)
+    }
+
+    func testHistoryKeepsLegacyRowsAndValidRowsBesideTruncatedTailWithoutClaimingCrash() throws {
+        let log = RollingActivityLog(directory: folder)
+        append("legacy", to: log); log.flush()
+        let file = folder.appendingPathComponent("activity.jsonl")
+        var row = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        for key in ["schemaVersion", "build", "osVersion", "quality"] { row.removeValue(forKey: key) }
+        var data = try JSONSerialization.data(withJSONObject: row)
+        data.append(contentsOf: "\n{\"truncated\":".utf8)
+        try data.write(to: file)
+        let read = expectation(description: "partial history")
+        log.loadHistory { history in
+            XCTAssertTrue(history.incomplete); XCTAssertNil(history.uncleanSession)
+            XCTAssertTrue(history.events.isEmpty); read.fulfill()
+        }
+        wait(for: [read], timeout: 2)
+    }
+
+    func testHistoryRejectsSpecialFilesWithoutBlocking() throws {
+        XCTAssertEqual(mkfifo(folder.appendingPathComponent("activity.jsonl").path, 0o600), 0)
+        let log = RollingActivityLog(directory: folder)
+        let read = expectation(description: "FIFO not read")
+        log.loadHistory { history in
+            XCTAssertTrue(history.incomplete); XCTAssertNil(history.uncleanSession); read.fulfill()
+        }
+        wait(for: [read], timeout: 2)
     }
 }
