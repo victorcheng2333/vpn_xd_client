@@ -2,15 +2,39 @@
 # Distribute the application together with notices and corresponding sources.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-APP="${APP_OUTPUT:-$PWD/dist/XD VPN.app}"
+source scripts/architectures.sh
+# With no target/output override, produce two independent application archives.
+if [ "${ARCHS+x}" != x ] && [ "${APP_OUTPUT+x}" != x ]; then
+    for TARGET in arm64 x86_64; do
+        ARCHS="$TARGET" bash scripts/package.sh
+    done
+    exit 0
+fi
+TARGET_ARCHS="$(xdvpn_architectures "${ARCHS-$(uname -m)}")"
+SOURCE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+APP="${APP_OUTPUT:-$PWD/dist/XD VPN $SOURCE_VERSION-$TARGET_ARCHS.app}"
+# A release command builds the complete payload before packaging it. Use
+# SKIP_BUILD=1 only to repackage an existing, verified application.
+if [ "${SKIP_BUILD:-0}" != 1 ]; then
+    APP_OUTPUT="$APP" bash scripts/build.sh
+fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
-ARCH="$(/usr/bin/lipo -archs "$APP/Contents/MacOS/XDVPN")"
-[[ "$ARCH" = arm64 || "$ARCH" = x86_64 ]] || exit 1
+TARGET_ARCHS="$(xdvpn_architectures "$(/usr/bin/lipo -archs "$APP/Contents/MacOS/XDVPN")")"
+xdvpn_verify_architectures "$APP/Contents/MacOS/XDVPN" "$TARGET_ARCHS"
+if [ "${ARCHS+x}" = x ]; then
+    xdvpn_verify_architectures "$APP/Contents/MacOS/XDVPN" "$(xdvpn_architectures "$ARCHS")"
+fi
+xdvpn_verify_architectures "$APP/Contents/Helpers/XDVPNHelper" "$TARGET_ARCHS"
+xdvpn_verify_engine "$APP/Contents/Resources/OpenConnect/openconnect" "$TARGET_ARCHS"
+case "$TARGET_ARCHS" in
+    arm64) ARCH=arm64; MACHINE='Apple Silicon（M 系列）Mac' ;;
+    x86_64) ARCH=x86_64; MACHINE='Intel Mac' ;;
+esac
 codesign --verify --deep --strict "$APP"
 test -x "$APP/Contents/Resources/OpenConnect/openconnect"
 test -x "$APP/Contents/Resources/OpenConnect/vpnc-script"
-STAGE="$PWD/.build/distribution/XD VPN $VERSION"
+STAGE="$PWD/.build/distribution/$ARCH/XD VPN $VERSION"
 SOURCES="$STAGE/ThirdPartySources"
 rm -rf "$STAGE"
 mkdir -p "$SOURCES/archives" "$SOURCES/scripts" dist
@@ -20,8 +44,8 @@ cp .build/openconnect/downloads/openconnect-9.21.tar.gz \
    .build/openconnect/downloads/pkgconf-3.0.6.tar.xz \
    .build/openconnect/downloads/vpnc-script \
    .build/openconnect/downloads/GPL-2.0.txt "$SOURCES/archives/"
-cp scripts/build-openconnect.sh "$SOURCES/scripts/"
-cp -R .build/openconnect/licenses "$STAGE/ThirdPartyLicenses"
+cp scripts/build-openconnect.sh scripts/architectures.sh "$SOURCES/scripts/"
+cp -R "$APP/Contents/Resources/ThirdParty" "$STAGE/ThirdPartyLicenses"
 # Include the actual GPL script source emitted by the network wrapper as well.
 python3 - "$SOURCES/vpnc-script-xdvpn" <<'PY'
 from pathlib import Path
@@ -54,7 +78,12 @@ To rebuild on a Mac with Xcode / Command Line Tools (Homebrew is not needed):
   cp archives/* .build/openconnect/downloads/
   bash scripts/build-openconnect.sh
 
-The executable and original vpnc-script are produced in .build/openconnect/runtime.
+The default rebuild targets the build machine's architecture.
+To select a target, use ARCHS=arm64 or ARCHS=x86_64 before bash.
+Both targets can be cross-compiled on either Mac architecture; Rosetta is
+only needed to run x86_64 validation on an Apple Silicon build machine.
+The executable and original vpnc-script are produced in
+.build/openconnect/<architecture>/runtime.
 The supplied archives permit this rebuild without downloading third-party code.
 Build output and installed application files are not assumed to be trusted merely
 because they were built here; the app's administrator installation verifies them.
@@ -69,11 +98,6 @@ https://github.com/openssl/openssl/releases/tag/openssl-3.6.2
 https://gitlab.com/openconnect/vpnc-scripts
 https://github.com/pkgconf/pkgconf
 EOF
-if [ "$ARCH" = arm64 ]; then
-    MACHINE='Apple Silicon（M 系列）Mac'
-else
-    MACHINE='Intel Mac'
-fi
 cat > "$STAGE/开始使用.txt" <<EOF
 XD VPN 内置引擎版
 

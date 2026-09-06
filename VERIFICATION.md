@@ -1,6 +1,24 @@
 # 验证记录
 
-## 当前交付：1.1.15 切网恢复修正版
+## 当前交付：1.1.16 Intel / Apple Silicon 独立包
+
+2026-09-06，build 19，助手协议继续为 8。按芯片分别交付，不生成通用二进制包。构建机为 Apple Silicon / macOS 26.6.2 / Swift 6.3.3。
+
+- `bash scripts/package.sh` 已实际完成两个 Release 构建及独立 ZIP。`ARCHS=x86_64` 或 `ARCHS=arm64` 可单独构建；默认 `build.sh` 仅构建本机架构。每个 App 中主程序、助手和 OpenConnect 均只有对应架构，最低系统目标均为 14.0。完整构建日志：`.build/intel-separate-package.log`。
+- Swift 使用显式目标 triple；OpenSSL 使用对应 Darwin 架构，OpenConnect 使用显式编译器架构和 build/host triple。修复上游 config.guess 使用不存在的 `/usr/bin/sh` 的问题，改由 `/bin/sh` 调用且检查结果；最终 Intel configure 日志显示 `cross compiling... yes`。构建无需运行另一架构引擎。源码、编译对象、运行文件及许可证按架构隔离，源码下载共用；编译缓存检查配方、工具链和工作区路径。
+- Apple Silicon 原生 XCTest：**174 项通过，0 失败**。Intel XCTest 经 Rosetta：**174 项通过，0 失败**。记录为 `.build/intel-arm64-tests-final.log`、`.build/intel-x86_64-tests-final.log`。测试入口使用当前执行架构对应的引擎；项目全为 XCTest，禁用不使用的 Swift Testing 加载器，避免其原生宿主进程无法加载 Intel bundle 而令成功的 XCTest 命令最终报错。
+- `bash scripts/test-packaging.sh`：两个实际 Mach-O 架构样例通过，7 个拒绝场景通过，覆盖混入另一架构的助手／引擎、通用二进制、错误目标架构及高于 macOS 14 的最低系统目标。记录 `.build/intel-packaging-tests.log`。
+- 两个最终 ZIP 完整性及解压后的严格签名检查通过；App、助手、引擎、网络脚本与原始构建逐一核对 SHA-256，版本为 1.1.16 / build 19，两个助手执行 `--version` 均为 8。源代码重建脚本与当前仓库一致，各包的许可证版本说明匹配自身架构。记录 `.build/intel-package-verification.json`。
+- 两个最终 ZIP 内的引擎分别按 arm64 原生／x86_64 Rosetta 执行隔离验收：移到带空格路径并禁止读取 Homebrew 和工作区后，版本查询与回环连接拒绝正常；可信 TLS 可发出 HTTP 请求，不可信证书及错误主机名均在发送 HTTP 前拒绝。两个引擎均仅依赖 macOS 系统库，无 `_strchrnul` 系统导入。记录 `.build/intel-arm64-engine-verification.json`、`.build/intel-x86_64-engine-verification.json`。
+
+| 分发包 | SHA-256 |
+| --- | --- |
+| `dist/XD-VPN-1.1.16-macOS-x86_64-bundled.zip` | `73fa639a80ae8fbb84f912f385c9fc9d189230d46fc3ea5667db1a2f8cd2c5f6` |
+| `dist/XD-VPN-1.1.16-macOS-arm64-bundled.zip` | `f2a8e426c869a8191b1fff41380074fbe67bf082ddc1a516f4d5c1d08abf3b86` |
+
+本次没有替换已安装的 App／系统助手、读取 VPN 凭据或操作真实网络。Intel 运行验收使用 Rosetta，尚未在 Intel 真机或 macOS 14 真机进行 VPN 连接验收。产物为本地 ad-hoc 签名，未进行 Apple 公证；此交付不改变既有切网恢复的实网验收边界。
+
+## 历史交付：1.1.15 切网恢复修正版
 
 2026-09-06，build 18，助手要求 8。针对用户报告切换到另一 Wi-Fi 后失败、切回恢复的问题，修复日志证实的重连准备阻塞；服务器会话拒绝的完整原因仍待实网确认。
 
