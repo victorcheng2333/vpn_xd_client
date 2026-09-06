@@ -9,7 +9,10 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 switch model.page {
-                case .connection: DashboardView()
+                case .connection:
+                    ScrollView {
+                        DashboardView().padding(.bottom, 2)
+                    }.scrollIndicators(.hidden)
                 case .quality: QualityView()
                 case .profile: ProfileView()
                 case .authorization: AuthorizationView()
@@ -110,6 +113,9 @@ struct DashboardView: View {
                 VStack(spacing: 18) { profileCard; privacyCard }.frame(width: 226)
             }
             autoConnectCard
+            LoginItemView()
+                .padding(19).background(Color(hex: 0xEDF1E9), in: RoundedRectangle(cornerRadius: 17))
+                .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color(hex: 0xE1E8DD)))
             HStack(spacing: 6) {
                 Image(systemName: "lock.shield").font(.system(size: 10))
                 Text("凭据留在你的 Mac，连接交给 XD VPN。") .font(.system(size: 10))

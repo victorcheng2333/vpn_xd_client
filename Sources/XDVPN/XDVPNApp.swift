@@ -4,6 +4,7 @@ import AppKit
 @main struct XDVPNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model: VPNModel
+    @StateObject private var loginItem = LoginItemManager()
 
     init() {
         let primary = AppInstanceCoordinator.shared.isPrimary
@@ -12,7 +13,7 @@ import AppKit
     }
     var body: some Scene {
         Window("XD VPN", id: "main") {
-            ContentView().environmentObject(model)
+            ContentView().environmentObject(model).environmentObject(loginItem)
                 .onAppear { delegate.model = model; NSApp.activate(ignoringOtherApps: true) }
         }
         .windowStyle(.hiddenTitleBar)
