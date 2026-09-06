@@ -52,7 +52,8 @@ final class RollingActivityLog {
                 let record = Record(timestamp: formatter.string(from: date), session: self.session, version: self.version,
                     source: source, event: event, stateBefore: state, connection: connection,
                     autoConnect: autoConnect, isError: isError, message: message, schemaVersion: 2,
-                    build: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development",
+                    build: Bundle.main.infoDictionary?["XDVPNBuildIdentifier"] as? String
+                        ?? Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "development",
                     osVersion: ProcessInfo.processInfo.operatingSystemVersionString, quality: quality, diagnostic: diagnostic)
                 var data = try JSONEncoder().encode(record)
                 data.append(10)

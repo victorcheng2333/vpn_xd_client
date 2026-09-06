@@ -8,12 +8,12 @@
 
 **请使用当前内置版 1.1.18。** 1.1.10 已确认存在路由校验和清理回归。
 
-按 Mac 芯片选择对应产物；Intel 版先解压 ZIP，再将应用拖到「应用程序」文件夹：
+按 Mac 芯片选择对应产物；打开 DMG 后，将应用拖到旁边的「Applications」文件夹：
 
 | Mac 芯片 | 默认输出 |
 | --- | --- |
-| Intel | `dist/XD-VPN-1.1.18-macOS-x86_64-bundled.zip` |
-| Apple Silicon（M 系列） | `dist/XD VPN 1.1.18-arm64.app`、`dist/XD-VPN-1.1.18-macOS-arm64-bundled.zip` |
+| Intel | `build/XD-VPN-1.1.18-macOS-x86_64.dmg` |
+| Apple Silicon（M 系列） | `build/XD VPN 1.1.18-arm64.app`、`build/XD-VPN-1.1.18-macOS-arm64.dmg` |
 
 1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`；已保存密码时输入框显示 `******`。
 2. 点击「保存配置」。密码存入 macOS 登录钥匙串，普通配置中不包含密码。
@@ -83,22 +83,29 @@
 需要 Xcode 或支持 Swift 6 的 Command Line Tools，不需要第三方 Swift 依赖。构建和测试缓存按当前工作区的绝对路径分开，复制／移动仓库后不会继续使用旧路径中的 SwiftShims 模块。
 
 ```bash
-# 默认输出 ARM .app、ARM ZIP 和 x64 ZIP
-bash scripts/package.sh
-
-# 仅构建／打包指定架构
-ARCHS=x86_64 bash scripts/package.sh
-ARCHS=arm64 bash scripts/package.sh
-
-# 开发构建默认使用本机架构；仅生成 .app
+# 日常开发：本机架构，固定输出到 build/dev/<架构>/XD VPN.app
 bash scripts/build.sh
 bash scripts/test.sh -c release
 bash scripts/test-packaging.sh
+
+# 小范围测试：显式指定构建号，ARM / Intel 测试 DMG 输出到 build/
+BUILD_CHANNEL=test BUILD_NUMBER=22 bash scripts/package.sh
+
+# 正式发布：确认版本文件后执行，输出 ARM .app、ARM DMG 和 Intel DMG 到 build/
+bash scripts/package.sh
+
+# 仅打包指定架构（也可与测试渠道、构建号组合）
+ARCHS=x86_64 bash scripts/package.sh
+ARCHS=arm64 bash scripts/package.sh
 ```
+
+日常修改默认只构建验证；只有明确要求正式发布时，才修改 `Resources/Info.plist` 中的 `CFBundleShortVersionString`（正式版本，如下一版 `1.1.19`）及 `CFBundleVersion`（构建号），验收后执行打包。两个脚本均不自动递增或回写版本文件，也不上传或发布到外部服务。测试迭代保持目标版本不变，每次分发时显式提供新的 `BUILD_NUMBER`，正式发布时使用高于已分发测试包的构建号。`BUILD_NUMBER` 只覆盖产物的构建号。
+
+`build.sh` 默认使用 `BUILD_CHANNEL=development`，重复构建复用 `build/dev/<架构>/XD VPN.app`，不生成 DMG。`BUILD_CHANNEL=test` 的单独构建输出到 `build/test/<架构>/XD VPN.app`，要求提供正整数 `BUILD_NUMBER`；`BUILD_CHANNEL=release` 则生成正式路径的应用。渠道与编译优化配置独立，`CONFIGURATION` 仍默认为 `release`。每个新构建的应用在 Info.plist 中保存 `XDVPNBuildChannel` 和 `XDVPNBuildIdentifier`，后者包含构建号、渠道、UTC 时间和 Git 短提交号（有未提交改动时带 `dirty`），同时写入活动日志的 `build` 字段，便于区分同一正式版本下的开发构建。
 
 `scripts/build.sh` 先调用 `scripts/build-openconnect.sh`，按固定 SHA-256 下载并编译 OpenConnect、OpenSSL 和构建工具 pkgconf，然后以显式目标架构编译 App 与助手、生成图标、组装 `.app` 并做本地 ad-hoc 签名。第三方源码、对象、引擎和许可证缓存在 `.build/openconnect/<架构>/`，下载归档共用；编译缓存还校验构建脚本、工作区路径与工具链，避免切换架构或移动目录后串用旧对象。pkgconf 始终在构建机器上运行。支持在任一芯片 Mac 上交叉编译另一架构，不需要通过 Rosetta 编译。引擎仅动态链接 macOS 系统库，禁用外部 OpenSSL 模块加载，最低部署目标为 macOS 14。开发时也可以在 Xcode 中打开 `Package.swift`；真实连接应运行打包后的 `.app`，因为权限助手位于其内部。
 
-`scripts/package.sh` 默认在 `dist` 中输出 ARM `.app`、ARM ZIP 和 x64 ZIP；Intel 中间应用保存在 `.build/package-apps`，不在 `dist` 中另放 `.app`。每个 ZIP 包含使用说明、许可证和可离线重建引擎的对应源码及脚本。打包前校验三个 Mach-O 文件的架构一致、最低系统目标为 14.0、签名有效，拒绝混合架构和通用二进制。只重新压缩已有应用时可使用 `SKIP_BUILD=1 ARCHS=x86_64 bash scripts/package.sh`；指定 `APP_OUTPUT` 时仅处理该应用，交叉构建须同时设置 `ARCHS`。`ARCHS` 每次只接受 `arm64` 或 `x86_64`。
+`scripts/package.sh` 默认使用正式渠道，在 `build` 中输出 ARM `.app`、ARM DMG 和 x64 DMG；Intel 中间应用保存在 `.build/package-apps`，不在 `build` 中另放 `.app`。测试渠道的 DMG 放在 `build`，名称包含 `-test.<构建号>`，不覆盖正式交付包。每个 DMG 包含完整的 `XD VPN.app`、「Applications」快捷入口和使用说明，不附带第三方源码归档或重建脚本；运行依赖及第三方许可证保留在应用内。编译缓存、源码下载与临时打包目录继续使用 `.build/`，最终应用及 DMG 输出到 `build/`。打包前校验三个 Mach-O 文件的架构一致、最低系统目标为 14.0、签名有效，拒绝混合架构和通用二进制。只重新打包已有应用时可使用 `SKIP_BUILD=1 ARCHS=x86_64 bash scripts/package.sh`；指定 `APP_OUTPUT` 时仅处理该应用，交叉构建须同时设置 `ARCHS`。重新打包要求应用渠道匹配，不允许将开发包直接当正式包；旧版没有渠道字段的应用按正式包处理。测试包重打包应设置 `BUILD_CHANNEL=test`，版本和构建号以已有应用为准。`ARCHS` 每次只接受 `arm64` 或 `x86_64`。
 
 当前内置版为 1.1.18（build 21），继续使用 **版本 8 系统助手**。断开并退出旧版后打开对应芯片版本，配置和钥匙串密码沿用。进入「系统授权」点击「升级系统助手」，完成一次管理员确认，安装本版助手、内置引擎及网络脚本。即使助手版本相同，引擎或网络脚本的 SHA-256 与应用内文件不一致时也会提示升级。可通过 `APP_OUTPUT` 指定构建位置，避免覆盖正在运行的应用。
 
@@ -145,6 +152,6 @@ OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 st
 
 开发参考：[公司示例脚本](https://git.tapsvc.com/-/snippets/92/raw/master/bin/xd-vpn)、[OpenConnect 官方手册](https://www.infradead.org/openconnect/manual.html)。
 
-内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "dist/XD VPN 1.1.18-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
+内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "build/XD VPN 1.1.18-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
 
-分发包随附第三方许可证、对应源码和重建脚本。构建选项依据 [OpenConnect 官方构建说明](https://www.infradead.org/openconnect/building.html)，许可证见 [OpenConnect 官方许可证](https://www.infradead.org/openconnect/licence.html)。
+应用内保留第三方许可证；分发 DMG 不附带源码归档和重建脚本，构建用源码仍缓存在 `.build/openconnect/downloads/`。构建选项依据 [OpenConnect 官方构建说明](https://www.infradead.org/openconnect/building.html)，许可证见 [OpenConnect 官方许可证](https://www.infradead.org/openconnect/licence.html)。
