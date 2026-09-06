@@ -4,6 +4,14 @@
 
 完整设计与实现说明见 [技术方案文档](docs/technical-solution.md)（Markdown，含架构、UI、状态机、恢复清理与质量监控等 13 张图，并注明版本基线与开发增量）。
 
+## 多端规划与 iOS 开发
+
+`codex/ios-support` 分支的 [多端架构与 iOS 接入方案](docs/design/2026-09-06-ios-support.md) 采用同仓库、独立 macOS/iOS/Android 原生客户端、统一产品与视觉规范。各端独立实现配置、权限、连接生命周期与 UI，不共享 Swift 运行时代码包。
+
+移动端的配置授权、Cisco/Hillstone 反馈、网络切换与休眠恢复实践见 [iOS VPN 可靠性调研](docs/design/2026-09-06-ios-vpn-reliability-research.md)。On Demand 与真机恢复验证提前纳入首个技术验证阶段。
+
+根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已通过真机/模拟器无签名构建及本地检查，真实 VPN、锁屏和换网仍待签名后在 iPhone 验证。未来 Android 在 `Apps/Android` 独立实现 Kotlin/Compose + VpnService，两端均不依赖 macOS 的 `VPNCore`。
+
 ## 直接使用
 
 **请使用当前内置版 1.1.18。** 1.1.10 已确认存在路由校验和清理回归。

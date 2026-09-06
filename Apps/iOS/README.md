@@ -1,0 +1,89 @@
+# XD VPN iOS 验证版 0.1.0
+
+这是独立的 iOS/iPadOS 17+ 原生验证工程，包含 SwiftUI App 和 Packet Tunnel Extension。**已实现连接路径并完成构建；尚未在公司网关和实体 iPhone 上验证成功。** macOS 工程、助手和运行时代码未改，Android 尚未建立工程。
+
+## 已实现
+
+- 服务器、用户名、密码、认证组配置；App 内申请添加系统 VPN 配置。
+- App/Extension 共享钥匙串持久引用；凭据只在本设备首次解锁后可读，不存入配置或诊断文件。
+- OpenConnect 9.21 + OpenSSL 3.6.2 独立交叉构建；Extension 内调用库，不运行命令行程序。
+- 公共 `packetFlow` 经非阻塞 datagram socketpair 桥接 IP 包；显式处理 Darwin 地址族前缀、MTU、丢包与背压。
+- 服务端 IPv4/IPv6 地址、分流路由、DNS/搜索域和 MTU 转成 NE 设置。证书由系统 SecTrust 验证完整链和主机名，禁止忽略证书错误。
+- TLS、可选 DTLS；库内会话重连，换网合并通知后使用命令管道暂停/恢复并刷新缓存的网关地址。每个 C 会话只由一个 worker 操作。
+- 基于内网域名的 On Demand；手动断开先保存暂停规则，重新连接才恢复。主 App 不使用后台保活计时器。
+- 自动冷启动五分钟最多三次，认证/证书错误持久化暂停，防止 Extension 重启后继续提交密码。系统规则禁用失败时，持久化门禁仍会拒绝继续认证；是否存在系统重复拉起须真机验收。
+- 最近 64 条结构化事件、真实桥接包计数、手动 HTTPS HEAD 内网检查和系统分享。诊断不保留引擎原始日志、密码、Cookie 或 Token。
+
+首版没有 SSO/MFA、客户端证书、HostScan/CSD、PAC 代理支持。暂拒绝单地址族全隧道，避免将不完整策略当成全流量覆盖。需要这些功能的网关不属于当前验证范围。企业根证书须已被系统信任，服务器应发送完整中间证书链；SecTrust 网络获取在回调中关闭。
+
+## 本地构建
+
+需要完整 Xcode（本轮使用 Xcode 26.6）和 Python 3。脚本只构建 arm64 真机与 arm64 模拟器，各 SDK 的静态库独立保存。使用 Xcode 工程不需要安装 XcodeGen、CocoaPods 或 Homebrew。
+
+从仓库根目录执行：
+
+```sh
+Apps/iOS/scripts/build.sh iphonesimulator
+Apps/iOS/scripts/build.sh iphoneos
+Apps/iOS/scripts/test.sh
+```
+
+两条 build 命令均为**无签名构建**，不能直接安装到实体 iPhone。默认输出：
+
+```text
+Apps/iOS/.build/xcode-iphonesimulator/Build/Products/Debug-iphonesimulator/XDVPN.app
+Apps/iOS/.build/xcode-iphoneos/Build/Products/Debug-iphoneos/XDVPN.app
+```
+
+工程的构建阶段自动构建固定版本引擎，并核对下载 SHA-256。首次构建需要下载依赖；`XDVPN_SOURCE_CACHE` 可指向已有源码压缩包目录，只复制并校验，不链接其他客户端产物。源码、补丁和构建缓存均在本 iOS 目录中。日志中未使用 AppIntents 的元数据提示不影响构建。
+
+如添加/移除源文件，执行 `python3 Apps/iOS/scripts/generate-project.py` 重新生成工程；修改项目配置应同步修改生成器。签名私有配置不进入版本控制。
+
+## 安装到 iPhone
+
+1. 将 `Configuration/Signing.example.xcconfig` 复制为 `Configuration/Signing.local.xcconfig`，填写实际 `DEVELOPMENT_TEAM`、唯一 `XDVPN_BUNDLE_ID` 和 `XDVPN_APP_GROUP`。
+2. 在 Xcode 打开 `XDVPN.xcodeproj`，选择 `XDVPN-iOS` scheme 和连接的 iPhone，确认 App/PacketTunnel 两个 target 使用同一个开发团队。
+3. 开发者账号及 provisioning profile 必须包含 Network Extensions（packet-tunnel-provider）、App Groups 和共享 Keychain 权限；App ID 与 Extension ID 分别为配置值及其 `.PacketTunnel` 后缀。让 Xcode 完成匹配签名后 Run。
+4. 在手机打开设置页，填写本人获授权的测试账号。先关闭按需恢复，保存并允许添加 VPN 配置，手动连接验证。
+
+本轮环境没有可用签名 identity，已登记 iPhone 状态为 unavailable；未请求账号登录、创建开发者证书或发布 TestFlight。不能把当前无签名 `.app` 重命名为 IPA 后直接安装。
+
+## 建议首次验收顺序
+
+| 次序 | 操作 | 验收观察 |
+| --- | --- | --- |
+| 1 | 手动连接，打开仅内网可访问的 HTTPS 地址 | 系统连接、隧道地址、真实上/下行包和业务响应均正确 |
+| 2 | 分别关闭/开启 DTLS | TLS 可用；允许 UDP 的网络观测 DTLS；禁止 UDP 时能使用 TLS |
+| 3 | 已连接时 Wi-Fi ↔ 蜂窝，断网后恢复 | 不重复并发登录，恢复事件可解释，业务重新可用 |
+| 4 | 断开后配置内网域名并启用按需恢复，再点击连接 | 锁屏 5/30 分钟或隔夜后，直接打开内网业务 App，不先打开 XD VPN |
+| 5 | 手动断开 | 网络变化或重新打开 App 后仍暂停，重新点击连接才重新启用 |
+| 6 | 使用测试环境验证过期会话/错误证书等 | 停止无效认证，界面解释原因，不持续提交错误密码 |
+
+按需规则匹配域名后由系统评估可达性；可选验证 URL 也会用于系统探测，非 HTTP 200 会触发 VPN。请选择公司允许探测的、只在内网可访问的 HTTPS 地址。系统状态和包计数不等于业务成功；HEAD 结果可能是 401/403/302，表示收到该服务响应，不代表业务授权通过。探测不跟随重定向。
+
+On Demand 不能保证每次解锁立即连接，网关要求 MFA、首次解锁前凭据不可用、系统终止等情况不能由客户端绕过。恢复耗时、耗电、NAT64、服务端会话策略和实际 On Demand 行为仍须真机验证。
+
+## 已完成的验证（2026-09-06）
+
+- arm64 iPhoneOS 与 arm64 iPhoneSimulator 引擎构建，完整 App/Extension 无签名构建通过。
+- 39 项配置、路由、IPv4/IPv6 帧、持久化恢复预算的本地检查通过（详见 `scripts/test.sh`）。这些纯逻辑测试在开发 Mac 上执行，不依赖 macOS 客户端模块。
+- 在 iOS 26.5 模拟器运行真实原生引擎，验证提前取消、离线等待取消、认证组选项提交和禁止重复密码提交。
+- 真实 iOS 模拟器引擎连接回环地址的一次性自签名 TLS 服务：系统信任校验拒绝，服务端未收到 HTTP 认证请求。
+- iPhone 17 Pro 模拟器中安装、启动并检查实际连接首屏；未将模拟器标记为可验证真实系统 VPN 的环境。
+- 引擎全部静态库检查无 `fork/exec/posix_spawn/system/popen` 依赖；App 与 Extension entitlement 对齐，未引入 macOS 模块依赖。
+
+模拟器原生回归命令（先启动指定模拟器，并构建引擎）：
+
+```sh
+Apps/iOS/scripts/test-native.sh SIMULATOR_UDID
+# 可选：第二个参数传入本机临时的不受信任 HTTPS 测试服务，检查证书拒绝。
+Apps/iOS/scripts/test-native.sh SIMULATOR_UDID https://127.0.0.1:TEST_PORT
+```
+
+未完成：手机签名/安装、真实公司认证与业务连通、Wi-Fi/蜂窝切换、锁屏/隔夜、IPv6-only/NAT64、Extension 系统终止与按需冷启动、耗电。完整矩阵见 [可靠性调研](../../docs/design/2026-09-06-ios-vpn-reliability-research.md)。
+
+## 依赖与后续发布
+
+`build-engine.sh` 固定源码及摘要，`patch-openconnect.py` 仅作用于 iOS 缓存源码：拒绝脚本/外部认证程序、只接受外部包 fd、移除身份切换。原始压缩包、修改后源码及许可证位于 `.build/engine/`，各端可独立更新版本。
+
+当前产物用于本地开发验证。后续分发需独立处理 Apple 签名/渠道，以及 OpenConnect LGPL 静态链接的对应源码、修改和重新链接材料；尚未完成商店或企业分发交付。
