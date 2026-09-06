@@ -46,7 +46,9 @@ Apps/iOS/.build/xcode-iphoneos/Build/Products/Debug-iphoneos/XDVPN.app
 3. 开发者账号及 provisioning profile 必须包含 Network Extensions（packet-tunnel-provider）、App Groups 和共享 Keychain 权限；App ID 与 Extension ID 分别为配置值及其 `.PacketTunnel` 后缀。让 Xcode 完成匹配签名后 Run。
 4. 在手机打开设置页，填写本人获授权的测试账号。先关闭按需恢复，保存并允许添加 VPN 配置，手动连接验证。
 
-本轮环境没有可用签名 identity，已登记 iPhone 状态为 unavailable；未请求账号登录、创建开发者证书或发布 TestFlight。不能把当前无签名 `.app` 重命名为 IPA 后直接安装。
+2026-09-06 真机检查：已连接并配对实体 iPhone 17 Pro（iOS 26.6.1），开发者模式启用，Xcode 已将其识别为可运行目标。实际启用签名的构建在 App 和 PacketTunnel 两个 target 均报 `requires a development team`，尚未安装或运行。
+
+已按用户选择检查 Tools UG：Xcode 的 Apple Accounts 页面显示 Admin，但 `Certificates, Identifiers, & Profiles` 标红不可用；工程 Signing & Capabilities 的 Team 菜单只有 Personal Team，没有 Tools UG。因此目前无法为此团队生成匹配的开发签名。需由 Tools UG 的 Account Holder 检查会员/协议状态及当前账号的开发资源访问。Apple 说明个人会员邀请的 App Store Connect 用户不属于其开发者团队，不能据 Admin 身份推定具备签名权限；Tools UG 的具体后台原因尚未确认（[Apple 角色与访问说明](https://developer.apple.com/help/account/access/roles/)）。本机当前可用签名 identity 为 0。后续可恢复团队开发资源访问后使用自动签名，或由团队提供有效的开发证书及对应私钥、App 和 Extension 的开发描述文件（包含测试设备及所需权限）后使用手动签名；手动签名不要求操作者具有后台证书管理权限。签名就绪后继续安装、连接及换网/锁屏验收。不能将无签名构建视为真机验证通过。
 
 ## 建议首次验收顺序
 
