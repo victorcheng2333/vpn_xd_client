@@ -8,6 +8,11 @@ if CommandLine.arguments == [CommandLine.arguments[0], "--version"] {
     print(PrivilegePolicy.version)
     exit(0)
 }
+// This internal mode is not in the sudoers rule. Only an already privileged
+// OpenConnect child can use it, with a root-owned private session directory.
+if CommandLine.arguments == [CommandLine.arguments[0], "--network-script"] {
+    exit(ManagedNetworkScript.run(environment: ProcessInfo.processInfo.environment))
+}
 guard let owner = try? PrivilegePolicy.sessionOwner(arguments: CommandLine.arguments,
     environment: ProcessInfo.processInfo.environment, effectiveUID: geteuid()) else { exit(64) }
 signal(SIGPIPE, SIG_IGN)
@@ -34,7 +39,9 @@ do {
         try socket.send(HelperEvent(.failure, "未找到 OpenConnect。请先运行 brew install openconnect。"))
         exit(69)
     }
-    let engine = TunnelEngine(executable: executable) { event in try? socket.send(event) }
+    let engine = TunnelEngine(executable: executable, networkSessionFactory: { try TunnelNetworkSession.create() }) {
+        event in try? socket.send(event)
+    }
     try socket.send(HelperEvent(.ready, "权限助手已就绪。"))
     do {
         commandLoop: while let command = try socket.receive(HelperCommand.self) {

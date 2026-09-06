@@ -3,9 +3,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 CONFIGURATION="${CONFIGURATION:-release}"
 APP="${APP_OUTPUT:-$PWD/dist/XD VPN.app}"
-export CLANG_MODULE_CACHE_PATH="$PWD/.build/clang-module-cache"
-swift build -c "$CONFIGURATION" --disable-sandbox
-BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
+source scripts/swift-env.sh
+swift build -c "$CONFIGURATION" --disable-sandbox --scratch-path "$XDVPN_BUILD_ROOT" --cache-path "$XDVPN_BUILD_ROOT/cache"
+BIN_DIR="$(swift build -c "$CONFIGURATION" --scratch-path "$XDVPN_BUILD_ROOT" --show-bin-path)"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
 cp "$BIN_DIR/XDVPN" "$APP/Contents/MacOS/XDVPN"
 cp "$BIN_DIR/XDVPNHelper" "$APP/Contents/Helpers/XDVPNHelper"

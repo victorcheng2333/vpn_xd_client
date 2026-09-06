@@ -37,7 +37,11 @@ private final class ConnectionResult: @unchecked Sendable {
     func prepare() async throws {
         if isReady { return }
         let generation = UUID(); session = generation
-        guard await PrivilegeManager.status() == .ready else {
+        let privilege = await PrivilegeManager.status()
+        if privilege == .needsUpdate {
+            throw VPNError.unavailable("已有系统授权仍有效，但系统助手需要升级才能使用本版网络恢复修复。请在「系统授权」点击「升级系统助手」。")
+        }
+        guard privilege == .ready else {
             throw VPNError.unavailable("请先在「系统授权」中安装一次授权，之后打开应用和自动重连都不会再弹出管理员密码框。")
         }
         try Task.checkCancellation()

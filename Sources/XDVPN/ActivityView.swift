@@ -7,8 +7,11 @@ struct ActivityView: View {
             HStack {
                 Text("每一次连接，都有迹可循。").font(.system(size: 12)).foregroundStyle(Palette.muted)
                 Spacer()
+                if model.activityLog != nil {
+                    Button { model.showLogFolder() } label: { Label("打开日志目录", systemImage: "folder") }.buttonStyle(.borderless)
+                }
                 Button { model.copyLog() } label: { Label("复制日志", systemImage: "doc.on.doc") }.buttonStyle(.borderless)
-                Button { model.clearLog() } label: { Image(systemName: "trash") }.buttonStyle(.borderless).help("清空日志")
+                Button { model.clearLog() } label: { Image(systemName: "trash") }.buttonStyle(.borderless).help("清空本次列表，保留文件日志")
             }
             Card(padding: 0) {
                 VStack(spacing: 0) {
@@ -41,8 +44,11 @@ struct ActivityView: View {
                     }
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            Label("日志只保留在本次会话中，不记录密码或认证凭据。", systemImage: "lock")
+            Label(model.activityLog == nil ? "本次会话日志，不记录密码或认证凭据。" : "日志保存在本机，最多 4 个文件、每个 1 MB。不记录密码或原始认证响应。", systemImage: "lock")
                 .font(.system(size: 10)).foregroundStyle(Palette.muted)
+            if let issue = model.logFileIssue {
+                Label(issue, systemImage: "exclamationmark.circle").font(.system(size: 11)).foregroundStyle(.orange)
+            }
         }.frame(maxHeight: .infinity)
     }
 }

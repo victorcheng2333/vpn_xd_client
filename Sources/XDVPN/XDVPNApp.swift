@@ -7,7 +7,8 @@ import AppKit
 
     init() {
         let primary = AppInstanceCoordinator.shared.isPrimary
-        _model = StateObject(wrappedValue: VPNModel(startMonitoring: primary, resumeAutomatically: primary))
+        _model = StateObject(wrappedValue: VPNModel(startMonitoring: primary, resumeAutomatically: primary,
+                                                   activityLog: primary ? RollingActivityLog() : nil))
     }
     var body: some Scene {
         Window("XD VPN", id: "main") {

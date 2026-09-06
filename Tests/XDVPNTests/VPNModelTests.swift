@@ -65,6 +65,195 @@ import VPNCore
         await letConnectRun()
     }
 
+    func testRepeatedUnchangedLinkEventsAcrossRecoveryWindowsNeverReconnect() async {
+        let values: NSDictionary = ["State:/Network/Interface/en0/Link": ["Active": true],
+            "State:/Network/Interface/en0/IPv4": ["Addresses": ["192.168.1.8"], "Router": "192.168.1.1"]]
+        for auto in [false, true] {
+            model.setAutoConnect(auto); model.connect(); await letConnectRun()
+            helper.onEvent?(.init(.connected, "connected"))
+            let count = helper.commands.count
+            let monitor = PhysicalNetworkMonitor(initialSnapshot: values) { [unowned self] in model.physicalNetworkObserved($0) }
+            // Advance beyond both the injected debounce and cooldown repeatedly.
+            // Debouncing a burst is not sufficient to satisfy this regression.
+            for _ in 0..<20 {
+                monitor.observe(values, source: .wifiLink)
+                monitor.observe(values, source: .configuration)
+                monitor.observe(values, source: .wifiPower)
+                await letRecoveryRun()
+            }
+            XCTAssertEqual(helper.commands.count, count)
+            XCTAssertEqual(model.state, .connected)
+            XCTAssertNil(model.issue)
+            monitor.observe(values, source: .wifiSSID)
+            await letRecoveryRun()
+            XCTAssertEqual(helper.commands.count, count + 1)
+            XCTAssertEqual(helper.commands.last?.kind, .reconnect)
+            helper.onEvent?(.init(.connected, "restored"))
+            model.disconnect(); helper.onEvent?(.init(.stopped, "stopped"))
+        }
+    }
+
+    func testPhysicalDiagnosticsPersistReasonsWithoutCredentialsAndFlushOnQuit() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("xdvpn-model-log-" + UUID().uuidString)
+        let log = RollingActivityLog(directory: folder)
+        defer { log.flush(); try? FileManager.default.removeItem(at: folder) }
+        model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+            recoveryDelay: .milliseconds(20), recoveryTimeout: .seconds(1), activityLog: log, engineLocator: { "/fake/openconnect" })
+        model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "VPN 隧道已建立。"))
+        var values: [String: [String: Any]] = ["State:/Network/Interface/en0/Link": ["Active": true],
+            "State:/Network/Interface/en0/IPv4": ["Addresses": ["192.168.1.8"], "Router": "192.168.1.1"]]
+        let monitor = PhysicalNetworkMonitor(initialSnapshot: values as NSDictionary) { [unowned self] in model.physicalNetworkObserved($0) }
+        monitor.observe(values as NSDictionary, source: .wifiLink)
+        values["State:/Network/Interface/en0/IPv4"]?["Router"] = "192.168.1.254"
+        monitor.observe(values as NSDictionary, source: .wifiLink)
+        monitor.observe(values as NSDictionary, source: .configuration)
+        await letRecoveryRun()
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect, .reconnect])
+        helper.onEvent?(.init(.info, "DTLS 加密通道已就绪。"))
+        await withCheckedContinuation { continuation in model.quit { continuation.resume() } }
+        let data = try Data(contentsOf: folder.appendingPathComponent("activity.jsonl"))
+        let rows = try data.split(separator: 10).map { try JSONDecoder().decode(RollingActivityLog.Record.self, from: Data($0)) }
+        XCTAssertTrue(rows.contains { $0.event == "notification.ignored" })
+        XCTAssertEqual(rows.filter { $0.event == "reconnect.requested" }.count, 1)
+        XCTAssertTrue(rows.contains { $0.event == "reconnect.requested" && $0.message.contains("en0/IPv4/Router") })
+        XCTAssertTrue(rows.contains { $0.source == .helper && $0.message.contains("DTLS") })
+        XCTAssertEqual(rows.last?.event, "app.quitting")
+        let text = String(decoding: data, as: UTF8.self)
+        for privateValue in ["unit-test-password", "alice", "vpn.xindong.com", "192.168.1.8", "192.168.1.254"] {
+            XCTAssertFalse(text.contains(privateValue), privateValue)
+        }
+    }
+
+    func testLogWriteFailureDoesNotBreakConnectionOrInMemoryActivity() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("xdvpn-log-file-" + UUID().uuidString)
+        try Data("not a directory".utf8).write(to: path)
+        let log = RollingActivityLog(directory: path)
+        defer { log.flush(); try? FileManager.default.removeItem(at: path) }
+        model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+                         activityLog: log, engineLocator: { "/fake/openconnect" })
+        model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        log.flush(); await letRecoveryRun()
+        XCTAssertEqual(model.state, .connected)
+        XCTAssertNil(model.issue)
+        XCTAssertNotNil(model.logFileIssue)
+        XCTAssertTrue(model.entries.contains { $0.message == "connected" })
+    }
+
+    func testOfflinePreservesEstablishedSessionAndDoesNotSendCommandsUntilOnline() async {
+        model.setAutoConnect(true); model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false)
+        XCTAssertEqual(helper.commands.last?.kind, .connect)
+        XCTAssertEqual(model.state, .reconnecting)
+        XCTAssertFalse(model.canEdit)
+        model.networkChanged(false)
+        XCTAssertEqual(helper.commands.filter { $0.kind == .disconnect }.count, 0)
+        helper.onEvent?(.init(.connected, "late event from old tunnel"))
+        XCTAssertEqual(model.state, .reconnecting)
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect, .reconnect])
+    }
+
+    func testUnexpectedExitWhileOfflineWaitsForNetworkAfterHelperCleanup() async {
+        model.setAutoConnect(true); model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false)
+        helper.onEvent?(.init(.stopped, "cleaned", retryable: true))
+        XCTAssertEqual(model.state, .waiting)
+        model.physicalNetworkChanged(); model.networkChanged(false)
+        try? await Task.sleep(for: .milliseconds(260))
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect])
+        XCTAssertNil(model.retryAt)
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect, .connect])
+    }
+
+    func testOfflineWithAutoConnectOffPreservesSessionThenCleansIfOnlineRecoveryFails() async {
+        model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false)
+        try? await Task.sleep(for: .milliseconds(260))
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect])
+        model.networkChanged(true); model.physicalNetworkChanged(); await letRecoveryRun()
+        try? await Task.sleep(for: .milliseconds(260))
+        XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned"))
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect, .reconnect, .disconnect])
+        XCTAssertFalse(model.autoConnect)
+    }
+
+    func testManualStopWhileOfflineStillRequestsCleanupAndCancelsResume() async {
+        model.setAutoConnect(true); model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false); model.disconnect()
+        helper.onEvent?(.init(.stopped, "cleaned"))
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
+        XCTAssertTrue(model.autoConnect)
+    }
+
+    func testOfflineDuringLoginCleansUpAndResumesManualAttemptWhenOnline() async {
+        model.connect(); await letConnectRun()
+        model.networkChanged(false)
+        XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned"))
+        XCTAssertEqual(model.state, .waiting)
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 2)
+        XCTAssertFalse(model.autoConnect)
+    }
+
+    func testOfflineDuringAuthorizationCancelsLateLoginUntilOnline() async {
+        helper.delayAuthorization = true
+        model.connect(); await letConnectRun()
+        model.networkChanged(false)
+        helper.authorization?.resume(); helper.authorization = nil
+        await letConnectRun()
+        XCTAssertTrue(helper.commands.isEmpty)
+        XCTAssertEqual(model.state, .waiting)
+        helper.delayAuthorization = false
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect])
+    }
+
+    func testOfflineBeforeReadyHelperReceivesConnectDoesNotWaitForNonexistentChild() async {
+        helper.isReady = true
+        model.connect()
+        model.networkChanged(false)
+        await letConnectRun()
+        XCTAssertTrue(helper.commands.isEmpty)
+        XCTAssertEqual(model.state, .waiting)
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect])
+    }
+
+    func testDisablingAutoConnectAfterUnexpectedOfflineExitCancelsPendingResume() async {
+        model.setAutoConnect(true); model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.networkChanged(false)
+        helper.onEvent?(.init(.stopped, "cleaned", retryable: true))
+        model.setAutoConnect(false)
+        model.networkChanged(true); await letRecoveryRun()
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect])
+    }
+
+    func testPhysicalReadinessTransitionResumesSessionWithoutGlobalPathEvent() async {
+        model.setAutoConnect(true); model.connect(); await letConnectRun()
+        helper.onEvent?(.init(.connected, "connected"))
+        model.physicalNetworkChanged(online: false)
+        XCTAssertFalse(model.networkAvailable)
+        XCTAssertEqual(helper.commands.last?.kind, .connect)
+        model.physicalNetworkChanged(online: true); await letRecoveryRun()
+        XCTAssertTrue(model.networkAvailable)
+        XCTAssertEqual(helper.commands.map(\.kind), [.connect, .reconnect])
+    }
+
     private func relaunch(resumeAutomatically: Bool = true) {
         model.quit {}
         helper = FakeHelper()
@@ -461,6 +650,7 @@ import VPNCore
         model.systemWillSleep(); model.networkChanged(false); model.systemDidWake()
         await letRecoveryRun()
         XCTAssertEqual(helper.commands.filter { $0.kind == .reconnect }.count, 0)
+        XCTAssertEqual(helper.commands.last?.kind, .connect)
         model.networkChanged(true); await letRecoveryRun()
         XCTAssertEqual(helper.commands.last?.kind, .reconnect)
     }
@@ -511,12 +701,15 @@ import VPNCore
         XCTAssertEqual(helper.commands.last?.kind, .reconnect)
     }
 
-    func testAutoConnectOffDoesNotLoginAgainAfterRecoveryDeadline() async {
+    func testAutoConnectOffCleansStaleTunnelAfterRecoveryDeadlineWithoutRelogin() async {
         model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         model.physicalNetworkChanged(); await letRecoveryRun()
         try? await Task.sleep(for: .milliseconds(250))
-        XCTAssertEqual(helper.commands.last?.kind, .reconnect)
+        XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
         XCTAssertFalse(model.autoConnect)
     }
 
@@ -583,7 +776,7 @@ import VPNCore
         XCTAssertTrue(defaults.bool(forKey: "autoConnect"))
     }
 
-    func testNaturalRecoveryDeadlinePausesOfflineAndResumesWithFreshBudget() async {
+    func testNaturalRecoveryPausesOfflineAndOnlyCleansAfterOnlineRecoveryDeadline() async {
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer"))
@@ -594,6 +787,8 @@ import VPNCore
         XCTAssertEqual(helper.commands.last?.kind, .reconnect)
         try? await Task.sleep(for: .milliseconds(240))
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 2)
     }
 
     func testNaturalRecoveryDeadlinePausesDuringSleepAndSuccessfulWakeCancelsIt() async {
@@ -610,25 +805,29 @@ import VPNCore
         XCTAssertEqual(helper.commands.last?.kind, .reconnect)
     }
 
-    func testEnablingAutoConnectDuringNaturalRecoveryArmsDeadline() async {
+    func testEnablingAutoConnectDuringNaturalRecoveryAllowsReloginAfterCleanup() async {
         model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer"))
-        try? await Task.sleep(for: .milliseconds(260))
+        await letRecoveryRun()
         XCTAssertEqual(helper.commands.last?.kind, .connect)
         model.setAutoConnect(true)
         try? await Task.sleep(for: .milliseconds(260))
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 2)
     }
 
-    func testDisablingAutoConnectCancelsNaturalRecoveryDeadline() async {
+    func testDisablingAutoConnectKeepsCleanupDeadlineButCancelsRelogin() async {
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer"))
         model.setAutoConnect(false)
         try? await Task.sleep(for: .milliseconds(260))
-        XCTAssertEqual(helper.commands.last?.kind, .connect)
-        XCTAssertEqual(model.state, .reconnecting)
+        XCTAssertEqual(helper.commands.last?.kind, .disconnect)
+        helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
     }
 
     private func exhaustRetryBackoff() async {

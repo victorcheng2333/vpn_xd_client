@@ -3,13 +3,14 @@ import CryptoKit
 import VPNCore
 
 enum PrivilegeStatus: Equatable {
-    case checking, notInstalled, ready, needsRepair
+    case checking, notInstalled, ready, needsUpdate, needsRepair
     var title: String {
         switch self {
         case .checking: "正在检查系统授权"
         case .notInstalled: "尚未安装授权"
         case .ready: "系统授权正常"
-        case .needsRepair: "系统授权需要更新"
+        case .needsUpdate: "系统助手需要升级"
+        case .needsRepair: "系统助手需要修复"
         }
     }
 }
@@ -22,8 +23,13 @@ enum PrivilegeManager {
         guard PrivilegePolicy.trustedInstalledHelper() else { return .needsRepair }
         do {
             let result = try await run("/usr/bin/sudo", ["-n", "--", PrivilegePolicy.helperPath, "--version"])
-            return result.code == 0 && result.output.trimmingCharacters(in: .whitespacesAndNewlines) == PrivilegePolicy.version ? .ready : .needsRepair
+            return status(exitCode: result.code, version: result.output)
         } catch { return .needsRepair }
+    }
+
+    static func status(exitCode: Int32, version: String) -> PrivilegeStatus {
+        guard exitCode == 0, Int(version.trimmingCharacters(in: .whitespacesAndNewlines)) != nil else { return .needsRepair }
+        return version.trimmingCharacters(in: .whitespacesAndNewlines) == PrivilegePolicy.version ? .ready : .needsUpdate
     }
 
     static func install() async throws {

@@ -6,6 +6,8 @@ final class PrivilegePolicyTests: XCTestCase {
     func testHelperIdentityComesFromSudoAndRejectsArbitraryCommands() throws {
         let args = ["helper", "--session", "/private/tmp/xdvpn-test/control.sock"]
         XCTAssertEqual(try PrivilegePolicy.sessionOwner(arguments: args, environment: ["SUDO_UID": "501"], effectiveUID: 0), 501)
+        XCTAssertEqual(PrivilegePolicy.version, "4", "The UI must require phase-aware hooks and retryable cleanup")
+        XCTAssertFalse(try PrivilegePolicy.sudoersRule(username: "test_user").contains("--network-script"))
         for (arguments, environment, uid) in [
             (args, ["SUDO_UID": "501"], uid_t(501)),
             (args, [:], uid_t(0)), (args, ["SUDO_UID": "0"], uid_t(0)),

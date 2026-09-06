@@ -5,12 +5,14 @@ struct AuthorizationView: View {
     @State private var confirmRemoval = false
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("授权一次，之后轻松连接。").font(.system(size: 13)).foregroundStyle(Palette.muted)
+            Text(model.privilegeStatus == .needsUpdate ? "已有授权仍有效，需要更新系统组件。" : "安装系统助手后，日常连接无需输入 Mac 密码。").font(.system(size: 13)).foregroundStyle(Palette.muted)
             Card {
                 VStack(alignment: .leading, spacing: 22) {
                     Label(model.privilegeStatus.title, systemImage: model.privilegeStatus == .ready ? "checkmark.shield.fill" : "lock.shield")
                         .font(.system(size: 19, weight: .semibold)).foregroundStyle(Palette.green)
-                    Text("安装专用授权助手时，macOS 会请求一次管理员确认。授权保存后，重新打开应用、连接和自动重连都无需再输入 Mac 密码。")
+                    Text(model.privilegeStatus == .needsUpdate
+                         ? "本版修复需要升级系统助手。已有授权和 VPN 配置会保留，权限范围不变。替换受保护的系统组件时，macOS 需要一次管理员确认。"
+                         : "首次安装、升级或修复系统助手时，macOS 会请求管理员确认。日常打开应用、连接和自动重连无需输入 Mac 密码。")
                         .font(.system(size: 13)).lineSpacing(6).fixedSize(horizontal: false, vertical: true)
                     Text("VPN 密码仍保存在钥匙串；Mac 管理员密码不会被保存。")
                         .font(.system(size: 11)).foregroundStyle(Palette.muted)
@@ -25,7 +27,7 @@ struct AuthorizationView: View {
                         Button("重新检测") { Task { await model.refreshPrivileges() } }.disabled(model.privilegeBusy)
                         if model.privilegeStatus != .ready {
                             Button { Task { await model.installPrivileges() } } label: {
-                                Label(model.privilegeBusy ? "等待系统确认…" : model.privilegeStatus == .notInstalled ? "安装授权" : "更新授权", systemImage: "lock.open")
+                                Label(model.privilegeBusy ? "等待系统确认…" : model.privilegeStatus == .notInstalled ? "安装系统助手" : model.privilegeStatus == .needsUpdate ? "升级系统助手" : "修复系统助手", systemImage: "lock.open")
                             }.buttonStyle(PrimaryButtonStyle()).frame(width: 170).disabled(model.privilegeBusy || !model.canEdit)
                         }
                     }

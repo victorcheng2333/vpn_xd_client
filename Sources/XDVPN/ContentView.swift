@@ -78,7 +78,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 7) {
-                SmallLabel(text: model.page == .connection ? "A LITTLE CLOSER TO WORK" : model.page == .profile ? "MAKE IT YOURS" : model.page == .authorization ? "ONE-TIME SETUP" : "CONNECTION JOURNAL")
+                SmallLabel(text: model.page == .connection ? "A LITTLE CLOSER TO WORK" : model.page == .profile ? "MAKE IT YOURS" : model.page == .authorization ? "SYSTEM HELPER" : "CONNECTION JOURNAL")
                 Text(model.page == .connection ? "工作网络，一键就绪。" : model.page.rawValue).font(.system(size: 27, weight: .semibold)).tracking(-0.8)
             }
             Spacer()
