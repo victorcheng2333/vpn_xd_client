@@ -126,7 +126,7 @@ struct DashboardView: View {
     }
 
     private var connectionCard: some View {
-        Card(padding: 22, background: isConnected ? model.state.statusSurface : .white) {
+        Card(padding: 22, background: model.state.statusSurface) {
             VStack(spacing: 0) {
                 HStack {
                     SmallLabel(text: "CONNECTION")
