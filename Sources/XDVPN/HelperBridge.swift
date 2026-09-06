@@ -39,7 +39,7 @@ private final class ConnectionResult: @unchecked Sendable {
         let generation = UUID(); session = generation
         let privilege = await PrivilegeManager.status()
         if privilege == .needsUpdate {
-            throw VPNError.unavailable("已有系统授权仍有效，但系统助手需要升级才能使用本版网络恢复修复。请在「系统授权」点击「升级系统助手」。")
+            throw VPNError.unavailable("已有系统授权仍有效，请在「系统授权」升级系统助手，以安装本版内置连接引擎。")
         }
         guard privilege == .ready else {
             throw VPNError.unavailable("请先在「系统授权」中安装一次授权，之后打开应用和自动重连都不会再弹出管理员密码框。")

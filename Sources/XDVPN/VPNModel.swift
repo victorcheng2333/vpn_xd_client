@@ -209,7 +209,7 @@ struct ActivityEntry: Identifiable {
         guard ![.connected, .connecting, .authorizing, .reconnecting, .disconnecting].contains(state) else { return }
         guard readyToConnect, let profile else { page = .profile; return }
         refreshEngine()
-        guard engineAvailable else { fail("未安装 OpenConnect。请在终端运行 brew install openconnect，再点击重新检测。") ; return }
+        guard engineAvailable else { fail("应用中的内置连接引擎不完整，请重新下载完整的 XD VPN 应用。") ; return }
         desiredConnection = true
         issue = nil
         pendingRecovery = false; recoveryTask?.cancel()

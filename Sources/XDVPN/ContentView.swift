@@ -69,7 +69,7 @@ struct ContentView: View {
             Rectangle().fill(.white.opacity(0.08)).frame(height: 1).padding(.horizontal, 22)
             HStack(spacing: 7) {
                 Circle().fill(model.engineAvailable ? Color(hex: 0xA6D6BA) : .orange).frame(width: 5, height: 5)
-                Text(model.engineAvailable ? "OpenConnect 就绪" : "需要安装连接引擎").font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
+                Text(model.engineAvailable ? "内置引擎就绪" : "内置引擎缺失").font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
                 Spacer()
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.1").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.25))
             }.padding(.horizontal, 24).padding(.vertical, 24)
@@ -120,27 +120,24 @@ struct DashboardView: View {
     }
 
     private var connectionCard: some View {
-        Card(padding: 22) {
+        Card(padding: 22, background: isConnected ? model.state.statusSurface : .white) {
             VStack(spacing: 0) {
                 HStack {
                     SmallLabel(text: "CONNECTION")
                     Spacer()
-                    HStack(spacing: 5) {
-                        Circle().fill(isConnected ? Palette.green : model.state.isBusy ? Color.orange : Palette.muted.opacity(0.6)).frame(width: 5, height: 5)
-                        Text(isConnected ? "在线" : model.state.isBusy ? "处理中" : "离线").font(.system(size: 10, weight: .medium))
-                    }.foregroundStyle(isConnected ? Palette.green : Palette.muted)
-                        .padding(.horizontal, 9).padding(.vertical, 5).background(Palette.canvas, in: Capsule())
+                    ConnectionStatusBadge(state: model.state)
                 }
-                OrbitView(connected: isConnected, busy: model.state.isBusy).frame(height: model.issue == nil ? 190 : 140)
-                Text(model.state.title).font(.system(size: 23, weight: .semibold)).tracking(-0.6)
+                OrbitView(state: model.state).frame(height: model.issue == nil ? 190 : 140)
+                Text(model.state.displayTitle).font(.system(size: 23, weight: .semibold)).tracking(-0.6)
+                    .foregroundStyle(model.state.statusColor)
                 Text(subtitle).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(2).multilineTextAlignment(.center).frame(height: 32).padding(.top, 5)
                 Button {
                     if model.state.isActive { model.disconnect() }
                     else if model.readyToConnect { model.connect() }
                     else { model.page = .profile }
                 } label: {
-                    Label(buttonTitle, systemImage: model.state.isActive ? "power" : model.readyToConnect ? "power" : "plus")
-                }.buttonStyle(PrimaryButtonStyle(destructive: model.state.isActive))
+                    Label(buttonTitle, systemImage: model.state.isActive ? (isConnected ? "power" : "xmark") : model.readyToConnect ? "power" : "plus")
+                }.buttonStyle(PrimaryButtonStyle(secondary: model.state.isActive))
                     .frame(maxWidth: 216).padding(.top, 18).disabled(model.state == .disconnecting)
                     .keyboardShortcut("k", modifiers: .command)
                 Rectangle().fill(Palette.line).frame(height: 1).padding(.top, 24).padding(.bottom, 17)
@@ -168,12 +165,14 @@ struct DashboardView: View {
     private var subtitle: String {
         if model.state == .authorizing { return "正在启动已授权的连接助手" }
         if model.state == .waiting { return model.networkAvailable ? "Auto Connect 将在稍后再次连接" : "网络不可用，恢复后自动连接" }
-        if isConnected { return "已接入工作网络，可以开始专注了" }
+        if isConnected { return "VPN 通道已建立，可以访问工作网络" }
+        if model.state == .disconnecting { return "正在结束 VPN 会话，请稍候" }
+        if model.state == .failed { return "未能接入工作网络，请检查提示后重试" }
         if model.state.isBusy { return "正在与工作网络建立联系，请稍候" }
-        return model.readyToConnect ? "你的工作网络，随时可以出发" : "保存一次配置，以后只需轻轻一点"
+        return model.readyToConnect ? "尚未接入工作网络，点击下方按钮连接" : "尚未接入工作网络，请先添加 VPN 配置"
     }
     private func duration(at now: Date) -> String {
-        guard let date = model.connectedAt else { return "00:00:00" }
+        guard let date = model.connectedAt else { return "—" }
         let t = max(0, Int(now.timeIntervalSince(date)))
         return String(format: "%02d:%02d:%02d", t / 3600, t / 60 % 60, t % 60)
     }
@@ -230,39 +229,5 @@ struct DashboardView: View {
                 .help("仅修改自动连接配置。手动断开后，需再次点击连接或重启应用才会连接。")
         }.padding(19).background(Color(hex: 0xEDF1E9), in: RoundedRectangle(cornerRadius: 17))
             .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color(hex: 0xE1E8DD)))
-    }
-}
-
-struct OrbitView: View {
-    let connected: Bool
-    let busy: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathe = false
-    var body: some View {
-        GeometryReader { geometry in
-            let size = min(geometry.size.height, 210.0)
-            ZStack {
-                Circle().fill(RadialGradient(colors: [Palette.mint.opacity(0.7), .white.opacity(0)], center: .center, startRadius: 20, endRadius: size * 0.6)).frame(width: size * 1.25, height: size * 1.25)
-                ForEach(0..<3) { i in
-                    Circle().stroke(Palette.green.opacity(0.055 + Double(2 - i) * 0.017), lineWidth: 1)
-                        .frame(width: size * (0.58 + Double(i) * 0.19), height: size * (0.58 + Double(i) * 0.19))
-                }
-                Circle().fill(Palette.mint.opacity(0.45)).frame(width: size * 0.65, height: size * 0.65)
-                    .scaleEffect(busy && breathe && !reduceMotion ? 1.16 : 1)
-                Circle().fill(.white).frame(width: size * 0.49, height: size * 0.49)
-                    .shadow(color: Palette.green.opacity(0.10), radius: 16, y: 5)
-                    .overlay(Circle().stroke(Palette.green.opacity(0.08)).frame(width: size * 0.49, height: size * 0.49))
-                Image(systemName: connected ? "lock.shield.fill" : "lock.shield")
-                    .font(.system(size: size * 0.22, weight: .light)).foregroundStyle(Palette.green)
-                    .symbolRenderingMode(.hierarchical).contentTransition(.symbolEffect(.replace))
-                Circle().fill(Palette.green.opacity(0.25)).frame(width: 5, height: 5).offset(x: -size * 0.405, y: -size * 0.24)
-                Circle().fill(Palette.green.opacity(0.20)).frame(width: 4, height: 4).offset(x: size * 0.43, y: size * 0.21)
-                ZStack {
-                    Circle().fill(connected ? Palette.green : .white).frame(width: 25, height: 25).shadow(color: .black.opacity(0.06), radius: 4, y: 2)
-                    Image(systemName: connected ? "checkmark" : busy ? "ellipsis" : "power").font(.system(size: 10, weight: .semibold)).foregroundStyle(connected ? .white : Palette.green)
-                }.offset(y: size * 0.26)
-            }.frame(width: geometry.size.width, height: geometry.size.height)
-        }.accessibilityHidden(true)
-            .onAppear { withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) { breathe = true } }
     }
 }

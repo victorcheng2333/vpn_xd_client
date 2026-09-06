@@ -25,6 +25,8 @@ final class VPNCoreTests: XCTestCase {
         XCTAssertTrue(args.contains("--passwd-on-stdin"))
         XCTAssertTrue(args.contains("--non-inter"))
         XCTAssertTrue(args.contains("--csd-wrapper=/usr/bin/false"))
+        XCTAssertTrue(args.contains("--cafile=/etc/ssl/cert.pem"))
+        XCTAssertTrue(args.contains("--no-system-trust"))
         XCTAssertFalse(args.contains { $0.hasPrefix("--password=") || $0 == "--background" || $0 == "--no-cert-check" })
     }
 
@@ -170,8 +172,10 @@ final class VPNCoreTests: XCTestCase {
         wait(for: [stopped], timeout: 4)
     }
 
-    func testInstalledOpenConnectReportsLoopbackRefusalWithoutPrivilegePrompt() throws {
-        guard let executable = OpenConnect.executable else { throw XCTSkip("OpenConnect is not installed") }
+    func testBundledOpenConnectReportsLoopbackRefusalWithoutPrivilegePrompt() throws {
+        let executable = try XCTUnwrap(ProcessInfo.processInfo.environment["XDVPN_TEST_OPENCONNECT"].flatMap {
+            FileManager.default.isExecutableFile(atPath: $0) ? $0 : nil
+        }, "Run bash scripts/test.sh with the built runtime")
         let stopped = expectation(description: "real engine exit")
         let engine = TunnelEngine(executable: executable) { event in
             XCTAssertNotEqual(event.kind, .connected)

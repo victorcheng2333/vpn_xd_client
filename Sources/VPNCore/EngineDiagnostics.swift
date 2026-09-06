@@ -18,6 +18,10 @@ public struct EngineDiagnostic: Codable, Equatable {
 
     public static func classify(_ line: String, phase: String, processID: Int32) -> Self {
         let text = line.lowercased()
+        if text.hasPrefix("got inappropriate http connect response: http/1.1 401 ") ||
+           text == "cookie was rejected by server; exiting." {
+            return .init(source: .openconnect, code: "session.rejected", phase: phase, processID: processID, level: .error)
+        }
         let errors: [(String, Int32, [String])] = [
             ("transport.addressUnavailable", EADDRNOTAVAIL, ["can't assign requested address", "cannot assign requested address"]),
             ("transport.networkUnreachable", ENETUNREACH, ["network is unreachable"]),

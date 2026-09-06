@@ -117,7 +117,8 @@ final class NetworkAndPrivilegeTests: XCTestCase {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: folder) }
         let rule = try PrivilegePolicy.sudoersRule(username: "test_user")
-        let script = PrivilegeManager.installScript(source: "/tmp/quoted app's $(untrusted)/helper", digest: String(repeating: "a", count: 64), rule: rule)
+        let script = PrivilegeManager.installScript(source: "/tmp/quoted app's $(untrusted)/helper", digest: String(repeating: "a", count: 64), rule: rule,
+            runtimeSource: "/tmp/quoted app's $(untrusted)/OpenConnect", executableDigest: String(repeating: "b", count: 64), scriptDigest: String(repeating: "c", count: 64))
         let scriptURL = folder.appendingPathComponent("install.sh"), ruleURL = folder.appendingPathComponent("sudoers")
         try script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try rule.write(to: ruleURL, atomically: true, encoding: .utf8)

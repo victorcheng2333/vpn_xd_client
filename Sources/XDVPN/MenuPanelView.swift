@@ -8,7 +8,7 @@ struct MenuPanelView: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack {
-                Image(systemName: "lock.shield.fill").foregroundStyle(Palette.green)
+                Image(systemName: model.state.menuBarSymbol).foregroundStyle(model.state.statusColor)
                 Text("XD VPN").font(.system(size: 17, weight: .semibold, design: .rounded))
                 Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "").font(.system(size: 9)).foregroundStyle(Palette.muted)
                 Spacer()
@@ -16,18 +16,23 @@ struct MenuPanelView: View {
                     .buttonStyle(.plain).foregroundStyle(Palette.muted).help("VPN 配置")
             }
             VStack(spacing: 7) {
-                OrbitView(connected: model.state == .connected, busy: model.state.isBusy).frame(height: 128)
-                Text(model.state.title).font(.system(size: 22, weight: .semibold))
+                OrbitView(state: model.state).frame(height: 128)
+                Text(model.state.displayTitle).font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(model.state.statusColor)
+                Text(connectionHint).font(.system(size: 11)).foregroundStyle(model.state.statusColor)
+                    .multilineTextAlignment(.center)
                 Text(model.profile?.displayServer ?? "你的工作网络，随时就绪")
-                    .font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(1)
-            }
+                    .font(.system(size: 10)).foregroundStyle(Palette.muted).lineLimit(1)
+            }.frame(maxWidth: .infinity).padding(.top, 2).padding(.bottom, 18)
+                .background(model.state.statusSurface, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(model.state.statusColor.opacity(0.12)))
             if let issue = model.issue {
                 Text(issue).font(.system(size: 11)).foregroundStyle(Color(hex: 0x946B37)).lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button(action: primaryAction) {
-                Label(primaryTitle, systemImage: model.state.isActive ? "power" : model.privilegeStatus == .ready ? "power" : "lock.open")
-            }.buttonStyle(PrimaryButtonStyle(destructive: model.state.isActive)).disabled(model.state == .disconnecting)
+                Label(primaryTitle, systemImage: model.state.isActive ? (model.state == .connected ? "power" : "xmark") : model.privilegeStatus == .ready ? "power" : "lock.open")
+            }.buttonStyle(PrimaryButtonStyle(secondary: model.state.isActive)).disabled(model.state == .disconnecting)
 
             if let profile = model.profile {
                 VStack(spacing: 10) {
@@ -66,6 +71,18 @@ struct MenuPanelView: View {
             }
         }.padding(22).frame(width: 350).background(Palette.canvas).foregroundStyle(Palette.ink)
             .preferredColorScheme(.light).task { await model.refreshPrivileges() }
+    }
+
+    private var connectionHint: String {
+        switch model.state {
+        case .idle: "尚未接入工作网络"
+        case .connected: "VPN 通道已建立，可以访问工作网络"
+        case .authorizing, .connecting: "正在建立 VPN 通道，请稍候"
+        case .reconnecting: "连接暂时中断，正在恢复"
+        case .waiting: model.networkAvailable ? "尚未连接，稍后自动重试" : "网络不可用，恢复后自动重连"
+        case .disconnecting: "正在结束 VPN 会话，请稍候"
+        case .failed: "未能接入工作网络，请检查错误提示"
+        }
     }
 
     private var primaryTitle: String {

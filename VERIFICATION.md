@@ -1,6 +1,46 @@
 # 验证记录
 
-## 当前交付：1.1.11
+## 当前交付：1.1.15 切网恢复修正版
+
+2026-09-06，build 18，助手要求 8。针对用户报告切换到另一 Wi-Fi 后失败、切回恢复的问题，修复日志证实的重连准备阻塞；服务器会话拒绝的完整原因仍待实网确认。
+
+- 14:24:37，助手已经将服务器主机路由从旧源地址／网关更新到新物理网络并读回通过。随后 attempt-reconnect 钩子未返回，14:24:40 客户端的 3 秒恢复期限触发 SIGINT，OpenConnect 在等待脚本时收到 EINTR 并结束恢复。14:23 的另一次切网也出现相同模式。
+- 14:24:41 至 14:25:23 的 8 次新进程均完成 TCP/TLS 及认证 POST，随后隧道 CONNECT 收到 `HTTP/1.1 401 Cookie is not acceptable`。这不同于之前的 EADDRNOTAVAIL 或路由错误；客户端日志不能判定服务端拒绝会话的具体策略，也不能证明它由提前重连引起。
+- 用户回到 1.1.13 后，14:28 的切网重新登录成功，但同样先经历了 3 秒中断。现场只读摘要确认本机仍安装 1.1.14 的引擎（`1bae1427fb5c116e59b86d9aa2049e2c5e5b419586c094490b6db3f11cbffafe`）及助手；回退 App 没有回退系统引擎。因此不能仅凭 App 版本认定 OpenSSL／引擎回归。有限事件摘录保存于 `.build/wifi-recovery-incident.json`，不含认证正文或凭据，未加入分发包。
+- 助手 8 的 attempt-reconnect 只执行原生服务器路由准备和核验，完成即返回。标准 vpnc-script 在这一阶段仅设置服务器路由，该函数已被托管脚本覆盖为空操作；移除多余的外部脚本启动，避免占用现有恢复预算。物理出口未就绪仍暂缓，实际路由更新失败仍返回错误。connect、reconnect、disconnect 的脚本处理及 3 秒恢复期限／清理重试策略保持既有行为。
+- HTTP CONNECT 401 和明确的 Cookie 拒绝单独标记为 `session.rejected` 错误诊断，不记录 Cookie 值，也不改变认证、证书验证或重试策略。
+- 禁止读取 Homebrew 的子沙箱内完成 Release 回归：**174 项通过，0 失败，无跳过**（`.build/wifi-recovery-full-tests.log`）。新增重连准备往返更新路由而不启动阻塞脚本、原生更新失败不误报成功，以及会话拒绝独立诊断；保留其他阶段脚本超时、原生清理和进程恢复测试。
+- Release App／助手构建与严格签名通过（`.build/wifi-recovery-build.log`）。ZIP 解压后版本为 1.1.15 / build 18、助手 8，四个有效载荷摘要与原始 App 一致，源代码重建脚本一致。内置引擎与 1.1.14 已通过 TLS 隔离验收的二进制逐字节相同，本次未重新编译 TLS 引擎。检查记录 `.build/wifi-recovery-package-verification.json`。
+- 提交前审查修正源码重建步骤：从默认含空格的解压目录复制到无空格临时目录后再构建；已实际执行准备步骤并核对复制的脚本与源包。使用说明按 arm64／x86_64 标注机型。重新打包后四个可执行载荷摘要均未改变，复用上述 174 项测试与签名验证结果。
+- 分发包：`dist/XD-VPN-1.1.15-macOS-arm64-bundled.zip`，SHA-256：`be32736955a570b0522756f0bc1a776bf44d3517dbb208ca453875ed7b6605c0`。需要在「系统授权」升级到助手 8 才会使用原生恢复准备流程。
+
+本次未操作真实 Wi-Fi、读取 VPN 密码或替换正在运行的 App／助手。必须在升级助手 8 后重新切网，才能确认真实恢复效果及 401 是否仍出现；本地回归不能证明所有服务器会话拒绝已解决。
+
+## 历史交付：1.1.14 内置引擎修正版
+
+2026-09-06，build 17，助手协议仍为 7。修复内置引擎评审发现的升级检测、macOS 14 系统函数引用及测试依赖遗漏。
+
+- 授权状态在检查助手版本和 root 所有权后，比较应用内与已安装引擎、vpnc-script 的 SHA-256。内容不一致显示需要升级；缺失／不可读显示需要修复。摘要不代替原有权限检查，也不再依赖递增助手协议版本才能更新引擎。
+- OpenConnect 使用显式 `OPENSSL_CFLAGS`、`OPENSSL_LIBS=-L… -lssl -lcrypto`；清除继承的编译搜索路径，libtool 使用保守的命令长度，避免沙箱 sysctl 探测失败。静态库不再嵌套 `.a` 成员，构建没有此前的归档／整数比较警告。记录 `.build/bundled-fix-engine-build.log`。
+- configure 强制 `ac_cv_func_strchrnul=no`，成品包含 `openconnect__strchrnul` 兼容实现，无 `_strchrnul` 系统引用，也无未定义弱引用。编译将新系统 API 可用性警告作为错误；构建和独立验收均拦截该已知不兼容导入。新的验收脚本对 1.1.13 的缺陷引擎会明确失败（`.build/bundled-fix-old-engine-rejected.log`）。这不替代 macOS 14 真机验收。
+- 在禁止读取 `/opt/homebrew` 和 `/usr/local` 的子沙箱内完成全部 Release 回归：**171 项通过，0 失败，无跳过**（`.build/bundled-fix-full-tests.log`）。包含同助手版本、同文件长度／时间戳下的引擎或脚本更新识别，缺失文件修复提示，以及内置 vpnc-script 的路由和清理检查。移除测试中的 Homebrew 路径；缺失任一测试引擎文件时，脚本启动前报错，直接 swift test 缺少测试路径也不再静默跳过。
+- `dist/XD VPN 1.1.14.app` 构建及签名验证通过（`.build/bundled-fix-build.log`）。最终 ZIP 解压后，App、助手、引擎和网络脚本逐一与构建产物核对摘要，严格签名和助手版本检查通过，附带的重建脚本与当前源码一致（`.build/bundled-fix-package-verification.json`）。ZIP 为 `dist/XD-VPN-1.1.14-macOS-arm64-bundled.zip`，SHA-256：`05f5890ca5864f447641bdb7533a830477c9db227317a8237238051b7c5e4912`。
+- 使用最终 ZIP 中的引擎完成移位与隔离验收：禁止读取 Homebrew 和工作区后，可信回环 TLS 可发送请求，不受信任证书及错误主机名均在发送 HTTP 前拒绝；版本查询和连接拒绝路径通过。仅加载四个系统动态库，最低部署目标 14.0（`.build/bundled-fix-engine-verification.json`）。
+- 企业私有 CA 支持未增加：继续严格使用 `/etc/ssl/cert.pem`，不自动导入钥匙串证书；README 明确其信任集合可能与 Homebrew 不同。本次未更新实际安装文件、使用真实凭据或中断 VPN；实际 VPN 登录／重连和 macOS 14 真机仍待验收。当前包为 Apple Silicon、本地 ad-hoc 签名，未公证。
+
+## 历史交付：1.1.13 内置引擎版
+
+后续评审发现：此版本保留 macOS 15.4 的 `strchrnul` 弱引用，一项路由测试仍使用 Homebrew 脚本，且引擎更新检测没有比较内容摘要。下述 168 项测试确实在本机通过，但不能据此认定无 Homebrew 或 macOS 14 真机兼容性；改用 1.1.14 修正版。
+
+2026-09-06，build 16，助手 7。保留 1.1.12 的连接状态 UI 更新；内置 OpenConnect 9.21、静态 OpenSSL 3.6.2 和固定版本 vpnc-script，运行和安装均不依赖 Homebrew。
+
+- `bash scripts/test.sh -c release`：168 项通过，0 失败、无跳过（`.build/bundled-full-tests.log`）。新增完整包识别、缺失文件／符号链接拒绝、带 shell 字符的安装来源、摘要错误不替换旧安装、发布失败恢复旧引擎／助手／规则等检查。安装事务在隔离的用户目录运行；root 权限边界由独立权限检查覆盖。
+- Release 构建和 App／助手／内置引擎严格签名验证通过（`.build/bundled-build.log`）。引擎 Mach-O `minos=14.0`，只有 libSystem、libz、libxml2、libiconv 四个 macOS 系统动态库；没有 Homebrew 或构建目录的动态库引用。
+- 将交付包内的引擎复制到带空格的临时目录，在禁止读取 `/opt/homebrew`、`/usr/local` 和整个工作区的子沙箱内通过版本查询、可信本机 TLS、无信任根拒绝、错误主机名拒绝和回环连接失败检查。不可信证书和主机名不匹配时，没有向测试服务发送 HTTP 请求。记录 `.build/bundled-engine-verification.json`。
+- TLS 使用 macOS `/etc/ssl/cert.pem`；不从 Homebrew 加载证书、动态库或配置，也不自动合并钥匙串中的自定义 CA。内置源码构建禁用 OpenSSL 动态模块和自动配置加载。
+- 未安装或升级本机系统助手，未替换正在运行的客户端、读取真实 VPN 密码或重新登录公司 VPN。完整的首次管理员安装、实际 VPN 登录和 macOS 14 真机验收仍需在收件人的 Mac 上完成；当前运行验证在 Apple Silicon / macOS 26 上完成。仍为本地 ad-hoc 签名，未做 Apple 公证。
+
+## 历史交付：1.1.11
 
 2026-09-06，修复 1.1.10 在首次连接时路由校验失败、漏清理却报成功，以及提前显示已连接的回归。系统助手要求 **6**。
 

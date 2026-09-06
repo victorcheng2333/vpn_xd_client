@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct VPNProfile: Codable, Equatable {
     public var name: String
@@ -47,14 +48,38 @@ public enum VPNError: LocalizedError {
 }
 
 public enum OpenConnect {
+    public static let bundledDirectory = "Contents/Resources/OpenConnect"
+    public static let installedDirectory = "/Library/PrivilegedHelperTools/com.xd.vpn.openconnect"
+
     public static var executable: String? {
-        ["/opt/homebrew/bin/openconnect", "/usr/local/bin/openconnect", "/opt/homebrew/sbin/openconnect", "/usr/local/sbin/openconnect"]
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
+        bundledExecutable(in: Bundle.main.bundleURL)
+    }
+
+    public static func bundledExecutable(in bundle: URL) -> String? {
+        let directory = bundle.appendingPathComponent(bundledDirectory)
+        guard ["openconnect", "vpnc-script"].allSatisfy({
+            let path = directory.appendingPathComponent($0).path
+            var info = stat()
+            return lstat(path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG && FileManager.default.isExecutableFile(atPath: path)
+        }) else { return nil }
+        return directory.appendingPathComponent("openconnect").path
+    }
+
+    public static var installedExecutable: String? {
+        installedRuntimeIsTrusted ? installedDirectory + "/openconnect" : nil
+    }
+
+    public static var installedRuntimeIsTrusted: Bool {
+        ["openconnect", "vpnc-script"].allSatisfy {
+            PrivilegePolicy.trustedInstalledHelper(at: installedDirectory + "/" + $0)
+        }
     }
 
     public static func arguments(profile: VPNProfile) throws -> [String] {
         let p = try profile.validated()
         var args = ["--protocol=anyconnect", "--passwd-on-stdin", "--non-inter", "--no-external-auth",
+                    // Use the macOS CA bundle, never a build-machine OpenSSL store.
+                    "--cafile=/etc/ssl/cert.pem", "--no-system-trust",
                     "--reconnect-timeout=300", "--force-dpd=20", "--user=\(p.username)",
                     // Never run a server-supplied CSD/host-check executable as root.
                     "--csd-wrapper=/usr/bin/false"]

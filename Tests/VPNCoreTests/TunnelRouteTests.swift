@@ -234,6 +234,44 @@ final class TunnelRouteTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: path))
     }
 
+    func testAttemptReconnectRefreshesRouteWithoutLaunchingTheBlockedScript() throws {
+        let fixture = RouteFixture(), session = try session(fixture)
+        defer { remove(session) }
+        try session.prepareServerRoute(environment: env, diagnostic: { _ in })
+        for target in [PhysicalRoute(interface: "en0", index: 14, address: "192.168.124.37", gateway: "192.168.124.1"),
+                       PhysicalRoute(interface: "en0", index: 14, address: "192.168.71.118", gateway: "192.168.71.1")] {
+            fixture.physical = target
+            var messages: [String] = []
+            let result = ManagedNetworkScript.execute(reason: .attemptReconnect, session: session, environment: env, processID: 42424,
+                parentExited: { false }, runScript: {
+                    XCTFail("The route is already native; this shell blocked until the recovery deadline in the incident")
+                    throw NetworkScriptRunner.Failure.timedOut
+                }, diagnostic: { messages.append($0) })
+            XCTAssertEqual(result, 0)
+            XCTAssertEqual(fixture.current?.gateway, target.gateway)
+            XCTAssertEqual(fixture.current?.source, target.address)
+            XCTAssertTrue(messages.contains { $0.contains("route add verified") })
+            XCTAssertEqual(messages.last, "XDVPN hook exited phase=attempt-reconnect status=0 native=true")
+        }
+        XCTAssertEqual(fixture.updates.map(\.0), [.add, .delete, .add, .delete, .add])
+    }
+
+    func testAttemptReconnectNeverReportsSuccessWhenNativeRouteUpdateFails() throws {
+        let fixture = RouteFixture(), session = try session(fixture)
+        defer { remove(session) }
+        try session.prepareServerRoute(environment: env, diagnostic: { _ in })
+        fixture.physical = .init(interface: "en0", index: 14, address: "192.168.124.37", gateway: "192.168.124.1")
+        fixture.failMutation = true
+        var messages: [String] = []
+        let result = ManagedNetworkScript.execute(reason: .attemptReconnect, session: session, environment: env, processID: 42424,
+            parentExited: { false }, runScript: { XCTFail("Do not fall back to the script after a native failure"); return 0 },
+            diagnostic: { messages.append($0) })
+        XCTAssertNotEqual(result, 0)
+        XCTAssertEqual(fixture.current?.gateway, "192.168.71.1")
+        XCTAssertTrue(messages.contains { $0.contains("route configuration failed") })
+        XCTAssertFalse(messages.contains { $0.contains("native=true") })
+    }
+
     func testOfflineRecoveryDefersWithoutDestroyingOrChangingTheRoute() throws {
         let fixture = RouteFixture(), session = try session(fixture)
         defer { remove(session) }
@@ -319,9 +357,9 @@ final class TunnelRouteTests: XCTestCase {
         XCTAssertEqual(scoped.gateway, physical.gateway)
     }
 
-    func testInstalledScriptCannotReintroduceWrongHostOrOldDefaultRoute() throws {
-        let source = "/opt/homebrew/etc/vpnc/vpnc-script"
-        guard FileManager.default.fileExists(atPath: source) else { throw XCTSkip("vpnc-script not installed") }
+    func testBundledScriptCannotReintroduceWrongHostOrOldDefaultRoute() throws {
+        let source = try XCTUnwrap(ProcessInfo.processInfo.environment["XDVPN_TEST_VPNC_SCRIPT"],
+                                   "Run bash scripts/test.sh with the built runtime")
         let fixture = RouteFixture(), session = try session(fixture)
         defer { remove(session) }
         let generated = try session.managedScript(source: source)

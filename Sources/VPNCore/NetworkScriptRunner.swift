@@ -61,9 +61,9 @@ public enum ManagedNetworkScript {
                   let pid = environment["VPNPID"].flatMap(Int32.init), pid > 1 else {
                 throw VPNError.system("网络脚本参数无效。")
             }
-            guard let script = ["/opt/homebrew/etc/vpnc/vpnc-script", "/usr/local/etc/vpnc/vpnc-script"]
-                .first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
-                throw VPNError.unavailable("未找到 vpnc-script。")
+            let script = OpenConnect.installedDirectory + "/vpnc-script"
+            guard PrivilegePolicy.trustedInstalledHelper(at: script) else {
+                throw VPNError.unavailable("内置网络脚本未安装或权限不正确，请修复系统助手。")
             }
             return execute(reason: reason, session: session, environment: environment, processID: pid,
                 parentExited: { kill(pid, 0) != 0 && errno == ESRCH },
@@ -101,6 +101,15 @@ public enum ManagedNetworkScript {
                 diagnostic("XDVPN route configuration failed phase=\(reason.rawValue): \(error.localizedDescription)")
                 return 1
             }
+        }
+        if reason == .attemptReconnect {
+            // The bundled script only sets the server route in this phase,
+            // and managedScript already overrides that function with a no-op.
+            // Native preparation above has updated and verified the route.
+            // Do not launch another shell while the old tunnel cannot carry
+            // traffic: its startup can consume the whole recovery deadline.
+            diagnostic("XDVPN hook exited phase=attempt-reconnect status=0 native=true")
+            return 0
         }
         if reason == .disconnect {
             // Release the dead resolver before route(8) can block on DNS.

@@ -63,8 +63,8 @@ do {
         exit(75)
     }
     defer { withExtendedLifetime(lease) {} }
-    guard let executable = OpenConnect.executable else {
-        deliver(HelperEvent(.failure, "未找到 OpenConnect。请先运行 brew install openconnect。"))
+    guard let executable = OpenConnect.installedExecutable else {
+        deliver(HelperEvent(.failure, "内置连接引擎未安装或权限不正确，请在「系统授权」中修复系统助手。"))
         exit(69)
     }
     let engine = TunnelEngine(executable: executable, networkSessionFactory: { try TunnelNetworkSession.create() }) {

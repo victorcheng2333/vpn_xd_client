@@ -14,19 +14,22 @@ extension Color {
 }
 struct Card<Content: View>: View {
     var padding: CGFloat = 24
+    var background: Color = .white
     @ViewBuilder var content: Content
     var body: some View {
-        content.padding(padding).background(.white, in: RoundedRectangle(cornerRadius: 20))
+        content.padding(padding).background(background, in: RoundedRectangle(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(Palette.line, lineWidth: 1))
     }
 }
 struct PrimaryButtonStyle: ButtonStyle {
-    var destructive = false
+    var secondary = false
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+        configuration.label.font(.system(size: 14, weight: .semibold)).foregroundStyle(secondary ? Palette.ink : .white)
             .frame(height: 46).frame(maxWidth: .infinity)
-            .background(destructive ? Palette.ink : Palette.green, in: RoundedRectangle(cornerRadius: 12))
-            .opacity(configuration.isPressed ? 0.82 : 1)
+            .background(secondary ? Color.white.opacity(0.8) : Palette.green, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(secondary ? Palette.ink.opacity(0.2) : .clear, lineWidth: 1))
+            .opacity(!isEnabled ? 0.45 : configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
     }
 }

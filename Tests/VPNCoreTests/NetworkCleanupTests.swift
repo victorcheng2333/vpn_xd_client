@@ -107,23 +107,21 @@ final class NetworkCleanupTests: XCTestCase {
     }
 
     func testRecoveryHookWatchdogDoesNotReportFatalErrorOrRemoveLiveSession() throws {
-        for reason in [ManagedNetworkScript.Reason.attemptReconnect, .reconnect] {
-            let store = TestNetworkStore(), session = try session(store)
-            defer { removeFixture(session) }
-            try session.claim(environment: environment()); store.installTunnel()
-            let executable = session.directory + "/blocked-hook"
-            try "#!/bin/sh\n/bin/sleep 10\n".write(toFile: executable, atomically: true, encoding: .utf8)
-            chmod(executable, 0o700)
-            var diagnostics: [String] = []
-            let result = ManagedNetworkScript.execute(reason: reason, session: session, environment: environment(), processID: 12345,
-                parentExited: { false }, runScript: {
-                    try NetworkScriptRunner.run(executable: executable, environment: ["PATH": "/usr/bin:/bin"], timeout: 0.05)
-                }, diagnostic: { diagnostics.append($0) })
-            XCTAssertEqual(result, 0, "A nonzero exit would make OpenConnect print Script returned error")
-            XCTAssertTrue(diagnostics.contains { $0.contains("hook timeout") })
-            XCTAssertEqual(diagnostics.compactMap { EngineOutput.event(for: $0, tunnelConfigured: true)?.kind }, [.info])
-            XCTAssertNotNil(store.get(prefix + "IPv4")); XCTAssertNotNil(store.get(prefix + "DNS"))
-        }
+        let store = TestNetworkStore(), session = try session(store)
+        defer { removeFixture(session) }
+        try session.claim(environment: environment()); store.installTunnel()
+        let executable = session.directory + "/blocked-hook"
+        try "#!/bin/sh\n/bin/sleep 10\n".write(toFile: executable, atomically: true, encoding: .utf8)
+        chmod(executable, 0o700)
+        var diagnostics: [String] = []
+        let result = ManagedNetworkScript.execute(reason: .reconnect, session: session, environment: environment(), processID: 12345,
+            parentExited: { false }, runScript: {
+                try NetworkScriptRunner.run(executable: executable, environment: ["PATH": "/usr/bin:/bin"], timeout: 0.05)
+            }, diagnostic: { diagnostics.append($0) })
+        XCTAssertEqual(result, 0, "A nonzero exit would make OpenConnect print Script returned error")
+        XCTAssertTrue(diagnostics.contains { $0.contains("hook timeout") })
+        XCTAssertEqual(diagnostics.compactMap { EngineOutput.event(for: $0, tunnelConfigured: true)?.kind }, [.info])
+        XCTAssertNotNil(store.get(prefix + "IPv4")); XCTAssertNotNil(store.get(prefix + "DNS"))
     }
 
     func testDisconnectReleasesResolverBeforeScriptAndVerifiesAgainAfterTimeout() throws {
@@ -277,14 +275,14 @@ final class NetworkCleanupTests: XCTestCase {
         XCTAssertNil(try live.read("State:/XDVPN/ReadOnlyTest/" + UUID().uuidString))
     }
 
-    func testInstalledVpncDisconnectBlocksBeforeRemovingKeysAndNativeFallbackStillWorks() throws {
-        let source = "/opt/homebrew/etc/vpnc/vpnc-script"
-        guard FileManager.default.fileExists(atPath: source) else { throw XCTSkip("vpnc-script unavailable") }
+    func testBundledVpncDisconnectBlocksBeforeRemovingKeysAndNativeFallbackStillWorks() throws {
+        let source = try XCTUnwrap(ProcessInfo.processInfo.environment["XDVPN_TEST_VPNC_SCRIPT"],
+                                   "Run bash scripts/test.sh with the built runtime")
         let store = TestNetworkStore(), session = try session(store)
         defer { removeFixture(session) }
         try session.claim(environment: environment()); store.installTunnel()
         let folder = session.directory
-        // Run the installed script's actual logic with isolated files and command
+        // Run the bundled script's actual logic with isolated files and command
         // doubles. No system routes, resolv.conf, configd keys or hooks are touched.
         let body = try String(contentsOfFile: source, encoding: .utf8)
             .replacingOccurrences(of: "/var/run/vpnc", with: folder + "/vpnc")

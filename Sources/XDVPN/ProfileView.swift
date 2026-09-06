@@ -79,14 +79,11 @@ struct ProfileView: View {
                     Card(padding: 16) {
                         HStack {
                             VStack(alignment: .leading, spacing: 5) {
-                                Text("先安装连接引擎").font(.system(size: 12, weight: .medium))
-                                Text("brew install openconnect").font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                                Text("内置连接引擎不完整").font(.system(size: 12, weight: .medium))
+                                Text("请重新下载完整的 XD VPN 应用，无需安装 Homebrew。")
+                                    .font(.system(size: 11)).foregroundStyle(Palette.muted)
                             }
                             Spacer()
-                            Button("复制命令") {
-                                NSPasteboard.general.clearContents(); NSPasteboard.general.setString("brew install openconnect", forType: .string)
-                                model.toast = "安装命令已复制"
-                            }
                             Button("重新检测") { model.refreshEngine() }
                         }
                     }

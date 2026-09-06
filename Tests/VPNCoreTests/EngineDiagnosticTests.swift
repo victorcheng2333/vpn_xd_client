@@ -3,6 +3,19 @@ import Darwin
 @testable import VPNCore
 
 final class EngineDiagnosticTests: XCTestCase {
+    func testSessionRejectionIsDistinctFromTLSAndTransportFailures() {
+        for line in ["Got inappropriate HTTP CONNECT response: HTTP/1.1 401 Cookie is not acceptable",
+                     "Cookie was rejected by server; exiting."] {
+            let diagnostic = EngineDiagnostic.classify(line, phase: "login", processID: 42424)
+            XCTAssertEqual(diagnostic.code, "session.rejected")
+            XCTAssertEqual(diagnostic.level, .error)
+            XCTAssertNil(diagnostic.errorNumber)
+            XCTAssertFalse(EngineOutput.isTransportFailure(line))
+            XCTAssertNil(EngineOutput.event(for: line), "Diagnostics must not change the existing retry/cleanup policy")
+        }
+        XCTAssertNotEqual(EngineDiagnostic.classify("Connected to HTTPS on vpn.example", phase: "login", processID: 42424).code, "session.rejected")
+    }
+
     func testEveryEngineLineIncludingUnknownErrorsReachesPersistentLogAndSecretsDoNot() throws {
         let directory = "/private/tmp/xdvpn-diagnostic-test-" + UUID().uuidString
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])

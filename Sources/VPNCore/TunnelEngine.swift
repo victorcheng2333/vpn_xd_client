@@ -70,7 +70,7 @@ public final class TunnelEngine {
             child.executableURL = URL(fileURLWithPath: executable)
             child.arguments = args
             // A known environment also prevents inherited proxy/loader variables.
-            child.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", "LANG": "C", "LC_ALL": "C", "HOME": "/var/root"]
+            child.environment = ["PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C", "HOME": "/var/root"]
             if let networkSession { child.environment?[TunnelNetworkSession.environmentKey] = networkSession.directory }
             child.currentDirectoryURL = URL(fileURLWithPath: "/")
             let input = Pipe(), output = Pipe()
