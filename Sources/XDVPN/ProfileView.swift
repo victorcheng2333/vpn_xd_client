@@ -34,15 +34,12 @@ struct ProfileView: View {
                         FieldShell(title: "VPN 服务器", hint: "支持地址、端口和路径") {
                             TextField("vpn.xindong.com:8443", text: $draft.server).accessibilityLabel("VPN 服务器")
                         }
-                        HStack(alignment: .top, spacing: 16) {
-                            FieldShell(title: "用户名") { TextField("你的公司账号", text: $draft.username).accessibilityLabel("VPN 用户名").focused($focused) }
-                            FieldShell(title: "认证组", hint: "选填") { TextField("使用服务器默认值", text: $draft.authGroup).accessibilityLabel("认证组") }
-                        }
+                        FieldShell(title: "用户名") { TextField("你的公司账号", text: $draft.username).accessibilityLabel("VPN 用户名").focused($focused) }
                         FieldShell(title: "VPN 密码", hint: model.hasPassword ? "已保存在钥匙串 · 留空则保留" : "将安全保存在本机钥匙串") {
                             HStack {
                                 Group {
-                                    if reveal { TextField(model.hasPassword ? "保留已保存的密码" : "输入 VPN 密码", text: $password) }
-                                    else { SecureField(model.hasPassword ? "保留已保存的密码" : "输入 VPN 密码", text: $password) }
+                                    if reveal { TextField(model.hasPassword ? "******" : "输入 VPN 密码", text: $password) }
+                                    else { SecureField(model.hasPassword ? "******" : "输入 VPN 密码", text: $password) }
                                 }.accessibilityLabel("VPN 密码")
                                 Button { reveal.toggle() } label: {
                                     Image(systemName: reveal ? "eye.slash" : "eye").foregroundStyle(Palette.muted)

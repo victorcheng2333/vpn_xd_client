@@ -6,16 +6,16 @@
 
 ## 直接使用
 
-**请使用当前内置版 1.1.16。** 1.1.10 已确认存在路由校验和清理回归。
+**请使用当前内置版 1.1.18。** 1.1.10 已确认存在路由校验和清理回归。
 
-按 Mac 芯片选择独立分发包，解压后将其中的 `XD VPN.app` 拖到「应用程序」文件夹：
+按 Mac 芯片选择对应产物；Intel 版先解压 ZIP，再将应用拖到「应用程序」文件夹：
 
-| Mac 芯片 | 分发包 | 构建后的应用 |
-| --- | --- | --- |
-| Intel | `dist/XD-VPN-1.1.16-macOS-x86_64-bundled.zip` | `dist/XD VPN 1.1.16-x86_64.app` |
-| Apple Silicon（M 系列） | `dist/XD-VPN-1.1.16-macOS-arm64-bundled.zip` | `dist/XD VPN 1.1.16-arm64.app` |
+| Mac 芯片 | 默认输出 |
+| --- | --- |
+| Intel | `dist/XD-VPN-1.1.18-macOS-x86_64-bundled.zip` |
+| Apple Silicon（M 系列） | `dist/XD VPN 1.1.18-arm64.app`、`dist/XD-VPN-1.1.18-macOS-arm64-bundled.zip` |
 
-1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`，认证组通常可留空。
+1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`；已保存密码时输入框显示 `******`。
 2. 点击「保存配置」。密码存入 macOS 登录钥匙串，普通配置中不包含密码。
 3. 进入「系统授权」，点击「安装系统助手」，按 macOS 提示完成一次管理员确认。此处使用 **Mac 管理员密码**，与 **VPN 密码** 不同；应用不保存管理员密码。授权完成后，普通启动、连接和自动重连都使用已安装助手，无需重复管理员弹窗。
 4. 点击「连接 VPN」。助手确认网络脚本完成、IPv4／DNS 与服务器路由核对通过后，才显示已连接、真实分配地址和本次连接时长。点击「断开连接」结束连接。
@@ -83,7 +83,7 @@
 需要 Xcode 或支持 Swift 6 的 Command Line Tools，不需要第三方 Swift 依赖。构建和测试缓存按当前工作区的绝对路径分开，复制／移动仓库后不会继续使用旧路径中的 SwiftShims 模块。
 
 ```bash
-# 一次构建并打包两个独立版本（arm64 和 x86_64）
+# 默认输出 ARM .app、ARM ZIP 和 x64 ZIP
 bash scripts/package.sh
 
 # 仅构建／打包指定架构
@@ -98,15 +98,15 @@ bash scripts/test-packaging.sh
 
 `scripts/build.sh` 先调用 `scripts/build-openconnect.sh`，按固定 SHA-256 下载并编译 OpenConnect、OpenSSL 和构建工具 pkgconf，然后以显式目标架构编译 App 与助手、生成图标、组装 `.app` 并做本地 ad-hoc 签名。第三方源码、对象、引擎和许可证缓存在 `.build/openconnect/<架构>/`，下载归档共用；编译缓存还校验构建脚本、工作区路径与工具链，避免切换架构或移动目录后串用旧对象。pkgconf 始终在构建机器上运行。支持在任一芯片 Mac 上交叉编译另一架构，不需要通过 Rosetta 编译。引擎仅动态链接 macOS 系统库，禁用外部 OpenSSL 模块加载，最低部署目标为 macOS 14。开发时也可以在 Xcode 中打开 `Package.swift`；真实连接应运行打包后的 `.app`，因为权限助手位于其内部。
 
-`scripts/package.sh` 默认依次完成两套构建，分别输出带架构名称的 `.app` 与 ZIP；每个 ZIP 包含使用说明、许可证和可离线重建引擎的对应源码及脚本。打包前校验三个 Mach-O 文件的架构一致、最低系统目标为 14.0、签名有效，拒绝混合架构和通用二进制。只重新压缩已有应用时可使用 `SKIP_BUILD=1 ARCHS=x86_64 bash scripts/package.sh`；指定 `APP_OUTPUT` 时仅处理该应用，交叉构建须同时设置 `ARCHS`。`ARCHS` 每次只接受 `arm64` 或 `x86_64`。
+`scripts/package.sh` 默认在 `dist` 中输出 ARM `.app`、ARM ZIP 和 x64 ZIP；Intel 中间应用保存在 `.build/package-apps`，不在 `dist` 中另放 `.app`。每个 ZIP 包含使用说明、许可证和可离线重建引擎的对应源码及脚本。打包前校验三个 Mach-O 文件的架构一致、最低系统目标为 14.0、签名有效，拒绝混合架构和通用二进制。只重新压缩已有应用时可使用 `SKIP_BUILD=1 ARCHS=x86_64 bash scripts/package.sh`；指定 `APP_OUTPUT` 时仅处理该应用，交叉构建须同时设置 `ARCHS`。`ARCHS` 每次只接受 `arm64` 或 `x86_64`。
 
-当前内置版为 1.1.16（build 19），继续使用 **版本 8 系统助手**。断开并退出旧版后打开对应芯片版本，配置和钥匙串密码沿用。进入「系统授权」点击「升级系统助手」，完成一次管理员确认，安装本版助手、内置引擎及网络脚本。即使助手版本相同，引擎或网络脚本的 SHA-256 与应用内文件不一致时也会提示升级。可通过 `APP_OUTPUT` 指定构建位置，避免覆盖正在运行的应用。
+当前内置版为 1.1.18（build 21），继续使用 **版本 8 系统助手**。断开并退出旧版后打开对应芯片版本，配置和钥匙串密码沿用。进入「系统授权」点击「升级系统助手」，完成一次管理员确认，安装本版助手、内置引擎及网络脚本。即使助手版本相同，引擎或网络脚本的 SHA-256 与应用内文件不一致时也会提示升级。可通过 `APP_OUTPUT` 指定构建位置，避免覆盖正在运行的应用。
 
 `scripts/test.sh` 默认使用 `.build/openconnect/<本机架构>/runtime` 的引擎和脚本；缺少任一文件会直接报错，需先构建引擎。也可设置 `XDVPN_TEST_OPENCONNECT` 和 `XDVPN_TEST_VPNC_SCRIPT` 验证指定交付包中的文件。构建强制使用 `strchrnul` 的兼容实现，并检查成品不引用 macOS 15.4 才提供的同名系统函数。
 
 Apple Silicon 上运行 Intel 测试需使用 Rosetta 启动测试运行器：`arch -x86_64 /bin/bash scripts/test.sh -c release --triple x86_64-apple-macosx14.0`，仅给原生测试命令传入 Intel triple 无法加载 Intel XCTest bundle。
 
-引擎隔离验收：`python3 scripts/verify-bundled-engine.py 'dist/XD VPN 1.1.16-x86_64.app' --arch x86_64`（Apple Silicon 上执行此 Intel 验收需要已安装 Rosetta）。arm64 包改用对应路径及 `--arch arm64`。该检查验证架构、最低系统版本、系统库依赖、移位运行和回环 TLS，不使用真实 VPN 账号；Intel 真机连接与 macOS 14 真机兼容仍需实机验收。
+引擎隔离验收：`python3 scripts/verify-bundled-engine.py '.build/package-apps/XD VPN 1.1.18-x86_64.app' --arch x86_64`（Apple Silicon 上执行此 Intel 验收需要已安装 Rosetta）。arm64 包改用对应路径及 `--arch arm64`。该检查验证架构、最低系统版本、系统库依赖、移位运行和回环 TLS，不使用真实 VPN 账号；Intel 真机连接与 macOS 14 真机兼容仍需实机验收。
 
 不同作者的同名客户端配置及系统助手独立，不能同时建立两个 VPN 隧道来验收。这个版本的授权助手路径与 Claude 版本不同，不会更新或移除 Claude 版本的系统文件。
 
@@ -139,12 +139,12 @@ OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 st
 
 自动化测试覆盖输入边界、密码传输、不可信参数不经 shell 执行、套接字身份检查、连接建立识别、错误分类、子进程正常清理、Auto Connect 取消／恢复、睡眠／同为在线的 Wi-Fi 切换、网络通知合并、恢复超时后顺序重建、路由变化过滤、权限安装脚本解析、退出偏好等。测试使用本地替身进程；另有内置 OpenConnect 对 `127.0.0.1:1` 的失败路径测试，不访问公司 VPN。
 
-自动化测试覆盖离线暂停、在线恢复、手动断开，以及慢清理子进程超过 TERM 升级期限、OpenConnect 异常退出／不响应、配置删除失败、误删保护和重复清理。另运行内置 vpnc-script 的实际逻辑，以隔离文件与命令替身重现路由处理阻塞、尚未执行 scutil 的路径，再验证助手的原生清理策略。动态存储写入测试使用可注入存储；没有删除真实 VPN 的系统键，也没有切换本机 Wi-Fi。本轮另覆盖服务器路由的网关／源地址更新、内核缓存重建、归属保护、修改意图持久化及异常退出清理。历史版本 1.1.11 的首次真实连接、服务器路由添加与完整枚举核验、百度 HTTPS 及 VPN DNS 响应均已通过。当前 1.1.16 尚需升级到版本 8 助手，验收实际 Wi-Fi 切换、服务器会话恢复与断网 30–60 秒后的 DNS／路由恢复。详细记录见 `VERIFICATION.md`。
+自动化测试覆盖离线暂停、在线恢复、手动断开，以及慢清理子进程超过 TERM 升级期限、OpenConnect 异常退出／不响应、配置删除失败、误删保护和重复清理。另运行内置 vpnc-script 的实际逻辑，以隔离文件与命令替身重现路由处理阻塞、尚未执行 scutil 的路径，再验证助手的原生清理策略。动态存储写入测试使用可注入存储；没有删除真实 VPN 的系统键，也没有切换本机 Wi-Fi。本轮另覆盖服务器路由的网关／源地址更新、内核缓存重建、归属保护、修改意图持久化及异常退出清理。历史版本 1.1.11 的首次真实连接、服务器路由添加与完整枚举核验、百度 HTTPS 及 VPN DNS 响应均已通过。当前 1.1.18 尚需升级到版本 8 助手，验收实际 Wi-Fi 切换、服务器会话恢复与断网 30–60 秒后的 DNS／路由恢复。详细记录见 `VERIFICATION.md`。
 
 该版本针对示例中的用户名／密码认证。需要短信验证码、交互式 MFA、浏览器 SSO、设备证书或 CSD/HostScan 的服务器不在当前支持范围；不会把公司二次认证绕过去。日志遇到额外认证要求会停止重试。示例脚本也提示，公司 VPN 可能无法在办公网络内使用。
 
 开发参考：[公司示例脚本](https://git.tapsvc.com/-/snippets/92/raw/master/bin/xd-vpn)、[OpenConnect 官方手册](https://www.infradead.org/openconnect/manual.html)。
 
-内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "dist/XD VPN 1.1.16-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
+内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "dist/XD VPN 1.1.18-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
 
 分发包随附第三方许可证、对应源码和重建脚本。构建选项依据 [OpenConnect 官方构建说明](https://www.infradead.org/openconnect/building.html)，许可证见 [OpenConnect 官方许可证](https://www.infradead.org/openconnect/licence.html)。

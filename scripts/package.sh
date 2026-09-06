@@ -3,16 +3,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/architectures.sh
-# With no target/output override, produce two independent application archives.
+# Default delivery: an ARM app plus ARM and Intel ZIPs.
 if [ "${ARCHS+x}" != x ] && [ "${APP_OUTPUT+x}" != x ]; then
-    for TARGET in arm64 x86_64; do
-        ARCHS="$TARGET" bash scripts/package.sh
-    done
+    ARCHS=arm64 bash scripts/package.sh
+    ARCHS=x86_64 bash scripts/package.sh
     exit 0
 fi
 TARGET_ARCHS="$(xdvpn_architectures "${ARCHS-$(uname -m)}")"
 SOURCE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-APP="${APP_OUTPUT:-$PWD/dist/XD VPN $SOURCE_VERSION-$TARGET_ARCHS.app}"
+APP_DIRECTORY="$PWD/dist"
+if [ "$TARGET_ARCHS" = x86_64 ]; then
+    APP_DIRECTORY="$PWD/.build/package-apps"
+fi
+APP="${APP_OUTPUT:-$APP_DIRECTORY/XD VPN $SOURCE_VERSION-$TARGET_ARCHS.app}"
 # A release command builds the complete payload before packaging it. Use
 # SKIP_BUILD=1 only to repackage an existing, verified application.
 if [ "${SKIP_BUILD:-0}" != 1 ]; then
