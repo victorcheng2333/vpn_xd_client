@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="475" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 475" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 13-helper-extension</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="475"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-475)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="475" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="445.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,891) scale(1,-1)">助手 v5 开发快照 · 尚未按最终版本验收</text>
+			<text x="20" y="421.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,843) scale(1,-1)">观察截点 2026-09-06 10:26:14 +08:00；不代表全部接线已完成</text>
+			<rect x="20" y="298" width="220" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="82.0" y="356.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,712) scale(1,-1)">物理出口核对</text>
+			<text x="71.128662109375" y="336.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,673) scale(1,-1)">en 接口 / 地址 / 网关</text>
+			<text x="84.5" y="318.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,637) scale(1,-1)">作用域默认路由</text>
+			<rect x="290" y="298" width="220" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="364.8671875" y="356.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,712) scale(1,-1)">route.json</text>
+			<text x="320.87646484375" y="336.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,673) scale(1,-1)">外部归属 / owned / pending</text>
+			<text x="348.0" y="318.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,637) scale(1,-1)">操作前先记录目标</text>
+			<rect x="560" y="298" width="220" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="627.77734375" y="356.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,712) scale(1,-1)">PF_ROUTE</text>
+			<text x="609.28466796875" y="336.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,673) scale(1,-1)">add / change / delete</text>
+			<text x="624.5" y="318.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,637) scale(1,-1)">操作后回读确认</text>
+			<polyline points="240 341, 290 341" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="290 341, 282 345, 282 337" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="510 341, 560 341" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="560 341, 552 345, 552 337" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="153" width="220" height="87" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="53.546875" y="211.9" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,423) scale(1,-1)">受控脚本与 IPv4 服务</text>
+			<text x="84.5" y="192.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,384) scale(1,-1)">禁用旧网关恢复</text>
+			<text x="66.082275390625" y="174.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,348) scale(1,-1)">全隧道 / 分流另行核验</text>
+			<rect x="290" y="153" width="220" height="87" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="360.0" y="211.9" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,423) scale(1,-1)">结构化诊断</text>
+			<text x="337.85009765625" y="192.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,384) scale(1,-1)">source / code / phase</text>
+			<text x="349.786865234375" y="174.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,348) scale(1,-1)">PID / errno / level</text>
+			<rect x="560" y="153" width="220" height="87" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="606.0" y="211.9" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,423) scale(1,-1)">助手独立日志草案</text>
+			<text x="612.575927734375" y="192.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,384) scale(1,-1)">脱敏 / root 私有文件</text>
+			<text x="593.9677734375" y="174.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,348) scale(1,-1)">4 × 4 MiB / 关键事件 fsync</text>
+			<polyline points="132 298, 132 240" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="132 240, 136 248, 128 248" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="240 196, 290 196" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="290 196, 282 200, 282 192" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="510 196, 560 196" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<polygon points="560 196, 552 200, 552 192" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="32" width="760" height="69" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="38" y="74.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(58%,41%,21%); stroke:none;" transform="translate(0,148) scale(1,-1)">核验重点：外部路由保护、pending 崩溃恢复、真实切网、脚本兼容、诊断完整接线。</text>
+			<text x="38" y="47.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,95) scale(1,-1)">需固定 App / Helper 版本和源码后重新验证；1.1.8 或质量功能的测试记录不能覆盖本增量。</text>
+		</g>
+	</g>
+</svg>

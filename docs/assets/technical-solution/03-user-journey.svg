@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="360" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 360" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 03-user-journey</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="360"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-360)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="360" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="330.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,661) scale(1,-1)">用户旅程与退出契约</text>
+			<rect x="20" y="195" width="160" height="88" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="68.0" y="245.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,490) scale(1,-1)">保存配置</text>
+			<text x="44.08349609374999" y="225.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,451) scale(1,-1)">VPN 密码 → 钥匙串</text>
+			<rect x="220" y="195" width="160" height="88" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="252.0" y="245.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,490) scale(1,-1)">安装系统助手</text>
+			<text x="254.5" y="225.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,451) scale(1,-1)">一次管理员确认</text>
+			<rect x="420" y="195" width="160" height="88" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="452.0" y="245.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,490) scale(1,-1)">连接工作网络</text>
+			<text x="450.16455078125" y="225.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,451) scale(1,-1)">状态 / 地址 / 时长</text>
+			<rect x="620" y="195" width="160" height="88" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="660.0" y="245.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,490) scale(1,-1)">日常菜单栏</text>
+			<text x="650.16455078125" y="225.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,451) scale(1,-1)">连接 / 断开 / 设置</text>
+			<polyline points="180 240, 220 240" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="220 240, 212 244, 212 236" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="380 240, 420 240" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="420 240, 412 244, 412 236" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="580 240, 620 240" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="620 240, 612 244, 612 236" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="90" y="49" width="260" height="76" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="188.0" y="93.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,186) scale(1,-1)">关闭窗口</text>
+			<text x="161.5" y="73.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,147) scale(1,-1)">继续运行与恢复任务</text>
+			<rect x="450" y="49" width="260" height="76" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="540.0" y="93.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,186) scale(1,-1)">退出并断开</text>
+			<text x="508.128662109375" y="73.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,147) scale(1,-1)">App 退出，助手独立清理</text>
+			<polyline points="700 195, 700 157, 220 157, 220 125" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="220 125, 224 133, 216 133" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="580 157, 580 125" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="580 125, 584 133, 576 133" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="20" y="9.950000000000001" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,19) scale(1,-1)">同一 VPNModel 驱动两种界面；手动断开不改写 Auto Connect 保存偏好。</text>
+		</g>
+	</g>
+</svg>

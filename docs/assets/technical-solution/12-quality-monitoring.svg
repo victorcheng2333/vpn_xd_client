@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="445" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 445" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 12-quality-monitoring</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="445"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-445)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="445" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="415.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,831) scale(1,-1)">连接质量增量 · 1.1.9 设计</text>
+			<text x="20" y="391.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,783) scale(1,-1)">业务事件驱动统计，不从中文过程日志倒推成功率</text>
+			<rect x="20" y="280" width="210" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="52.5390625" y="326.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,652) scale(1,-1)">VPNModel 状态入口</text>
+			<text x="56.746826171875" y="306.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,613) scale(1,-1)">开始 / 成功 / 失败 / 取消</text>
+			<rect x="285" y="280" width="230" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="334.62890625" y="335.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,670) scale(1,-1)">ConnectionQuality</text>
+			<text x="348.0" y="315.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,631) scale(1,-1)">一轮最多一个结果</text>
+			<text x="336.056884765625" y="297.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,595) scale(1,-1)">ContinuousClock 计时</text>
+			<rect x="570" y="280" width="210" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="629.64453125" y="335.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,670) scale(1,-1)">QualityEvent</text>
+			<text x="622.254150390625" y="315.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,631) scale(1,-1)">UUID / connection</text>
+			<text x="608.87646484375" y="297.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,595) scale(1,-1)">kind / reason / duration</text>
+			<polyline points="230 320, 285 320" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="285 320, 277 324, 277 316" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="515 320, 570 320" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="570 320, 562 324, 562 316" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="570" y="140" width="210" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="612.30859375" y="195.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,390) scale(1,-1)">JSONL schema 2</text>
+			<text x="617.582275390625" y="175.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,351) scale(1,-1)">历史恢复 / 损坏提示</text>
+			<text x="612.158203125" y="157.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,315) scale(1,-1)">最近 24 小时保留样本</text>
+			<polyline points="675 280, 675 220" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="675 220, 679 228, 671 228" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="285" y="140" width="230" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="341.296875" y="195.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,390) scale(1,-1)">QualitySnapshot</text>
+			<text x="332.09912109375" y="175.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,351) scale(1,-1)">成功率 / P95 / 恢复次数</text>
+			<text x="348.0" y="157.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,315) scale(1,-1)">样本量与窗口限制</text>
+			<polyline points="570 180, 515 180" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="515 180, 523 176, 523 184" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="140" width="210" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="85.0" y="195.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,390) scale(1,-1)">连接质量页</text>
+			<text x="61.08227539062499" y="175.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,351) scale(1,-1)">三张指标卡 / 耗时散点</text>
+			<text x="79.5" y="157.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,315) scale(1,-1)">可滚动告警列表</text>
+			<polyline points="285 180, 230 180" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="230 180, 238 176, 238 184" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="29" width="760" height="66" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="38" y="69.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(58%,41%,21%); stroke:none;" transform="translate(0,138) scale(1,-1)">本地告警：连续 3 次失败；至少 5 次完成且成功率 &lt; 80%；10 分钟中断 ≥ 3 次。</text>
+			<text x="38" y="42.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,85) scale(1,-1)">触发和解除时记录；30 秒复评。无样本不判健康，退出记录缺失不直接认定崩溃。</text>
+		</g>
+	</g>
+</svg>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="605" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 605" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 07-recovery-flow</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="605"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-605)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="605" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="575.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,1151) scale(1,-1)">网络观察到恢复决策</text>
+			<text x="20" y="551.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,1103) scale(1,-1)">把通知当作观察，比较后再决定是否行动</text>
+			<rect x="20" y="453" width="225" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="59.58203125" y="494.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,988) scale(1,-1)">configd / CoreWLAN</text>
+			<text x="76.1455078125" y="474.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,949) scale(1,-1)">Link / Power / SSID</text>
+			<rect x="290" y="453" width="220" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="336.0" y="494.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,988) scale(1,-1)">统一物理快照比较</text>
+			<text x="338.964111328125" y="474.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,949) scale(1,-1)">Active / 地址 / 网关等</text>
+			<rect x="555" y="453" width="225" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="608.81640625" y="494.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,988) scale(1,-1)">相同 link / power</text>
+			<text x="616.20458984375" y="474.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,949) scale(1,-1)">只写 ignored 日志</text>
+			<polyline points="245 488, 290 488" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="290 488, 282 492, 282 484" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="510 488, 555 488" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="555 488, 547 492, 547 484" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="290" y="337" width="220" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="319.9921875" y="378.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,756) scale(1,-1)">真实变化 / SSID / 唤醒</text>
+			<text x="341.5" y="358.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,717) scale(1,-1)">记录原因与连接意图</text>
+			<polyline points="400 453, 400 407" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="400 407, 404 415, 396 415" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="207" width="225" height="82" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="93.83203125" y="263.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,526) scale(1,-1)">离线 / 睡眠</text>
+			<text x="74.0" y="243.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,487) scale(1,-1)">暂停重试与恢复期限</text>
+			<text x="80.5" y="225.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,451) scale(1,-1)">首次握手单独清理</text>
+			<rect x="290" y="207" width="220" height="82" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="328.0" y="254.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,508) scale(1,-1)">在线且仍有连接意图</text>
+			<text x="342.75048828125" y="234.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,469) scale(1,-1)">1 秒防抖 + 3 秒冷却</text>
+			<polyline points="400 337, 400 289" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="400 289, 404 297, 396 297" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="290 370, 132 370, 132 289" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="132 289, 136 297, 128 297" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="20" y="62" width="225" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="68.9296875" y="120.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,240) scale(1,-1)">首次登录 / waiting</text>
+			<text x="80.5" y="100.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,201) scale(1,-1)">清理旧握手后登录</text>
+			<text x="93.5" y="82.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,165) scale(1,-1)">或跳过旧退避</text>
+			<rect x="290" y="62" width="220" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="360.0" y="120.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,240) scale(1,-1)">已建立隧道</text>
+			<text x="324.158203125" y="100.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,201) scale(1,-1)">SIGUSR2 请求旧会话恢复</text>
+			<text x="360.273193359375" y="82.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,165) scale(1,-1)">同轮 3 秒预算</text>
+			<rect x="555" y="62" width="225" height="86" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="627.5" y="120.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,240) scale(1,-1)">恢复未成功</text>
+			<text x="600.306884765625" y="100.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,201) scale(1,-1)">清理后按 Auto Connect</text>
+			<text x="615.5" y="82.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,165) scale(1,-1)">重登录或保持断开</text>
+			<polyline points="400 207, 400 148" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="400 148, 404 156, 396 156" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="335 207, 335 180, 132 180, 132 148" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="132 148, 136 156, 128 156" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="510 105, 555 105" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="555 105, 547 109, 547 101" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="20" y="18.950000000000003" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,37) scale(1,-1)">物理就绪 ≠ 互联网可达。重复消息不延长同一轮期限；失网/睡眠后新一轮在条件恢复时开始。</text>
+		</g>
+	</g>
+</svg>

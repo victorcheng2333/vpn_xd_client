@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="540" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 540" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 08-timing</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="540"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-540)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="540" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="510.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,1021) scale(1,-1)">策略时间图</text>
+			<text x="20" y="486.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,973) scale(1,-1)">以下均为代码参数；不是实测恢复耗时，也不是统一时间刻度</text>
+			<text x="20" y="442.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,884) scale(1,-1)">A  在线网络变化后的恢复阶段</text>
+			<rect x="20" y="345" width="158" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="69.0" y="392.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,784) scale(1,-1)">网络就绪</text>
+			<text x="46.99999999999999" y="371.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,743) scale(1,-1)">不保证互联网可达</text>
+			<rect x="190" y="345" width="168" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="237.748779296875" y="392.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,784) scale(1,-1)">防抖 / 冷却</text>
+			<text x="223.4345703125" y="371.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,743) scale(1,-1)">1 秒 / 同进程 3 秒</text>
+			<rect x="370" y="345" width="165" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="415.0" y="392.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,784) scale(1,-1)">旧会话恢复</text>
+			<text x="412.773193359375" y="371.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,743) scale(1,-1)">本轮最多 3 秒</text>
+			<rect x="548" y="345" width="232" height="80" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="592.4716796875" y="392.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,784) scale(1,-1)">停止 → 核验 → 新登录</text>
+			<text x="599.0" y="371.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,743) scale(1,-1)">清理通过且允许重登录</text>
+			<polyline points="178 385, 190 385" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="190 385, 182 389, 182 381" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="358 385, 370 385" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="370 385, 362 389, 362 381" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="535 385, 547 385" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="547 385, 539 389, 539 381" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="20" y="302.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,604) scale(1,-1)">B  停止升级（从首次停止请求计时）</text>
+			<polyline points="65 261, 745 261" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<circle cx="65" cy="261" r="5" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="52.162109375" y="278.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,556) scale(1,-1)">0 秒</text>
+			<text x="43.332275390625" y="235.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,471) scale(1,-1)">SIGINT</text>
+			<circle cx="201" cy="261" r="5" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="188.162109375" y="278.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,556) scale(1,-1)">8 秒</text>
+			<text x="171.38818359375" y="235.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,471) scale(1,-1)">SIGTERM</text>
+			<circle cx="745" cy="261" r="5" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="728.26904296875" y="278.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,556) scale(1,-1)">40 秒</text>
+			<text x="720.431396484375" y="235.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,471) scale(1,-1)">SIGKILL</text>
+			<text x="20" y="188.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,376) scale(1,-1)">C  可重试退出后的退避</text>
+			<rect x="55" y="56.999999999999986" width="50" height="4.950000000000003" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="73.135009765625" y="72.89999999999999" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,145) scale(1,-1)">3s</text>
+			<text x="76.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">1</text>
+			<rect x="154" y="56.99999999999998" width="50" height="9.899999999999999" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="172.135009765625" y="77.84999999999998" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,155) scale(1,-1)">6s</text>
+			<text x="175.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">2</text>
+			<rect x="253" y="57.000000000000014" width="50" height="19.799999999999997" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="267.52001953125" y="87.75000000000001" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,175) scale(1,-1)">12s</text>
+			<text x="274.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">3</text>
+			<rect x="352" y="57.00000000000003" width="50" height="39.599999999999994" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="366.52001953125" y="107.55000000000003" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,215) scale(1,-1)">24s</text>
+			<text x="373.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">4</text>
+			<rect x="451" y="57.0" width="50" height="79.19999999999999" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="465.52001953125" y="147.14999999999998" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,294) scale(1,-1)">48s</text>
+			<text x="472.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">5</text>
+			<rect x="550" y="57.0" width="50" height="99.0" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="564.52001953125" y="166.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,333) scale(1,-1)">60s</text>
+			<text x="571.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">6</text>
+			<rect x="649" y="57.0" width="50" height="99.0" rx="4" ry="4" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="663.52001953125" y="166.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,333) scale(1,-1)">60s</text>
+			<text x="670.6630859375" y="36.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,73) scale(1,-1)">7</text>
+			<text x="20" y="10.950000000000001" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,21) scale(1,-1)">重试次数 →                  物理网络变化、唤醒或连接成功会重置累计退避。</text>
+		</g>
+	</g>
+</svg>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="900" height="590" preserveAspectRatio="xMinYMin meet" viewBox="0 0 900 590" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 02-ui-layout</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="900" height="590"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-590)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="900" height="590" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="560.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,1121) scale(1,-1)">UI 结构示意</text>
+			<text x="20" y="536.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,1073) scale(1,-1)">根据 SwiftUI 布局重绘；占位内容不代表真实账号或运行状态</text>
+			<rect x="20" y="34" width="590" height="480" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<rect x="20" y="34" width="125" height="480" rx="10" ry="10" style="stroke: rgb(9%,17%,15%); stroke-linecap: butt; stroke-width: 1; fill: rgb(9%,17%,15%); fill-rule: evenodd;"/>
+			<text x="37" y="472.45" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 23px;fill: rgb(100%,100%,100%); stroke:none;" transform="translate(0,944) scale(1,-1)">XD VPN</text>
+			<text x="37" y="433.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(85%,93%,89%); stroke:none;" transform="translate(0,867) scale(1,-1)">工作空间</text>
+			<rect x="30" y="374" width="104" height="40" rx="7" ry="7" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(20%,31%,27%); fill-rule: evenodd;"/>
+			<text x="43" y="392.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(100%,100%,100%); stroke:none;" transform="translate(0,784) scale(1,-1)">连接</text>
+			<text x="43" y="335.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(72%,78%,75%); stroke:none;" transform="translate(0,670) scale(1,-1)">VPN 配置</text>
+			<text x="43" y="278.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(72%,78%,75%); stroke:none;" transform="translate(0,556) scale(1,-1)">系统授权</text>
+			<text x="43" y="221.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(72%,78%,75%); stroke:none;" transform="translate(0,442) scale(1,-1)">连接日志</text>
+			<text x="37" y="109.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(85%,93%,89%); stroke:none;" transform="translate(0,219) scale(1,-1)">少一点操作，</text>
+			<text x="37" y="85.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(85%,93%,89%); stroke:none;" transform="translate(0,171) scale(1,-1)">多一点专注。</text>
+			<text x="37" y="47.5" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 10px;fill: rgb(85%,93%,89%); stroke:none;" transform="translate(0,95) scale(1,-1)">OpenConnect 就绪</text>
+			<text x="166" y="474.3" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 22px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,948) scale(1,-1)">工作网络，一键就绪。</text>
+			<text x="166" y="449.5" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 10px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,899) scale(1,-1)">A LITTLE CLOSER TO WORK</text>
+			<rect x="165" y="139" width="250" height="287" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="182" y="400.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,801) scale(1,-1)">CONNECTION</text>
+			<circle cx="290" cy="327" r="55" style="stroke: rgb(85%,93%,89%); stroke-linecap: butt; stroke-width: 1.2; fill: none; fill-rule: evenodd;"/>
+			<circle cx="290" cy="327" r="43" style="stroke: rgb(85%,93%,89%); stroke-linecap: butt; stroke-width: 1.2; fill: none; fill-rule: evenodd;"/>
+			<circle cx="290" cy="327" r="32" style="stroke: rgb(85%,93%,89%); stroke-linecap: butt; stroke-width: 1.2; fill: none; fill-rule: evenodd;"/>
+			<circle cx="290" cy="327" r="27" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="275.0" y="323.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,646) scale(1,-1)">连接</text>
+			<text x="248.0" y="242.15" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 21px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,484) scale(1,-1)">尚未连接</text>
+			<rect x="200" y="180" width="180" height="38" rx="9" ry="9" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="257.4951171875" y="195.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(100%,100%,100%); stroke:none;" transform="translate(0,390) scale(1,-1)">连接 VPN</text>
+			<text x="180" y="152.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,305) scale(1,-1)">时长 00:00:00</text>
+			<text x="307" y="152.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,305) scale(1,-1)">分配地址 --</text>
+			<rect x="430" y="261" width="158" height="165" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="447" y="398.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,797) scale(1,-1)">MY PROFILE</text>
+			<text x="447" y="358.55" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 17px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,717) scale(1,-1)">我的工作网络</text>
+			<text x="447" y="330.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,661) scale(1,-1)">服务器 / 示例账号</text>
+			<text x="447" y="288.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,577) scale(1,-1)">管理配置</text>
+			<rect x="430" y="139" width="158" height="108" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="447" y="217.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,434) scale(1,-1)">密码，安心记住。</text>
+			<text x="447" y="187.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,375) scale(1,-1)">保存在本机钥匙串</text>
+			<rect x="165" y="56" width="423" height="66" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(92%,94%,91%); fill-rule: evenodd;"/>
+			<text x="183" y="96.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,192) scale(1,-1)">自动连接  AUTO CONNECT</text>
+			<text x="183" y="71.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,143) scale(1,-1)">启动时连接，手动断开后保持断开</text>
+			<rect x="530" y="85" width="40" height="21" rx="10" ry="10" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="690" y="499.55" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 17px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,999) scale(1,-1)">菜单栏快捷面板</text>
+			<rect x="639" y="34" width="241" height="445" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="661" y="443.0" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 20px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,886) scale(1,-1)">XD VPN</text>
+			<circle cx="760" cy="372" r="42" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="745.0" y="368.25" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 15px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,736) scale(1,-1)">盾牌</text>
+			<text x="720.0" y="295.0" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 20px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,590) scale(1,-1)">尚未连接</text>
+			<rect x="660" y="231" width="198" height="38" rx="8" ry="8" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<text x="705.3310546875" y="247.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(100%,100%,100%); stroke:none;" transform="translate(0,494) scale(1,-1)">连接 / 配置 / 授权</text>
+			<rect x="660" y="135" width="198" height="79" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="675" y="188.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,377) scale(1,-1)">账号     示例账号</text>
+			<text x="675" y="159.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,319) scale(1,-1)">地址 / 时长</text>
+			<text x="665" y="103.1" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,206) scale(1,-1)">自动连接</text>
+			<text x="665" y="58.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,117) scale(1,-1)">设置    日志    退出并断开</text>
+			<text x="20" y="6.800000000000001" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,13) scale(1,-1)">主窗口默认 1040 × 740 pt；侧栏 204 pt。菜单栏面板宽 350 pt。图中为压缩比例。</text>
+		</g>
+	</g>
+</svg>

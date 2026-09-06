@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="490" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 490" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 06-state-machine</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="490"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-490)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="490" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="460.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,921) scale(1,-1)">连接状态机主干</text>
+			<text x="20" y="436.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,873) scale(1,-1)">图示主路径；详细条件以正文状态表和 VPNModel 为准</text>
+			<rect x="20" y="323" width="160" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="87.546875" y="364.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,728) scale(1,-1)">idle</text>
+			<text x="74.0" y="344.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,689) scale(1,-1)">尚未连接</text>
+			<rect x="220" y="323" width="160" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="260.86328125" y="364.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,728) scale(1,-1)">authorizing</text>
+			<text x="274.0" y="344.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,689) scale(1,-1)">准备助手</text>
+			<rect x="420" y="323" width="160" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="461.3046875" y="364.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,728) scale(1,-1)">connecting</text>
+			<text x="474.0" y="344.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,689) scale(1,-1)">首次登录</text>
+			<rect x="620" y="323" width="160" height="70" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(85%,93%,89%); fill-rule: evenodd;"/>
+			<text x="663.08203125" y="364.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,728) scale(1,-1)">connected</text>
+			<text x="667.5" y="344.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,689) scale(1,-1)">已建立隧道</text>
+			<polyline points="180 358, 220 358" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="220 358, 212 362, 212 354" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="380 358, 420 358" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="420 358, 412 362, 412 354" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="580 358, 620 358" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="620 358, 612 362, 612 354" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="174.9853515625" y="398.0" width="54.029296875" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="180.9853515625" y="401.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,803) scale(1,-1)">connect</text>
+			<rect x="546.64453125" y="398.0" width="94.7109375" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="552.64453125" y="401.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,803) scale(1,-1)">connected 事件</text>
+			<rect x="620" y="171" width="160" height="72" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="654.19140625" y="213.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,426) scale(1,-1)">reconnecting</text>
+			<text x="667.5" y="193.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,387) scale(1,-1)">旧会话恢复</text>
+			<polyline points="700 323, 700 243" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="700 243, 704 251, 696 251" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="664.9990234375" y="269.0" width="70.001953125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="670.9990234375" y="272.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,545) scale(1,-1)">掉线 / 切网</text>
+			<polyline points="780 223, 792 223, 792 303, 755 303, 755 323" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="755 323, 751 315, 759 315" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="718.0" y="300.25" width="34.0" height="13.75" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="724.0" y="303.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,607) scale(1,-1)">成功</text>
+			<rect x="420" y="171" width="160" height="72" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,94%,86%); fill-rule: evenodd;"/>
+			<text x="451.078125" y="213.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,426) scale(1,-1)">disconnecting</text>
+			<text x="454.5" y="193.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,387) scale(1,-1)">等待停止与清理</text>
+			<polyline points="620 207, 580 207" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="580 207, 588 203, 588 211" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="583.0" y="221.25" width="34.0" height="13.75" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="589.0" y="224.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,449) scale(1,-1)">超时</text>
+			<polyline points="500 323, 500 243" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="500 243, 504 251, 496 251" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="452.9990234375" y="276.0" width="94.001953125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="458.9990234375" y="279.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,559) scale(1,-1)">取消 / 配置失败</text>
+			<rect x="220" y="42" width="160" height="72" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(91%,94%,96%); fill-rule: evenodd;"/>
+			<text x="275.09765625" y="84.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,168) scale(1,-1)">waiting</text>
+			<text x="261.0" y="64.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,129) scale(1,-1)">等网络或退避</text>
+			<rect x="420" y="42" width="160" height="72" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="480.875" y="84.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,168) scale(1,-1)">failed</text>
+			<text x="474.0" y="64.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,129) scale(1,-1)">终止错误</text>
+			<rect x="20" y="42" width="160" height="72" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="87.546875" y="84.4" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 16px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,168) scale(1,-1)">idle</text>
+			<text x="54.49999999999999" y="64.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,129) scale(1,-1)">手动结束后保持</text>
+			<polyline points="450 171, 450 142, 100 142, 100 114" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="100 114, 104 122, 96 122" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<polyline points="500 171, 500 114" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="500 114, 504 122, 496 122" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="495.5" y="133.25" width="45.0" height="13.75" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="501.5" y="136.65" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 11px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,273) scale(1,-1)">有错误</text>
+			<polyline points="420 198, 300 198, 300 114" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="300 114, 304 122, 296 122" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="256.0" y="160.0" width="96.0" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="262.0" y="163.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,327) scale(1,-1)">允许自动新登录</text>
+			<polyline points="220 79, 202 79, 202 284, 299 284, 299 323" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="299 323, 295 315, 303 315" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="240.318359375" y="257.0" width="117.36328125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="246.318359375" y="260.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,521) scale(1,-1)">条件就绪后 connect</text>
+			<text x="20" y="10.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,21) scale(1,-1)">手动断开清除 desiredConnection；保存的 autoConnect 不变。新登录只能在清理完成后开始。</text>
+		</g>
+	</g>
+</svg>

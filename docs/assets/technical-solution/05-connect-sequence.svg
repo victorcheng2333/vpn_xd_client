@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg
+  PUBLIC '-//W3C//DTD SVG 1.0//EN'
+  'http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd'>
+<svg width="800" height="590" preserveAspectRatio="xMinYMin meet" viewBox="0 0 800 590" xmlns="http://www.w3.org/2000/svg" version="1.0" fill-rule="evenodd" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<title>XD VPN 技术图 05-connect-sequence</title>
+	<desc>根据项目源码归纳绘制的技术设计示意图</desc>
+	<clipPath id="clip">
+		<rect x="0" y="0" width="800" height="590"/>
+	</clipPath>
+	<g id="group" transform="scale(1,-1) translate(0,-590)" style="clip-path: url(#clip)">
+		<g transform="">
+			<rect x="0" y="0" width="800" height="590" style="stroke: rgb(100%,100%,100%); stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="20" y="560.7" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 18px;fill: rgb(13%,47%,34%); stroke:none;" transform="translate(0,1121) scale(1,-1)">首次连接正常路径</text>
+			<text x="20" y="536.95" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 13px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,1073) scale(1,-1)">示意省略失败与取消分支；每一步只表示该阶段完成</text>
+			<rect x="12" y="469" width="136" height="43" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="53.16552734375" y="489.6" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,979) scale(1,-1)">用户 / UI</text>
+			<polyline points="80 469, 80 42" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<rect x="172" y="469" width="136" height="43" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="206.54150390625" y="489.6" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,979) scale(1,-1)">VPNModel</text>
+			<polyline points="240 469, 240 42" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<rect x="337" y="469" width="136" height="43" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="364.14501953125" y="489.6" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,979) scale(1,-1)">HelperBridge</text>
+			<polyline points="405 469, 405 42" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<rect x="497" y="469" width="136" height="43" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="536.9931640625" y="489.6" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,979) scale(1,-1)">root 助手</text>
+			<polyline points="565 469, 565 42" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<rect x="657" y="469" width="136" height="43" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="681.8037109375" y="489.6" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 14px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,979) scale(1,-1)">OpenConnect</text>
+			<polyline points="725 469, 725 42" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd; stroke-dasharray: 5, 4;"/>
+			<polyline points="80 439, 240 439" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="240 439, 232 443, 232 435" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="130.0" y="448.0" width="60.0" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="136.0" y="451.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,903) scale(1,-1)">点击连接</text>
+			<polyline points="240 387, 405 387" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="405 387, 397 391, 397 383" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="266.818359375" y="396.0" width="111.36328125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="272.818359375" y="399.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,799) scale(1,-1)">prepare / 检查授权</text>
+			<polyline points="405 335, 565 335" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="565 335, 557 339, 557 331" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="421.1416015625" y="344.0" width="127.716796875" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="427.1416015625" y="347.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,695) scale(1,-1)">sudo -n + 私有 socket</text>
+			<rect x="493" y="265" width="145" height="49" rx="10" ry="10" style="stroke: rgb(84%,88%,86%); stroke-linecap: butt; stroke-width: 1; fill: rgb(96%,96%,95%); fill-rule: evenodd;"/>
+			<text x="512.47265625" y="290.3" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(10%,18%,16%); stroke:none;" transform="translate(0,580) scale(1,-1)">UID / SessionLease</text>
+			<polyline points="565 239, 405 239" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="405 239, 413 235, 413 243" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="450.32421875" y="248.0" width="69.3515625" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="456.32421875" y="251.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,503) scale(1,-1)">ready 事件</text>
+			<polyline points="240 187, 565 187" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="565 187, 557 191, 557 183" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="295.818359375" y="196.0" width="213.36328125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="301.818359375" y="199.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,399) scale(1,-1)">校验未取消，读取密码并发送 connect</text>
+			<polyline points="565 135, 725 135" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="725 135, 717 139, 717 131" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="570.71484375" y="144.0" width="148.5703125" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="576.71484375" y="147.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,295) scale(1,-1)">启动子进程；密码 → stdin</text>
+			<polyline points="725 83, 565 83" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="565 83, 573 79, 573 87" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="572.642578125" y="92.0" width="144.71484375" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="578.642578125" y="95.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,191) scale(1,-1)">配置钩子 / Configured as</text>
+			<polyline points="565 40, 240 40" style="stroke: rgb(13%,47%,34%); stroke-linecap: butt; stroke-width: 1.7; fill: None; fill-rule: evenodd;"/>
+			<polygon points="240 40, 248 36, 248 44" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(13%,47%,34%); fill-rule: evenodd;"/>
+			<rect x="340.6279296875" y="49.0" width="123.744140625" height="15.0" rx="2" ry="2" style="stroke: none; stroke-linecap: butt; stroke-width: 1; fill: rgb(100%,100%,100%); fill-rule: evenodd;"/>
+			<text x="346.6279296875" y="52.8" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,105) scale(1,-1)">connected + address</text>
+			<text x="20" y="1.8000000000000007" style="font-family: Arial Unicode MS, PingFang SC, sans-serif; font-size: 12px;fill: rgb(40%,46%,43%); stroke:none;" transform="translate(0,3) scale(1,-1)">网络配置写入前先建立归属记录；UI 显示成功需要隧道事件，不以启动进程或 ready 为依据。</text>
+		</g>
+	</g>
+</svg>

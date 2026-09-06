@@ -2,6 +2,8 @@
 
 一个为日常办公设计的原生 macOS VPN 客户端。SwiftUI 界面，OpenConnect 连接引擎，兼容 Cisco AnyConnect 用户名／密码认证。
 
+完整设计与实现说明见 [技术方案文档](docs/technical-solution.md)（Markdown，含架构、UI、状态机、恢复清理与质量监控等 13 张图，并注明版本基线与开发增量）。
+
 ## 直接使用
 
 本项目已构建的应用位于 **`dist/XD VPN 1.1.8.app`**。双击打开即可，也可以把整个 `.app` 拖到「应用程序」文件夹。
