@@ -1,0 +1,3 @@
+-keep class com.xd.vpn.android.engine.NativeEngine { *; }
+-keep class com.xd.vpn.android.engine.NativeCallbacks { *; }
+-keepclassmembers class * implements com.xd.vpn.android.engine.NativeCallbacks { *; }
