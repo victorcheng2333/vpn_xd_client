@@ -16,7 +16,6 @@ struct ContentView: View {
                     }.scrollIndicators(.hidden)
                 case .quality: QualityView()
                 case .profile: ProfileView()
-                case .authorization: AuthorizationView()
                 case .activity: ActivityView()
                 }
             }.padding(.horizontal, 32).padding(.top, 32).padding(.bottom, 22)
@@ -25,6 +24,10 @@ struct ContentView: View {
         .frame(minWidth: 990, minHeight: 720)
         .background(Palette.canvas).foregroundStyle(Palette.ink)
         .preferredColorScheme(.light)
+        .task { await model.refreshPrivileges() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            Task { await model.refreshPrivileges() }
+        }
         .overlay(alignment: .bottom) {
             if let toast = model.toast {
                 Label(toast, systemImage: "checkmark.circle.fill").font(.system(size: 12, weight: .medium))
@@ -83,7 +86,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 7) {
-                SmallLabel(text: model.page == .connection ? "A LITTLE CLOSER TO WORK" : model.page == .quality ? "CONNECTION QUALITY" : model.page == .profile ? "MAKE IT YOURS" : model.page == .authorization ? "SYSTEM HELPER" : "CONNECTION JOURNAL")
+                SmallLabel(text: model.page == .connection ? "A LITTLE CLOSER TO WORK" : model.page == .quality ? "CONNECTION QUALITY" : model.page == .profile ? "MAKE IT YOURS" : "CONNECTION JOURNAL")
                 Text(model.page == .connection ? "工作网络，一键就绪。" : model.page.rawValue).font(.system(size: 27, weight: .semibold)).tracking(-0.8)
             }
             Spacer()
@@ -101,7 +104,8 @@ struct DashboardView: View {
     private var isConnected: Bool { model.state == .connected }
     var body: some View {
         VStack(spacing: 18) {
-            if let issue = model.issue {
+            if model.needsServiceAttention { ServiceSetupView() }
+            if let issue = model.issue, !model.needsServiceAttention {
                 HStack(alignment: .top, spacing: 9) {
                     Image(systemName: "exclamationmark.circle.fill")
                     Text(issue).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
@@ -139,13 +143,11 @@ struct DashboardView: View {
                     .foregroundStyle(model.state.statusColor)
                 Text(subtitle).font(.system(size: 11)).foregroundStyle(Palette.muted).lineLimit(2).multilineTextAlignment(.center).frame(height: 32).padding(.top, 5)
                 Button {
-                    if model.state.isActive { model.disconnect() }
-                    else if model.readyToConnect { model.connect() }
-                    else { model.page = .profile }
+                    Task { await model.performConnectionAction() }
                 } label: {
-                    Label(buttonTitle, systemImage: model.state.isActive ? (isConnected ? "power" : "xmark") : model.readyToConnect ? "power" : "plus")
+                    Label(model.connectionButtonTitle, systemImage: model.state.isActive ? (isConnected ? "power" : "xmark") : !model.readyToConnect ? "plus" : model.privilegeStatus == .ready ? "power" : "lock.open")
                 }.buttonStyle(PrimaryButtonStyle(secondary: model.state.isActive))
-                    .frame(maxWidth: 216).padding(.top, 18).disabled(model.state == .disconnecting)
+                    .frame(maxWidth: 216).padding(.top, 18).disabled(!model.connectionButtonEnabled)
                     .keyboardShortcut("k", modifiers: .command)
                 Rectangle().fill(Palette.line).frame(height: 1).padding(.top, 24).padding(.bottom, 17)
                 HStack {
@@ -163,17 +165,12 @@ struct DashboardView: View {
         }.frame(maxWidth: .infinity)
     }
 
-    private var buttonTitle: String {
-        if model.state == .disconnecting { return "正在断开…" }
-        if model.state == .connected { return "断开连接" }
-        if model.state.isActive { return "取消连接" }
-        return model.readyToConnect ? "连接 VPN" : "配置我的 VPN"
-    }
     private var subtitle: String {
         if model.state == .authorizing { return "正在启动已授权的连接助手" }
         if model.state == .waiting { return model.networkAvailable ? "Auto Connect 将在稍后再次连接" : "网络不可用，恢复后自动连接" }
         if isConnected { return "VPN 通道已建立，可以访问工作网络" }
         if model.state == .disconnecting { return "正在结束 VPN 会话，请稍候" }
+        if !model.state.isActive, model.needsServiceAttention { return "请按上方提示完成连接准备" }
         if model.state == .failed { return "未能接入工作网络，请检查提示后重试" }
         if model.state.isBusy { return "正在与工作网络建立联系，请稍候" }
         return model.readyToConnect ? "尚未接入工作网络，点击下方按钮连接" : "尚未接入工作网络，请先添加 VPN 配置"

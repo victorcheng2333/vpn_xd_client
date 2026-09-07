@@ -19,12 +19,36 @@ enum PrivilegeStatus: Equatable {
     }
     var actionTitle: String {
         switch self {
+        case .checking: "正在检测…"
+        case .invalidSignature, .moveToApplications: "重新检测"
         case .requiresApproval: "打开系统设置"
         case .needsMigration: "迁移旧版授权"
         case .notInstalled: "启用系统服务"
         default: "重新注册服务"
         }
     }
+    var canRequestService: Bool { [.notInstalled, .requiresApproval, .needsMigration, .needsUpdate, .needsRepair].contains(self) }
+    var canRemoveService: Bool { [.ready, .needsUpdate, .needsMigration, .requiresApproval, .needsRepair].contains(self) }
+    var instructions: String {
+        switch self {
+        case .requiresApproval: "请在系统设置的「登录项与扩展」中允许 XD VPN 后台服务。返回应用后会自动检测。"
+        case .needsMigration: "新服务已就绪。请先断开并退出旧版 XD VPN，再点击「迁移旧版授权」。原有 VPN 配置和密码会保留。"
+        case .needsUpdate: "请先断开 VPN，再重新注册系统服务，使其与当前应用版本一致。"
+        case .needsRepair: "系统服务暂未响应。请先断开 VPN，再重新注册；若仍失败，请检查系统设置中的后台服务是否允许运行。"
+        case .invalidSignature: "请重新下载公司签名并完成 Apple 公证的完整安装包。"
+        case .moveToApplications: "请将应用拖入 Applications 文件夹，从该位置重新打开。"
+        default: "首次连接前需要启用 VPN 系统服务，并在 macOS 系统设置中批准。日常连接无需重复授权。"
+        }
+    }
+}
+
+@MainActor struct PrivilegeAccess {
+    var status: () async -> PrivilegeStatus
+    var install: () async throws -> Void
+    var migrate: () async throws -> Void
+    var uninstall: () async throws -> Void
+    static let live = PrivilegeAccess(status: { await PrivilegeManager.status() }, install: { try await PrivilegeManager.install() },
+                                      migrate: { try await PrivilegeManager.migrate() }, uninstall: { try await PrivilegeManager.uninstall() })
 }
 
 @MainActor enum PrivilegeManager {

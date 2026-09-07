@@ -49,7 +49,7 @@ public final class HelperSessionController {
                 guard owner > 0, identity == self.identity else { throw VPNError.unavailable("助手与 App 构建不匹配，请重新注册系统助手。") }
                 guard !self.shuttingDown, self.session == nil else { throw VPNError.unavailable("已有 VPN 会话或清理正在进行，请稍后重试。") }
                 try self.validate()
-                guard !self.legacyPresent() else { throw VPNError.unavailable("请先在系统授权中迁移旧版授权，再使用新服务连接。") }
+                guard !self.legacyPresent() else { throw VPNError.unavailable("请先在连接页迁移旧版授权，再使用新服务连接。") }
                 let resources = try self.acquire(owner)
                 let engine = try self.makeEngine(owner, event)
                 self.session = Session(id: id, engine: engine, resources: resources)

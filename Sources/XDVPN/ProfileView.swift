@@ -68,7 +68,7 @@ struct ProfileView: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "info.circle").font(.system(size: 13)).padding(.top, 1)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("在「系统授权」中安装一次授权，之后连接无需再次输入 Mac 密码。")
+                        Text("保存后返回连接页，按提示启用系统服务；日常连接无需重复授权。")
                         Text("VPN 密码与 Mac 登录密码不同。公司 VPN 可能仅允许从办公网以外连接。")
                     }.font(.system(size: 10)).lineSpacing(3)
                 }.foregroundStyle(Palette.muted).padding(.horizontal, 2)
@@ -85,6 +85,7 @@ struct ProfileView: View {
                         }
                     }
                 }
+                ServiceAdvancedView()
             }.padding(.bottom, 2)
         }.scrollIndicators(.hidden)
             .onAppear { draft = model.profile ?? VPNProfile(); model.refreshEngine() }

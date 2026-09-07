@@ -26,13 +26,14 @@ struct MenuPanelView: View {
             }.frame(maxWidth: .infinity).padding(.top, 2).padding(.bottom, 18)
                 .background(model.state.statusSurface, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(model.state.statusColor.opacity(0.12)))
-            if let issue = model.issue {
+            if let issue = model.issue, !model.needsServiceAttention {
                 Text(issue).font(.system(size: 11)).foregroundStyle(Color(hex: 0x946B37)).lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             Button(action: primaryAction) {
-                Label(primaryTitle, systemImage: model.state.isActive ? (model.state == .connected ? "power" : "xmark") : model.privilegeStatus == .ready ? "power" : "lock.open")
-            }.buttonStyle(PrimaryButtonStyle(secondary: model.state.isActive)).disabled(model.state == .disconnecting)
+                Label(model.needsServiceAttention && !model.state.isActive && model.readyToConnect ? "完成连接准备" : model.connectionButtonTitle,
+                      systemImage: model.state.isActive ? (model.state == .connected ? "power" : "xmark") : model.privilegeStatus == .ready ? "power" : "lock.open")
+            }.buttonStyle(PrimaryButtonStyle(secondary: model.state.isActive)).disabled(!model.connectionButtonEnabled)
 
             if let profile = model.profile {
                 VStack(spacing: 10) {
@@ -59,12 +60,14 @@ struct MenuPanelView: View {
                     .help("仅修改自动连接配置。手动断开后，需再次点击连接或重启应用才会连接。")
             }.padding(15).background(Palette.mint.opacity(0.35), in: RoundedRectangle(cornerRadius: 13))
             HStack {
-                Button { show(.authorization) } label: {
-                    HStack(spacing: 5) {
-                        Circle().fill(model.privilegeStatus == .ready ? Palette.green : .orange).frame(width: 5, height: 5)
-                        Text(model.privilegeStatus.title).font(.system(size: 10))
-                    }
-                }.buttonStyle(.plain).foregroundStyle(Palette.muted)
+                if model.needsServiceAttention {
+                    Button { show(.connection) } label: {
+                        HStack(spacing: 5) {
+                            Circle().fill(model.privilegeStatus == .ready ? Palette.green : .orange).frame(width: 5, height: 5)
+                            Text(model.privilegeStatus.title).font(.system(size: 10))
+                        }
+                    }.buttonStyle(.plain).foregroundStyle(Palette.muted)
+                }
                 Spacer()
                 Button("日志") { show(.activity) }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(Palette.muted)
                 Button("退出并断开") { NSApp.terminate(nil) }.buttonStyle(.plain).font(.system(size: 10)).foregroundStyle(Palette.ink)
@@ -85,18 +88,10 @@ struct MenuPanelView: View {
         }
     }
 
-    private var primaryTitle: String {
-        if model.state == .disconnecting { return "正在断开…" }
-        if model.state == .connected { return "断开连接" }
-        if model.state.isActive { return "取消连接" }
-        if !model.readyToConnect { return "配置 VPN" }
-        return model.privilegeStatus == .ready ? "连接 VPN" : "安装系统授权"
-    }
     private func primaryAction() {
-        if model.state.isActive { model.disconnect() }
-        else if !model.readyToConnect { show(.profile) }
-        else if model.privilegeStatus != .ready { show(.authorization) }
-        else { model.connect() }
+        if !model.state.isActive, !model.readyToConnect { show(.profile) }
+        else if !model.state.isActive, model.needsServiceAttention { show(.connection) }
+        else { Task { await model.performConnectionAction() } }
     }
     private func show(_ page: Page) {
         model.page = page; openWindow(id: "main"); NSApp.activate(ignoringOtherApps: true)

@@ -20,7 +20,7 @@ import VPNCore
     func prepare() async throws {
         if isReady { return }
         guard await PrivilegeManager.status() == .ready else {
-            throw VPNError.unavailable("请先在「系统授权」中完成系统服务注册与批准。")
+            throw VPNError.unavailable("请在连接页按提示启用并批准系统服务。")
         }
         try Task.checkCancellation()
         let identity = try HelperIdentity.read(bundle: Bundle.main.bundleURL)

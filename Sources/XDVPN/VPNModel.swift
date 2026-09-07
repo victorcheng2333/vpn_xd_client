@@ -2,8 +2,8 @@ import SwiftUI
 import Network
 import VPNCore
 
-enum Page: String, CaseIterable { case connection = "连接", quality = "连接质量", profile = "VPN 配置", authorization = "系统授权", activity = "连接日志"
-    var icon: String { switch self { case .connection: "square.grid.2x2"; case .quality: "chart.xyaxis.line"; case .profile: "slider.horizontal.3"; case .authorization: "checkmark.shield"; case .activity: "text.alignleft" } }
+enum Page: String, CaseIterable { case connection = "连接", quality = "连接质量", profile = "VPN 配置", activity = "连接日志"
+    var icon: String { switch self { case .connection: "square.grid.2x2"; case .quality: "chart.xyaxis.line"; case .profile: "slider.horizontal.3"; case .activity: "text.alignleft" } }
 }
 enum ConnectionState: Equatable {
     case idle, authorizing, connecting, connected, reconnecting, waiting, disconnecting, failed
@@ -55,6 +55,9 @@ struct ActivityEntry: Identifiable {
     private let bridge: any HelperControlling
     private let credentials: CredentialAccess
     private let engineLocator: () -> String?
+    private let privileges: PrivilegeAccess
+    private var privilegeRefresh = UUID()
+    private var servicePreparationFailed = false
     // Fallback only. The regular monitor below uses physical link/IP state,
     // independent of the default route and resolver installed by the VPN.
     private let monitor = NWPathMonitor(prohibitedInterfaceTypes: [.other])
@@ -82,12 +85,36 @@ struct ActivityEntry: Identifiable {
 
     var readyToConnect: Bool { profile != nil && hasPassword }
     var canEdit: Bool { !state.isActive }
+    var needsServiceAttention: Bool { ![.ready, .checking].contains(privilegeStatus) }
+    var connectionButtonTitle: String {
+        if state == .disconnecting { return "正在断开…" }
+        if state == .connected { return "断开连接" }
+        if state.isActive { return "取消连接" }
+        if !readyToConnect { return "配置我的 VPN" }
+        if privilegeBusy { return "正在处理…" }
+        return privilegeStatus == .ready ? "连接 VPN" : privilegeStatus.actionTitle
+    }
+    var connectionButtonEnabled: Bool {
+        !isQuitting && state != .disconnecting && (state.isActive || (!privilegeBusy && (!readyToConnect || privilegeStatus != .checking)))
+    }
+
+    func performConnectionAction() async {
+        guard connectionButtonEnabled else { return }
+        if state.isActive { disconnect() }
+        else if !readyToConnect { page = .profile }
+        else if privilegeStatus == .ready { connect() }
+        else {
+            page = .connection
+            if privilegeStatus.canRequestService { await installPrivileges() }
+            else { await refreshPrivileges() }
+        }
+    }
 
     init(defaults: UserDefaults = .standard, bridge: (any HelperControlling)? = nil,
          credentials: CredentialAccess = .live, startMonitoring: Bool = true, resumeAutomatically: Bool = true,
          recoveryDelay: Duration = .seconds(1), recoveryTimeout: Duration = .seconds(3),
          recoveryCooldown: Duration = .seconds(3),
-         activityLog: RollingActivityLog? = nil,
+         activityLog: RollingActivityLog? = nil, privileges: PrivilegeAccess? = nil,
          engineLocator: @escaping () -> String? = { OpenConnect.executable }) {
         self.defaults = defaults
         self.activityLog = activityLog
@@ -96,6 +123,7 @@ struct ActivityEntry: Identifiable {
         self.bridge = bridge ?? HelperBridge()
         self.credentials = credentials
         self.engineLocator = engineLocator
+        self.privileges = privileges ?? .live
         engineAvailable = engineLocator() != nil
         profile = defaults.data(forKey: "profile").flatMap { try? JSONDecoder().decode(VPNProfile.self, from: $0) }
         autoConnect = defaults.bool(forKey: "autoConnect")
@@ -205,12 +233,13 @@ struct ActivityEntry: Identifiable {
     }
 
     func connect() {
-        guard !isQuitting else { return }
+        guard !isQuitting, !privilegeBusy else { return }
         guard ![.connected, .connecting, .authorizing, .reconnecting, .disconnecting].contains(state) else { return }
         guard readyToConnect, let profile else { page = .profile; return }
         refreshEngine()
         guard engineAvailable else { fail("应用中的内置连接引擎不完整，请重新下载完整的 XD VPN 应用。") ; return }
         desiredConnection = true
+        servicePreparationFailed = false
         issue = nil
         pendingRecovery = false; recoveryTask?.cancel()
         retryTask?.cancel(); retryAt = nil
@@ -237,7 +266,10 @@ struct ActivityEntry: Identifiable {
                 self.fail(error.localizedDescription)
                 await self.refreshPrivileges()
                 guard self.generation == attempt else { return }
-                if self.privilegeStatus != .ready { self.page = .authorization }
+                if self.privilegeStatus != .ready {
+                    self.servicePreparationFailed = true
+                    self.page = .connection
+                }
             }
         }
     }
@@ -539,7 +571,8 @@ struct ActivityEntry: Identifiable {
         guard !isQuitting else { return }
         if state.isActive {
             recordQuality(quality.end(reason: .helperUnavailable, cancelled: false))
-            fail("权限助手已退出。请重新连接；若持续失败，请在「系统授权」中重新检测。")
+            fail("系统服务连接已中断，请返回连接页检查服务状态后重试。")
+            Task { [weak self] in await self?.refreshPrivileges() }
         }
     }
     private func fail(_ message: String) {
@@ -626,16 +659,25 @@ struct ActivityEntry: Identifiable {
     }
 
     func refreshPrivileges() async {
-        privilegeStatus = await PrivilegeManager.status()
+        let request = UUID(); privilegeRefresh = request
+        let status = await privileges.status()
+        guard privilegeRefresh == request, !isQuitting else { return }
+        privilegeStatus = status
+        if status == .ready {
+            privilegeIssue = nil
+            if servicePreparationFailed, state == .failed {
+                issue = nil; state = .idle; servicePreparationFailed = false
+            }
+        }
     }
 
     func installPrivileges() async {
-        guard canEdit, !privilegeBusy, !isQuitting else { return }
+        guard canEdit, !privilegeBusy, !isQuitting, privilegeStatus.canRequestService else { return }
         privilegeBusy = true; privilegeIssue = nil
         defer { privilegeBusy = false }
         do {
-            if privilegeStatus == .needsMigration { try await PrivilegeManager.migrate() }
-            else { try await PrivilegeManager.install() }
+            if privilegeStatus == .needsMigration { try await privileges.migrate() }
+            else { try await privileges.install() }
             await refreshPrivileges()
             if privilegeStatus == .ready {
                 issue = nil; state = .idle
@@ -654,10 +696,10 @@ struct ActivityEntry: Identifiable {
         defer { privilegeBusy = false }
         do {
             bridge.shutdown()
-            try await PrivilegeManager.uninstall()
+            try await privileges.uninstall()
             await refreshPrivileges()
-            toast = "已移除系统授权"
-            log("已移除本客户端的系统授权。")
+            toast = "已移除系统服务"
+            log("已移除本客户端的系统服务。")
         } catch { privilegeIssue = error.localizedDescription }
     }
 }

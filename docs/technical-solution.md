@@ -608,7 +608,7 @@ VERIFICATION.md 记录：最终验证中 121 项在受限环境通过，另 3 �
 | 单实例 | [AppInstanceCoordinator.swift](../Sources/XDVPN/AppInstanceCoordinator.swift) | bundle ID 检查、instance.lock |
 | 主界面与主题 | [ContentView.swift](../Sources/XDVPN/ContentView.swift)、[Theme.swift](../Sources/XDVPN/Theme.swift) | DashboardView、OrbitView、Palette |
 | 菜单栏 | [MenuPanelView.swift](../Sources/XDVPN/MenuPanelView.swift)、[MenuBarStatusIcon.swift](../Sources/XDVPN/MenuBarStatusIcon.swift) | primaryAction、menuBarSymbol |
-| 配置/授权/日志 UI | [ProfileView.swift](../Sources/XDVPN/ProfileView.swift)、[AuthorizationView.swift](../Sources/XDVPN/AuthorizationView.swift)、[ActivityView.swift](../Sources/XDVPN/ActivityView.swift) | 保存、授权状态、日志列表 |
+| 配置/授权/日志 UI | [ProfileView.swift](../Sources/XDVPN/ProfileView.swift)、[ServiceSetupView.swift（现行入口）](../Sources/XDVPN/ServiceSetupView.swift)、[ActivityView.swift](../Sources/XDVPN/ActivityView.swift) | 保存、授权状态、日志列表 |
 | 状态机与恢复 | [VPNModel.swift](../Sources/XDVPN/VPNModel.swift) | receive、networkChanged、enterRecovering、quit |
 | 物理网络 | [PhysicalNetworkMonitor.swift](../Sources/XDVPN/PhysicalNetworkMonitor.swift) | observe、physicalSnapshot、hasUsablePhysicalNetwork |
 | 凭据 | [KeychainStore.swift](../Sources/XDVPN/KeychainStore.swift) | CredentialAccess、contains/read/save/delete |

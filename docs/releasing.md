@@ -131,6 +131,8 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.19 \
 
 ## SMAppService / XPC 包结构与验收
 
+应用不再提供独立的「系统授权」页。连接页根据服务状态显示启用、系统批准、旧授权迁移或修复提示；返回应用后自动检测，就绪后显示「连接 VPN」。批准本身不会自动发起新的 VPN 连接。菜单栏需要处理服务时打开连接页；移除入口在「VPN 配置 → 高级 · 系统服务」，连接活动期间不可移除。
+
 新助手位于 `Contents/Library/LaunchServices/com.xd.vpn.helper`，配置位于 `Contents/Library/LaunchDaemons/com.xd.vpn.helper.plist`。两个文件必须进入最终 App 签名；助手和引擎要求 Tools UG Developer ID 签名及 hardened runtime。macOS 要求包含 LaunchDaemon 的 App 完成公证。不要直接从 DMG 或 build 目录注册服务；先放入 `/Applications`。
 
 服务会在 root 私有目录中建立并再次验证运行副本，固定当前引擎和网络清理程序。替换 `/Applications` 中的 App 不会影响活动连接的清理；更新后的新连接仍需重新注册。`--service-command verify-bundle` 可在启用服务前验证公司签名、包完整性以及副本复制／权限收紧后签名仍有效。

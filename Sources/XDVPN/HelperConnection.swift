@@ -54,10 +54,10 @@ private final class XPCReply<Value: Sendable>: @unchecked Sendable {
         return try await withCheckedThrowingContinuation { continuation in
             let reply = XPCReply<T>(continuation)
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                reply.finish(.failure(VPNError.unavailable("系统助手响应超时，请检查系统授权。")))
+                reply.finish(.failure(VPNError.unavailable("系统服务响应超时，请在连接页检查服务状态。")))
             }
             guard let proxy = connection.remoteObjectProxyWithErrorHandler({ _ in
-                reply.finish(.failure(VPNError.unavailable("无法连接可信系统助手，请检查系统授权或重新注册。")))
+                reply.finish(.failure(VPNError.unavailable("无法连接可信系统服务，请在连接页检查或重新注册。")))
             }) as? HelperServiceProtocol else {
                 reply.finish(.failure(VPNError.unavailable("系统助手接口不可用。"))); return
             }
