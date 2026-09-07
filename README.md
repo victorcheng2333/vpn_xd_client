@@ -12,6 +12,10 @@
 
 根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已完成 iPhone 签名安装、真实内网访问、后台飞行模式恢复及连接质量统计验证；长时间锁屏、Wi-Fi/蜂窝切换等完整矩阵仍待验收。未来 Android 在 `Apps/Android` 独立实现 Kotlin/Compose + VpnService，两端均不依赖 macOS 的 `VPNCore`。
 
+## Windows 开发
+
+`Apps/Windows` 提供 WPF 原生预览版、Windows 后台服务和 OpenConnect/Wintun 引擎构建。界面参照 macOS，重点实现自动重连和会话网络清理。见 [Windows 安装与构建](Apps/Windows/README.md)、[技术方案](docs/design/2026-09-07-windows-support.md) 和 [验证边界](Apps/Windows/VERIFICATION.md)。
+
 ## 直接使用
 
 **当前源码的目标正式版本为 1.1.22（build 31）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。

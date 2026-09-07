@@ -7,3 +7,8 @@ dist/
 
 __pycache__/
 *.pyc
+
+# Windows / .NET
+Apps/Windows/**/bin/
+Apps/Windows/**/obj/
+Apps/Windows/.vs/

@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="XDVPN.App/XDVPN.App.csproj" />
+  <Project Path="XDVPN.Core/XDVPN.Core.csproj" />
+  <Project Path="XDVPN.Platform.Tests/XDVPN.Platform.Tests.csproj" />
+  <Project Path="XDVPN.Platform/XDVPN.Platform.csproj" />
+  <Project Path="XDVPN.Service/XDVPN.Service.csproj" />
+  <Project Path="XDVPN.Tests/XDVPN.Tests.csproj" />
+</Solution>
