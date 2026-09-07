@@ -62,7 +62,7 @@ struct ContentView: View {
                         TextField("用户名", text: $model.profile.username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                         SecureField("密码", text: $model.password,
                                     prompt: Text(model.hasPassword ? "****" : "密码")
-                                        .foregroundColor(model.hasPassword ? .primary : .secondary))
+                                        .foregroundColor(model.hasPassword ? .primary : Color(uiColor: .placeholderText)))
                             .textContentType(.password)
                             .accessibilityLabel("密码")
                             .accessibilityHint(model.hasPassword ? "已保存密码；输入新密码可替换，留空保持原密码。" : "")
