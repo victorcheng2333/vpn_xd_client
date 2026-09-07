@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-09-07：新版界面本地测试包 test.25 公证完成
+
+- 产物：`build/XD-VPN-1.1.19-test.25-macOS-arm64.dmg`，4,570,206 字节；源提交 `9df6d5f61e13415983f9664ed0967957bd2474f1`。包含 SMAppService／XPC 新架构及独立授权页移除后的界面。测试渠道，不发布 GitHub Release。
+- 本机 `xdvpn-notary` 公证 profile 已可用。App 提交 `30f781b4-c94c-4e57-b1bf-31da096e8c34`、DMG 提交 `6eb7c800-9835-43f4-ab3b-909d8eff77c6` 均返回 `Accepted`，两者已附加票据并验证成功。
+- 最终 DMG 只读挂载后，公司签名、App／DMG 公证票据、版本／渠道／源码提交、主程序／助手／引擎 ARM 架构和服务 plist 均通过检查。Gatekeeper 返回 `accepted`、`source=Notarized Developer ID`；实际执行 `verify-bundle` 验证权限收紧后的运行副本签名通过。内置引擎隔离验证通过。
+- SHA-256：`31dfb51ff6620f464a0e2e24e5165a1901f738985dfd0bfa8aa26755a598aafb`。日志 `.build/test25-build.log`、`.build/test25-package.log`、`.build/test25-engine-verification.log`，复核结果 `.build/test25-verification.json`。
+- 此轮仅生成本地测试包，未替换运行中的应用、注册系统服务、迁移旧授权或连接真实 VPN；这些实机项目仍待用户安装后验收。
+
 ## 2026-09-07：移除独立系统授权页
 
 - 删除独立页面和导航项。连接页按状态提供启用、系统批准、迁移及修复提示；服务就绪后隐藏提示，主按钮恢复「连接 VPN」。菜单栏需要处理服务时打开连接页；移除服务入口收进配置页的「高级 · 系统服务」。安装说明与运行时错误提示同步更新。
