@@ -60,7 +60,12 @@ struct ContentView: View {
                     Section("VPN 配置") {
                         TextField("HTTPS 服务器地址", text: $model.profile.server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                         TextField("用户名", text: $model.profile.username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        SecureField(model.hasPassword ? "已保存，留空保持原密码" : "密码", text: $model.password).textContentType(.password)
+                        SecureField("密码", text: $model.password,
+                                    prompt: Text(model.hasPassword ? "****" : "密码")
+                                        .foregroundColor(model.hasPassword ? .primary : .secondary))
+                            .textContentType(.password)
+                            .accessibilityLabel("密码")
+                            .accessibilityHint(model.hasPassword ? "已保存密码；输入新密码可替换，留空保持原密码。" : "")
                     }.disabled(model.active || model.onDemandActive || model.busy)
                     Section {
                         Toggle("优先使用 DTLS", isOn: $model.profile.useDTLS)
