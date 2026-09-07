@@ -291,7 +291,7 @@ import VPNCore
         try? await Task.sleep(for: .milliseconds(260))
         XCTAssertEqual(helper.commands.map(\.kind), [.connect])
         model.networkChanged(true); model.physicalNetworkChanged(); await letRecoveryRun()
-        try? await Task.sleep(for: .milliseconds(260))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         helper.onEvent?(.init(.stopped, "cleaned"))
         XCTAssertEqual(model.state, .idle)
@@ -672,7 +672,7 @@ import VPNCore
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer"))
-        try? await Task.sleep(for: .milliseconds(260))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(model.state, .disconnecting)
         helper.onEvent?(.init(.failure, EngineOutput.networkConfigurationFailureMessage))
         helper.onEvent?(.init(.stopped, "cleaned up", retryable: false))
@@ -797,7 +797,7 @@ import VPNCore
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         model.physicalNetworkChanged(); await letRecoveryRun()
-        try? await Task.sleep(for: .milliseconds(250))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(model.state, .disconnecting)
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
@@ -823,7 +823,7 @@ import VPNCore
         model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         model.physicalNetworkChanged(); await letRecoveryRun()
-        try? await Task.sleep(for: .milliseconds(250))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
         XCTAssertEqual(model.state, .idle)
@@ -907,7 +907,7 @@ import VPNCore
         XCTAssertEqual(helper.commands.last?.kind, .connect)
         model.networkChanged(true); await letRecoveryRun()
         XCTAssertEqual(helper.commands.last?.kind, .reconnect)
-        try? await Task.sleep(for: .milliseconds(240))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
         XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 2)
@@ -934,7 +934,7 @@ import VPNCore
         await letRecoveryRun()
         XCTAssertEqual(helper.commands.last?.kind, .connect)
         model.setAutoConnect(true)
-        try? await Task.sleep(for: .milliseconds(260))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
         XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 2)
@@ -945,7 +945,7 @@ import VPNCore
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer"))
         model.setAutoConnect(false)
-        try? await Task.sleep(for: .milliseconds(260))
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         helper.onEvent?(.init(.stopped, "cleaned")); await letRecoveryRun()
         XCTAssertEqual(model.state, .idle)
