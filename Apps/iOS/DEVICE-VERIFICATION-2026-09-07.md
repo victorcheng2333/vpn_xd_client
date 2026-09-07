@@ -115,4 +115,7 @@ iPhone 17（iOS 26.5）模拟器补验：默认未连接画面、蓝色连接中
 - 用户重新填写凭据并保存系统 VPN 配置。第一次认证成功，但保存的全隧道选项仍为关闭，网关下发默认路由后按策略拒绝。通过现有 Debug 启动参数保存全隧道选项后重试，没有修改二进制或重新安装。
 - 12:31:07 真实认证和 TLS 隧道建立成功；12:31:19 诊断为已连接，上行 100 包、下行 83 包。IPv4 全隧道下的 IPv6 阻断生效路径记录正常；该计数不代表额外完成流量泄漏测试。
 - 真机截图确认绿色盾牌、真实隧道地址和「按需恢复已暂停」，无模拟器预览参数。首次/已连接画面分别保存为 `ui-device-idle.png`、`ui-device-connected.png`。
-- 本轮证据另含 `ui-resumed-install.json`、`ui-resumed-launch.json`、`ui-resumed-state.json`、`ui-device-connect-launch.json`、`ui-device-connected.json`，均在本机忽略的验证目录。业务访问与手动断开后的联网结果待用户反馈。
+- 本轮证据另含 `ui-resumed-install.json`、`ui-resumed-launch.json`、`ui-resumed-state.json`、`ui-device-connect-launch.json`、`ui-device-connected.json`，均在本机忽略的验证目录。
+- 用户确认「内网访问 ok」，随后确认「断开后上网正常」。12:34:33 系统停止隧道，最终统计上行 2332 包、下行 2526 包。
+- 12:34:59 重新启动 App 仅导出诊断；12:35:09 读取结果为「尚未连接」，未自动重连。诊断保留的 TLS 和包计数属于刚结束的会话，不表示仍连接。
+- 手动连接、业务访问、正常断开和重新打开 App 保持断开这条验收链路通过。设备保留已断开状态，按需恢复未启用。新增证据 `ui-device-disconnected.json` 和 `ui-device-disconnected-launch.json`。换网、锁屏及长时间按需恢复不在本轮通过范围内。
