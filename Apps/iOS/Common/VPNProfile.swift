@@ -10,6 +10,8 @@ struct VPNProfile: Codable, Equatable {
     var username = ""
     var group = ""
     var useDTLS = true
+    // Optional for compatibility with profiles saved before this setting existed.
+    var fullTunnel: Bool? = nil
     var onDemand = false
     var domains = ""
     var probeURL = ""

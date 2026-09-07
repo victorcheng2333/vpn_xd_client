@@ -2,6 +2,9 @@ import Foundation
 import Darwin
 
 enum PacketCodec {
+    static func canForward(family: Int32, blocksIPv6: Bool) -> Bool {
+        family == AF_INET || (family == AF_INET6 && !blocksIPv6)
+    }
     static func valid(_ packet: Data, family: Int32, mtu: Int) -> Bool {
         guard packet.count <= mtu, let first = packet.first else { return false }
         let bytes = [UInt8](packet.prefix(6))

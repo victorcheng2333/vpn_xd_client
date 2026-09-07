@@ -16,7 +16,7 @@
     BOOL _authenticationFailed, _certificateFailed, _settingsFailed;
     NSUInteger _submissions, _formCallbacks;
     BOOL _groupSelected;
-    NSString *_server, *_username, *_password, *_group;
+    NSString *_server, *_username, *_password, *_group, *_certificateFailureDetail;
     BOOL (^_settings)(NSDictionary *, int);
     void (^_event)(NSString *);
 }
@@ -70,6 +70,7 @@ static NSArray *routes(struct oc_split_include *head) {
 + (NSString *)version { return text(openconnect_get_version()); }
 - (BOOL)authenticationFailed { return _authenticationFailed; }
 - (BOOL)certificateFailed { return _certificateFailed; }
+- (NSString *)certificateFailureDetail { return _certificateFailureDetail ?: @"服务器证书校验失败。"; }
 - (BOOL)settingsFailed { return _settingsFailed; }
 - (void)emit:(NSString *)event { if (_event) _event(event); }
 - (void)cancel {
@@ -100,16 +101,28 @@ static NSArray *routes(struct oc_split_include *head) {
         }
     }
     if (chain) openconnect_free_peer_cert_chain(_vpn, chain);
-    NSString *host = text(openconnect_get_hostname(_vpn));
+    // get_hostname may return the resolved IP. Certificate identity must use
+    // the DNS name from the current URL (including an authenticated redirect).
+    NSString *host = text(openconnect_get_dnsname(_vpn));
     BOOL valid = NO;
+    _certificateFailureDetail = [NSString stringWithFormat:@"证书链读取失败（返回 %d，解析 %lu 张）。", count, (unsigned long)certificates.count];
     if (certificates.count == (NSUInteger)count && count > 0 && host.length) {
         SecPolicyRef policy = SecPolicyCreateSSL(true, (__bridge CFStringRef)host);
         SecTrustRef trust = NULL;
-        if (SecTrustCreateWithCertificates((__bridge CFArrayRef)certificates, policy, &trust) == errSecSuccess) {
+        OSStatus status = SecTrustCreateWithCertificates((__bridge CFArrayRef)certificates, policy, &trust);
+        if (status == errSecSuccess) {
             // Avoid unbounded network fetches during the C TLS callback; the server must send its intermediates.
             SecTrustSetNetworkFetchAllowed(trust, false);
-            valid = SecTrustEvaluateWithError(trust, NULL);
+            CFErrorRef error = NULL;
+            valid = SecTrustEvaluateWithError(trust, &error);
+            if (error) {
+                _certificateFailureDetail = [NSString stringWithFormat:@"系统证书校验失败（%@/%ld，证书数 %d）。",
+                    (__bridge NSString *)CFErrorGetDomain(error), (long)CFErrorGetCode(error), count];
+                CFRelease(error);
+            }
             CFRelease(trust);
+        } else {
+            _certificateFailureDetail = [NSString stringWithFormat:@"无法创建证书校验（%d）。", (int)status];
         }
         CFRelease(policy);
     }

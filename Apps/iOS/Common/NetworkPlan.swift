@@ -47,6 +47,8 @@ struct NetworkPlan {
     let domains: [String]
     let searchDomains: [String]
     let mtu: Int
+    let requiresFullTunnel: Bool
+    let blocksIPv6: Bool
 
     init(_ input: [String: Any]) throws {
         func text(_ name: String) -> String { input[name] as? String ?? "" }
@@ -70,11 +72,20 @@ struct NetworkPlan {
                 throw ConfigurationError.invalid("网关路由与分配的地址族不匹配。")
             }
         }
-        // Never claim full traffic coverage when the server leaves IPv6 outside the tunnel.
         let full4 = routes.contains { $0.family == AF_INET && $0.prefix == 0 }
         let full6 = routes.contains { $0.family == AF_INET6 && $0.prefix == 0 }
-        if full4 != full6 {
-            throw ConfigurationError.invalid("验证版暂不接受单地址族全隧道；请使用网关分流策略或双栈全隧道。")
+        requiresFullTunnel = full4 || full6
+        blocksIPv6 = full4 && ipv6 == nil
+        if full4 != full6 && !blocksIPv6 {
+            throw ConfigurationError.invalid("暂不支持 IPv6 单栈全隧道或混合全隧道/分流策略。")
+        }
+        // includeAllNetworks cannot honor explicit route exclusions. Never
+        // silently replace a server exclusion policy with a different one.
+        if requiresFullTunnel && !excludes.isEmpty {
+            throw ConfigurationError.invalid("全隧道包含排除路由，当前版本无法完整应用该策略。")
+        }
+        if blocksIPv6 && (input["dns"] as? [String] ?? []).contains(where: { IPRoute.family(of: $0) == AF_INET6 }) {
+            throw ConfigurationError.invalid("IPv4 全隧道不能使用网关未支持的 IPv6 DNS。")
         }
         includes = routes
         dns = input["dns"] as? [String] ?? []

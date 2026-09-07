@@ -9,6 +9,7 @@ final class PacketPump {
     private let queue: DispatchQueue
     private var source: DispatchSourceRead?
     private var running = false
+    var blocksIPv6 = false
     var mtu: Int
     private(set) var sent: UInt64 = 0
     private(set) var received: UInt64 = 0
@@ -33,7 +34,8 @@ final class PacketPump {
             self.queue.async {
                 guard self.running else { return }
                 for (packet, proto) in zip(packets, protocols) {
-                    guard let frame = PacketCodec.encode(packet, family: proto.int32Value, mtu: self.mtu) else {
+                    guard PacketCodec.canForward(family: proto.int32Value, blocksIPv6: self.blocksIPv6),
+                          let frame = PacketCodec.encode(packet, family: proto.int32Value, mtu: self.mtu) else {
                         self.dropped += 1; continue
                     }
                     let count = frame.withUnsafeBytes { Darwin.send(self.fd, $0.baseAddress, $0.count, 0) }
@@ -52,7 +54,8 @@ final class PacketPump {
             let length = recv(fd, &buffer, buffer.count, 0)
             if length < 0 { if errno != EAGAIN && errno != EWOULDBLOCK { dropped += 1 }; break }
             if length == 0 { break }
-            guard let (packet, family) = PacketCodec.decode(Data(buffer.prefix(length)), mtu: mtu) else { dropped += 1; continue }
+            guard let (packet, family) = PacketCodec.decode(Data(buffer.prefix(length)), mtu: mtu),
+                  PacketCodec.canForward(family: family, blocksIPv6: blocksIPv6) else { dropped += 1; continue }
             if flow.writePackets([packet], withProtocols: [NSNumber(value: family)]) { received += 1 }
             else { dropped += 1 }
         }

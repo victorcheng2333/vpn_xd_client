@@ -50,6 +50,11 @@ struct ContentView: View {
                     }.disabled(model.active || model.onDemandActive || model.busy)
                     Section {
                         Toggle("优先使用 DTLS", isOn: $model.profile.useDTLS)
+                        Toggle("全隧道模式", isOn: Binding(get: { model.profile.fullTunnel == true }, set: { model.profile.fullTunnel = $0 }))
+                        if model.profile.fullTunnel == true {
+                            Text("用于网关下发默认路由的配置。网关仅支持 IPv4 时，IPv6 将被阻断；系统蜂窝服务、推送与设备通信按系统规则处理。")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         Toggle("连接后启用按需恢复", isOn: $model.profile.onDemand)
                         if model.profile.onDemand {
                             TextField("内网域名，以逗号分隔", text: $model.profile.domains, axis: .vertical).textInputAutocapitalization(.never).autocorrectionDisabled()

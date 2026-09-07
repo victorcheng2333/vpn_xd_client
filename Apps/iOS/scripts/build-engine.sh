@@ -38,8 +38,11 @@ if [ ! -x "$TOOLS/bin/pkgconf" ]; then
   tar -xf "$DOWNLOADS/pkgconf-3.0.6.tar.xz" -C "$TOOLS/sources"
   (
     cd "$TOOLS/sources/pkgconf-3.0.6"
+    # Xcode exports the iOS deployment target into build phases. Clear it
+    # for this Mac executable; otherwise clang produces an unrunnable iOS tool.
+    unset IPHONEOS_DEPLOYMENT_TARGET TVOS_DEPLOYMENT_TARGET WATCHOS_DEPLOYMENT_TARGET XROS_DEPLOYMENT_TARGET
     export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
-    CC="$(xcrun -f clang)" ./configure --prefix="$TOOLS" --disable-shared --enable-static
+    CC="$(xcrun --sdk macosx -f clang)" ./configure --prefix="$TOOLS" --disable-shared --enable-static
     make -j "$JOBS"
     make install
   )

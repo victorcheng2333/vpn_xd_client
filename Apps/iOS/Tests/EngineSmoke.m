@@ -5,6 +5,22 @@
 #include "openconnect.h"
 @interface OCEngine (FormTest)
 - (int)processForm:(struct oc_auth_form *)form;
+- (int)validateCertificate;
+@end
+
+// End every probe in the certificate callback, including on success, so
+// tests never send HTTP requests or credentials to the target gateway.
+@interface CertificateProbe : OCEngine
+@property(nonatomic) BOOL checked;
+@property(nonatomic) BOOL trusted;
+@end
+@implementation CertificateProbe
+- (int)validateCertificate {
+    self.checked = YES;
+    self.trusted = [super validateCertificate] == 0;
+    [self cancel];
+    return -EINVAL;
+}
 @end
 
 static void check(BOOL value, const char *name) {
@@ -12,7 +28,7 @@ static void check(BOOL value, const char *name) {
 }
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        printf("Loaded OpenConnect %s in iOS Simulator\n", OCEngine.version.UTF8String);
+        printf("Loaded OpenConnect %s in native engine test\n", OCEngine.version.UTF8String);
         OCEngine *cancelled = [[OCEngine alloc] initWithServer:@"https://127.0.0.1:1" username:@"test-only" password:@"not-a-real-password" group:@"" useDTLS:NO];
         [cancelled cancel];
         NSInteger result = [cancelled runWithSettingsHandler:^BOOL(NSDictionary *settings, int fd) {
@@ -44,13 +60,16 @@ int main(int argc, const char *argv[]) {
         check(username._value && !strcmp(username._value, "test-only") && password._value != NULL, "populate known credential fields");
         check([formEngine processForm:&form] == OC_FORM_RESULT_CANCELLED && formEngine.authenticationFailed, "never resubmit password after challenge/rejection");
         free(username._value); free(password._value);
-        if (argc > 1 && argv[1][0]) {
-            OCEngine *untrusted = [[OCEngine alloc] initWithServer:[NSString stringWithUTF8String:argv[1]] username:@"test-only" password:@"not-a-real-password" group:@"" useDTLS:NO];
-            NSInteger rejected = [untrusted runWithSettingsHandler:^BOOL(NSDictionary *settings, int fd) {
-                check(NO, "untrusted certificate must not create tunnel"); return NO;
+        for (int index = 1; index <= 2 && index < argc; index++) {
+            if (!argv[index][0]) continue;
+            BOOL expectTrusted = index == 2;
+            CertificateProbe *probe = [[CertificateProbe alloc] initWithServer:[NSString stringWithUTF8String:argv[index]] username:@"" password:@"" group:@"" useDTLS:NO];
+            NSInteger result = [probe runWithSettingsHandler:^BOOL(NSDictionary *settings, int fd) {
+                check(NO, "certificate probe must never create tunnel"); return NO;
             } eventHandler:^(NSString *event) {}];
-            check(rejected != 0 && untrusted.certificateFailed, "system trust rejects local self-signed server");
-            printf("System trust rejection check passed.\n");
+            check(result != 0 && probe.checked, "probe must reach certificate callback and abort before HTTP");
+            check(probe.trusted == expectTrusted, expectTrusted ? "system trust accepts valid DNS certificate after IP resolution" : "system trust rejects invalid certificate");
+            printf("Certificate probe passed: expected %s.\n", expectTrusted ? "trusted" : "rejected");
         }
         printf("Native engine cancellation and authentication-form checks passed.\n");
     }

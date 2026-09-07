@@ -15,6 +15,7 @@ final class VPNModel: ObservableObject {
     @Published private(set) var probeResult = "尚未验证"
     @Published private(set) var probing = false
     private var didLoadProfile = false
+    private var loading = false
     private var manager: NETunnelProviderManager?
     private var observer: AnyCancellable?
     private let store = SharedStore()
@@ -30,8 +31,15 @@ final class VPNModel: ObservableObject {
         }
     }
     init() {
-        observer = NotificationCenter.default.publisher(for: .NEVPNStatusDidChange).receive(on: DispatchQueue.main).sink { [weak self] _ in
-            Task { @MainActor in await self?.load() }
+        observer = NotificationCenter.default.publisher(for: .NEVPNStatusDidChange).receive(on: DispatchQueue.main).sink { [weak self] notification in
+            Task { @MainActor in
+                guard let self, let connection = notification.object as? NEVPNConnection,
+                      connection === self.manager?.connection else { return }
+                // Loading preferences creates connection objects that can themselves post
+                // status notifications. Refresh the existing connection, never reload here.
+                self.refreshStatus()
+                await self.refreshDiagnostics()
+            }
         }
     }
     func load() async {
@@ -39,7 +47,9 @@ final class VPNModel: ObservableObject {
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
         return
         #else
-        guard !busy else { return }
+        guard !busy, !loading else { return }
+        loading = true
+        defer { loading = false }
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == RuntimeConfiguration.providerID }
@@ -114,6 +124,9 @@ final class VPNModel: ObservableObject {
         proto.passwordReference = newReference ?? oldReference
         proto.providerConfiguration = try validated.configuration
         proto.disconnectOnSleep = false
+        proto.includeAllNetworks = validated.fullTunnel == true
+        proto.excludeLocalNetworks = false
+        // Preserve OS cellular services, APNs and USB device communication exceptions.
         let evaluate = NEOnDemandRuleEvaluateConnection()
         let rule = NEEvaluateConnectionRule(matchDomains: validated.domainList, andAction: .connectIfNeeded)
         if !validated.probeURL.isEmpty { rule.probeURL = URL(string: validated.probeURL) }
@@ -171,6 +184,30 @@ final class VPNModel: ObservableObject {
             probeResult = "HTTP \(response.statusCode) · \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(Date().formatted(date: .omitted, time: .standard))"
         } catch { probeResult = "验证失败：" + error.localizedDescription }
     }
+    #if DEBUG
+    private var debugValidationStarted = false
+    func runDebugValidationIfRequested() async {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard !debugValidationStarted,
+              arguments.contains("--debug-connect-saved-vpn") || arguments.contains("--debug-export-vpn") else { return }
+        debugValidationStarted = true
+        if arguments.contains("--debug-enable-full-tunnel") { profile.fullTunnel = true }
+        if arguments.contains("--debug-connect-saved-vpn") { await connect() }
+        for _ in 0..<30 {
+            await refreshDiagnostics()
+            let result: [String: Any] = ["status": title, "message": message ?? "", "report": report,
+                                      "phase": snapshot.phase, "transport": snapshot.transport,
+                                      "packetsToTunnel": snapshot.packetsToTunnel,
+                                      "packetsFromTunnel": snapshot.packetsFromTunnel]
+            if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+               let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
+                try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try? data.write(to: directory.appendingPathComponent("debug-vpn-validation.json"), options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+            }
+            try? await Task.sleep(for: .seconds(1))
+        }
+    }
+    #endif
     var report: String {
         "XD VPN iOS 0.1 验证报告\n系统状态：\(title)\n事件时间：\(snapshot.updatedAt)\n传输：\(snapshot.transport)\n上行包：\(snapshot.packetsToTunnel) 下行包：\(snapshot.packetsFromTunnel) 丢弃包：\(snapshot.droppedPackets)\n" + snapshot.events.joined(separator: "\n")
     }

@@ -109,6 +109,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         guard token == generation, !stopping, reply.pending else { reply.finish(false); return }
         do {
             let plan = try NetworkPlan(dictionary)
+            guard plan.requiresFullTunnel == (profile?.fullTunnel == true) else {
+                throw ConfigurationError.invalid(plan.requiresFullTunnel
+                    ? "网关要求全隧道，请在设置中开启全隧道模式后重新连接。"
+                    : "网关下发分流策略，请关闭全隧道模式后重新连接。")
+            }
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: plan.gateway)
             if let address = plan.ipv4 {
                 let v4 = NEIPv4Settings(addresses: [address.address], subnetMasks: [address.ipv4Mask])
@@ -120,6 +125,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 let v6 = NEIPv6Settings(addresses: [address.address], networkPrefixLengths: [NSNumber(value: address.prefix)])
                 v6.includedRoutes = plan.includes.filter { $0.family == AF_INET6 }.map { NEIPv6Route(destinationAddress: $0.address, networkPrefixLength: NSNumber(value: $0.prefix)) }
                 v6.excludedRoutes = plan.excludes.filter { $0.family == AF_INET6 }.map { NEIPv6Route(destinationAddress: $0.address, networkPrefixLength: NSNumber(value: $0.prefix)) }
+                settings.ipv6Settings = v6
+            }
+            if plan.blocksIPv6 {
+                // includeAllNetworks enforces capture; a local-only IPv6 address
+                // lets the pump explicitly discard IPv6 instead of forwarding it
+                // to an IPv4-only gateway. This is not a server-assigned address.
+                let v6 = NEIPv6Settings(addresses: ["fd6d:7864:7670::1"], networkPrefixLengths: [128])
+                v6.includedRoutes = [NEIPv6Route.default()]
                 settings.ipv6Settings = v6
             }
             let dns = NEDNSSettings(servers: plan.dns)
@@ -136,11 +149,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     self.settingsReply = nil
                     if let error { self.lastSettingsError = error; reply.finish(false); return }
                     self.snapshot.address = [plan.ipv4?.address, plan.ipv6?.address].compactMap { $0 }.joined(separator: " / ")
-                    if let pump = self.pump { pump.mtu = plan.mtu }
+                    if let pump = self.pump { pump.mtu = plan.mtu; pump.blocksIPv6 = plan.blocksIPv6 }
                     else {
                         let pump = PacketPump(flow: self.packetFlow, fd: fd, mtu: plan.mtu, queue: self.queue)
+                        pump.blocksIPv6 = plan.blocksIPv6
                         self.pump = pump; pump.start()
                     }
+                    if plan.blocksIPv6 { self.record("IPv4 全隧道，IPv6 已阻断", updatePhase: false) }
                     reply.finish(true)
                 }
             }
@@ -169,7 +184,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         settingsReply?.finish(false); settingsReply = nil
         if stopping { completeStop(); return }
         let error: Error
-        if engine.certificateFailed { error = ConfigurationError.invalid("服务器证书不受信任、已过期或主机名不匹配。") }
+        if engine.certificateFailed { error = ConfigurationError.invalid(engine.certificateFailureDetail) }
         else if engine.authenticationFailed || result == -Int(EPERM) { error = ConfigurationError.invalid("认证被拒绝或会话已过期。请检查密码；验证版暂不支持 MFA/SSO。") }
         else if engine.settingsFailed { error = lastSettingsError ?? ConfigurationError.invalid("隧道网络配置失败或超时。") }
         else {

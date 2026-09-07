@@ -1,6 +1,6 @@
 # XD VPN iOS 验证版 0.1.0
 
-这是独立的 iOS/iPadOS 17+ 原生验证工程，包含 SwiftUI App 和 Packet Tunnel Extension。**已实现连接路径并完成构建；尚未在公司网关和实体 iPhone 上验证成功。** macOS 工程、助手和运行时代码未改，Android 尚未建立工程。
+这是独立的 iOS/iPadOS 17+ 原生验证工程，包含 SwiftUI App 和 Packet Tunnel Extension。**已完成实体 iPhone 签名安装和真实公司 VPN 连接，用户确认内网业务正常；切网、锁屏及长期恢复行为仍待验收。** macOS 工程、助手和运行时代码未改，Android 尚未建立工程。
 
 ## 已实现
 
@@ -14,7 +14,7 @@
 - 自动冷启动五分钟最多三次，认证/证书错误持久化暂停，防止 Extension 重启后继续提交密码。系统规则禁用失败时，持久化门禁仍会拒绝继续认证；是否存在系统重复拉起须真机验收。
 - 最近 64 条结构化事件、真实桥接包计数、手动 HTTPS HEAD 内网检查和系统分享。诊断不保留引擎原始日志、密码、Cookie 或 Token。
 
-首版没有 SSO/MFA、客户端证书、HostScan/CSD、PAC 代理支持。暂拒绝单地址族全隧道，避免将不完整策略当成全流量覆盖。需要这些功能的网关不属于当前验证范围。企业根证书须已被系统信任，服务器应发送完整中间证书链；SecTrust 网络获取在回调中关闭。
+首版没有 SSO/MFA、客户端证书、HostScan/CSD、PAC 代理支持。支持 IPv4 全隧道：设置中启用「全隧道模式」，系统约束全隧道路由并阻断网关未提供的 IPv6。IPv6 单栈全隧道、混合全/分流及全隧道显式排除路由仍拒绝。需要这些功能的网关不属于当前验证范围。企业根证书须已被系统信任，服务器应发送完整中间证书链；SecTrust 网络获取在回调中关闭。
 
 ## 本地构建
 
@@ -50,6 +50,12 @@ Apps/iOS/.build/xcode-iphoneos/Build/Products/Debug-iphoneos/XDVPN.app
 
 已按用户选择检查 Tools UG：Xcode 的 Apple Accounts 页面显示 Admin，但 `Certificates, Identifiers, & Profiles` 标红不可用；工程 Signing & Capabilities 的 Team 菜单只有 Personal Team，没有 Tools UG。因此目前无法为此团队生成匹配的开发签名。需由 Tools UG 的 Account Holder 检查会员/协议状态及当前账号的开发资源访问。Apple 说明个人会员邀请的 App Store Connect 用户不属于其开发者团队，不能据 Admin 身份推定具备签名权限；Tools UG 的具体后台原因尚未确认（[Apple 角色与访问说明](https://developer.apple.com/help/account/access/roles/)）。本机当前可用签名 identity 为 0。后续可恢复团队开发资源访问后使用自动签名，或由团队提供有效的开发证书及对应私钥、App 和 Extension 的开发描述文件（包含测试设备及所需权限）后使用手动签名；手动签名不要求操作者具有后台证书管理权限。签名就绪后继续安装、连接及换网/锁屏验收。不能将无签名构建视为真机验证通过。
 
+## 2026-09-07 真机验证进展
+
+Tools UG 开发签名现已可用。已在独立 `codex/ios-support` worktree 完成 App 与 PacketTunnel 自动签名、描述文件权限核验，并在 iPhone 17 Pro（iOS 26.6.1）成功安装、启动及检查真实首屏。修复了 Xcode 空缓存首次构建时 pkgconf 宿主工具误继承 iOS 部署目标的问题；修复后完整签名构建及 39 项本地逻辑检查通过。
+
+上文 2026-09-06 的签名阻塞为历史记录，当前已解除。后续调试已修复证书误用解析后 IP 校验及状态通知刷新循环，补齐 IPv4 全隧道支持；49 项本地逻辑检查通过。iPhone 已完成真实认证及 TLS 隧道连接，用户确认内网业务正常。切网/锁屏恢复仍待测试。详见 [本轮真机验证记录](DEVICE-VERIFICATION-2026-09-07.md)。
+
 ## 建议首次验收顺序
 
 | 次序 | 操作 | 验收观察 |
@@ -80,9 +86,11 @@ On Demand 不能保证每次解锁立即连接，网关要求 MFA、首次解锁
 Apps/iOS/scripts/test-native.sh SIMULATOR_UDID
 # 可选：第二个参数传入本机临时的不受信任 HTTPS 测试服务，检查证书拒绝。
 Apps/iOS/scripts/test-native.sh SIMULATOR_UDID https://127.0.0.1:TEST_PORT
+# 可选第三个参数验证受信任网关证书；探测在 TLS 回调结束，不发送 HTTP/凭据。
+Apps/iOS/scripts/test-native.sh SIMULATOR_UDID https://127.0.0.1:TEST_PORT https://vpn.example.com
 ```
 
-未完成：手机签名/安装、真实公司认证与业务连通、Wi-Fi/蜂窝切换、锁屏/隔夜、IPv6-only/NAT64、Extension 系统终止与按需冷启动、耗电。完整矩阵见 [可靠性调研](../../docs/design/2026-09-06-ios-vpn-reliability-research.md)。
+截至 2026-09-07 未完成：Wi-Fi/蜂窝切换、锁屏/隔夜、IPv6-only/NAT64、Extension 系统终止与按需冷启动、耗电。完整矩阵见 [可靠性调研](../../docs/design/2026-09-06-ios-vpn-reliability-research.md)。
 
 ## 依赖与后续发布
 

@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)updateNetworkAvailable:(BOOL)available reconnect:(BOOL)reconnect;
 @property(nonatomic, readonly) BOOL authenticationFailed;
 @property(nonatomic, readonly) BOOL certificateFailed;
+@property(nonatomic, readonly, copy) NSString *certificateFailureDetail;
 @property(nonatomic, readonly) BOOL settingsFailed;
 + (NSString *)version;
 @end

@@ -30,6 +30,12 @@ profile.domains = "10.0.0.1"
 rejects("IP is not demand domain") { _ = try profile.validated() }
 profile.onDemand = false; profile.domains = ""
 expect(try VPNProfile.decode(profile.configuration) == profile, "profile round trip")
+var oldProfile = try JSONSerialization.jsonObject(with: JSONEncoder().encode(profile)) as! [String: Any]
+oldProfile.removeValue(forKey: "fullTunnel")
+let legacyProfile = try JSONDecoder().decode(VPNProfile.self, from: JSONSerialization.data(withJSONObject: oldProfile))
+expect(legacyProfile.fullTunnel == nil, "legacy saved profile remains readable")
+profile.fullTunnel = true
+expect(try VPNProfile.decode(profile.configuration).fullTunnel == true, "full tunnel selection persists")
 rejects("unknown config version") { _ = try VPNProfile.decode(["version": 2, "profile": Data()]) }
 
 expect(try IPRoute("10.0.0.0/255.255.0.0").prefix == 16, "dotted mask")
@@ -41,9 +47,24 @@ for route in ["10.0.0.0/33", "10.0.0.0/255.0.255.0", "2001:db8::/129", "10.0.0.9
 var input: [String: Any] = ["gateway":"203.0.113.1", "address":"10.8.0.2", "netmask":"255.255.255.0", "dns":["10.8.0.1"], "mtu":1400, "includes":["10.0.0.0/8"], "excludes":[], "splitDNS":["example.internal"], "pac":""]
 expect(try NetworkPlan(input).domains == ["example.internal"], "split DNS")
 input["includes"] = []
-rejects("IPv4-only full tunnel rejected") { _ = try NetworkPlan(input) }
+let ipv4Full = try NetworkPlan(input)
+expect(ipv4Full.requiresFullTunnel && ipv4Full.blocksIPv6, "IPv4 full tunnel requires enforced routing and IPv6 blocking")
+expect(ipv4Full.ipv6 == nil, "never present blocking address as server-assigned IPv6")
+var excludedFull = input
+excludedFull["excludes"] = ["192.168.0.0/16"]
+rejects("full tunnel must not silently ignore excluded routes") { _ = try NetworkPlan(excludedFull) }
+var badDNS = input
+badDNS["dns"] = ["2001:db8::53"]
+rejects("IPv4-only tunnel cannot reach IPv6 DNS") { _ = try NetworkPlan(badDNS) }
 input["netmask6"] = "fd00::2/64"; input["dns"] = ["fd00::1"]
 expect(try NetworkPlan(input).includes.count == 2, "dual stack full tunnel")
+expect(try !NetworkPlan(input).blocksIPv6, "dual stack preserves IPv6 forwarding")
+var mixed = input
+mixed["includes"] = ["0.0.0.0/0", "fd00::/64"]
+rejects("mixed family full/split policy is not overridden") { _ = try NetworkPlan(mixed) }
+expect(PacketCodec.canForward(family: AF_INET, blocksIPv6: true), "IPv4 allowed with IPv6 blocked")
+expect(!PacketCodec.canForward(family: AF_INET6, blocksIPv6: true), "IPv6 is dropped with IPv4-only gateway")
+expect(PacketCodec.canForward(family: AF_INET6, blocksIPv6: false), "IPv6 preserved with dual stack gateway")
 var v6Only = input
 v6Only["address"] = ""; v6Only["netmask"] = ""
 rejects("IPv6-only full tunnel rejected") { _ = try NetworkPlan(v6Only) }
