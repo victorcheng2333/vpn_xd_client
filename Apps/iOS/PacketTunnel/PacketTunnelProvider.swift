@@ -111,8 +111,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let plan = try NetworkPlan(dictionary)
             guard plan.requiresFullTunnel == (profile?.fullTunnel == true) else {
                 throw ConfigurationError.invalid(plan.requiresFullTunnel
-                    ? "网关要求全隧道，请在设置中开启全隧道模式后重新连接。"
-                    : "网关下发分流策略，请关闭全隧道模式后重新连接。")
+                    ? "网关要求全隧道，当前保存的路由配置不兼容。"
+                    : "网关下发分流策略，当前保存的路由配置不兼容。")
             }
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: plan.gateway)
             if let address = plan.ipv4 {

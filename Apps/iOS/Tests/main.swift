@@ -35,6 +35,8 @@ var oldProfile = try JSONSerialization.jsonObject(with: JSONEncoder().encode(pro
 oldProfile.removeValue(forKey: "fullTunnel")
 let legacyProfile = try JSONDecoder().decode(VPNProfile.self, from: JSONSerialization.data(withJSONObject: oldProfile))
 expect(legacyProfile.fullTunnel == nil, "legacy saved profile remains readable")
+expect(try legacyProfile.validated().fullTunnel == true, "missing route policy uses company full-tunnel default")
+expect(VPNProfile().fullTunnel == true && VPNProfile().useDTLS, "new company profile defaults to full tunnel and DTLS preference")
 profile.fullTunnel = true
 expect(try VPNProfile.decode(profile.configuration).fullTunnel == true, "full tunnel selection persists")
 rejects("unknown config version") { _ = try VPNProfile.decode(["version": 2, "profile": Data()]) }

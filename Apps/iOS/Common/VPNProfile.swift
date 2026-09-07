@@ -11,7 +11,7 @@ struct VPNProfile: Codable, Equatable {
     var group = ""
     var useDTLS = true
     // Optional for compatibility with profiles saved before this setting existed.
-    var fullTunnel: Bool? = nil
+    var fullTunnel: Bool? = true
     // Nil preserves the narrower domain rules of configurations saved by the prototype.
     var autoConnect: Bool? = nil
     var onDemand = false
@@ -22,6 +22,7 @@ struct VPNProfile: Codable, Equatable {
 
     func validated() throws -> VPNProfile {
         var result = self
+        if result.fullTunnel == nil { result.fullTunnel = true }
         result.server = server.trimmingCharacters(in: .whitespacesAndNewlines)
         if !result.server.contains("://") { result.server = "https://" + result.server }
         guard let url = URLComponents(string: result.server), url.scheme == "https",

@@ -40,7 +40,7 @@ struct ContentView: View {
                             Toggle("自动连接", isOn: Binding(get: { model.profile.automaticConnectionEnabled }, set: { enabled in
                                 Task { await model.setAutoConnect(enabled) }
                             }))
-                            .disabled(model.busy || !model.hasPassword || model.status == .disconnecting)
+                            .disabled(model.busy || model.savingAutoConnect || !model.hasPassword || model.status == .disconnecting)
                             Text(model.autoConnectDescription).font(.footnote).foregroundStyle(.secondary)
                         }.padding(20).background(.background, in: RoundedRectangle(cornerRadius: 20))
                         VStack(spacing: 16) {
@@ -66,18 +66,9 @@ struct ContentView: View {
                             .textContentType(.password)
                             .accessibilityLabel("密码")
                             .accessibilityHint(model.hasPassword ? "已保存密码；输入新密码可替换，留空保持原密码。" : "")
-                    }.disabled(model.active || model.onDemandActive || model.busy)
+                    }.disabled(model.active || model.onDemandActive || model.busy || model.savingAutoConnect)
                     Section {
-                        Toggle("优先使用 DTLS", isOn: $model.profile.useDTLS)
-                        Toggle("全隧道模式", isOn: Binding(get: { model.profile.fullTunnel == true }, set: { model.profile.fullTunnel = $0 }))
-                        if model.profile.fullTunnel == true {
-                            Text("用于网关下发默认路由的配置。网关仅支持 IPv4 时，IPv6 将被阻断；系统蜂窝服务、推送与设备通信按系统规则处理。")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        TextField("HTTPS 内网验证地址（可选）", text: $model.profile.probeURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    } header: { Text("连接选项") }.disabled(model.active || model.onDemandActive || model.busy)
-                    Section {
-                        Button("保存配置") { Task { await model.save() } }.disabled(model.active || model.onDemandActive || model.busy)
+                        Button("保存配置") { Task { await model.save() } }.disabled(model.active || model.onDemandActive || model.busy || model.savingAutoConnect)
                     } footer: { Text("密码保存在本机钥匙串，首次解锁后可供隧道后台读取。首版支持 AnyConnect 用户名/密码认证，暂不支持 SSO、MFA、客户端证书及终端合规检查。") }
                     if let message = model.message { Section { Text(message).font(.footnote).foregroundStyle(.secondary) } }
                 }.navigationTitle("设置")
@@ -92,12 +83,6 @@ struct ContentView: View {
                         row("上行 / 下行包", "\(model.snapshot.packetsToTunnel) / \(model.snapshot.packetsFromTunnel)")
                         row("桥接丢弃包", "\(model.snapshot.droppedPackets)")
                         Button("刷新诊断") { Task { await model.refreshDiagnostics() } }
-                    }
-                    Section {
-                        Button(model.probing ? "正在验证…" : "验证内网地址") { Task { await model.probe() } }.disabled(model.probing)
-                        Text(model.probeResult).font(.footnote).textSelection(.enabled)
-                    } header: { Text("真实访问检查") } footer: {
-                        Text("向你填写的地址发送 HTTPS HEAD 请求。HTTP 响应代表地址可达，不能单独证明所有流量经过 VPN；请使用仅内网可访问的地址。")
                     }
                     Section("恢复事件") {
                         ForEach(Array(model.snapshot.events.enumerated().reversed()), id: \.offset) { _, event in

@@ -9,14 +9,14 @@ final class VPNModel: ObservableObject {
     @Published private(set) var hasPassword = false
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var busy = false
+    @Published private(set) var savingAutoConnect = false
     @Published private(set) var startingConnection = false
     @Published private(set) var onDemandActive = false
     @Published var message: String?
     @Published private(set) var snapshot = DiagnosticSnapshot()
-    @Published private(set) var probeResult = "尚未验证"
-    @Published private(set) var probing = false
     private var didLoadProfile = false
     private var loading = false
+    private var autoConnectUpdate: Task<Void, Never>?
     private var manager: NETunnelProviderManager?
     private var observer: AnyCancellable?
     private let store = SharedStore()
@@ -35,12 +35,12 @@ final class VPNModel: ObservableObject {
     var autoConnectDescription: String {
         if !hasPassword { return "先在设置中保存账号，即可开启自动连接。" }
         if profile.automaticConnectionEnabled && !onDemandActive {
-            return "自动连接已暂停，点「连接 VPN」恢复。"
+            return "下次连接后启用自动恢复；手动断开后保持断开。"
         }
         if profile.autoConnect == nil && profile.onDemand {
             return "访问已配置的内网时自动连接；手动断开后保持断开。"
         }
-        return "需要联网时自动连接，掉线后自动重试；手动断开后保持断开。"
+        return "连接后自动恢复；手动断开后保持断开。"
     }
     init() {
         observer = NotificationCenter.default.publisher(for: .NEVPNStatusDidChange).receive(on: DispatchQueue.main).sink { [weak self] notification in
@@ -61,7 +61,7 @@ final class VPNModel: ObservableObject {
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
         return
         #else
-        guard !busy, !loading else { return }
+        guard !busy, !savingAutoConnect, !loading else { return }
         loading = true
         defer { loading = false }
         do {
@@ -83,6 +83,7 @@ final class VPNModel: ObservableObject {
     }
     func save() async { await perform { try await self.saveConfiguration() } }
     func connect() async {
+        await autoConnectUpdate?.value
         guard !busy else { return }
         startingConnection = true
         defer { startingConnection = false }
@@ -105,7 +106,19 @@ final class VPNModel: ObservableObject {
         }
     }
     func setAutoConnect(_ enabled: Bool) async {
-        await perform {
+        guard !busy, !savingAutoConnect, !loading else { return }
+        savingAutoConnect = true
+        let update = Task { @MainActor in
+            await self.saveAutoConnectPreference(enabled)
+        }
+        autoConnectUpdate = update
+        await update.value
+        autoConnectUpdate = nil
+        savingAutoConnect = false
+        refreshStatus()
+    }
+    private func saveAutoConnectPreference(_ enabled: Bool) async {
+        do {
             guard let manager = self.manager,
                   let proto = manager.protocolConfiguration as? NETunnelProviderProtocol,
                   proto.passwordReference != nil else {
@@ -125,7 +138,9 @@ final class VPNModel: ObservableObject {
             let previouslyEnabled = manager.isOnDemandEnabled
             proto.providerConfiguration = try saved.configuration
             manager.onDemandRules = saved.makeOnDemandRules()
-            manager.isOnDemandEnabled = enabled
+            // A preference change must not start a disconnected VPN. Arm system
+            // recovery only for a connection the user has already started.
+            manager.isOnDemandEnabled = enabled && self.active && self.status != .disconnecting
             do { try await manager.saveToPreferences() }
             catch {
                 proto.providerConfiguration = previousConfiguration
@@ -137,7 +152,7 @@ final class VPNModel: ObservableObject {
             self.profile.autoConnect = enabled
             try await manager.loadFromPreferences()
             self.message = nil
-        }
+        } catch { message = error.localizedDescription }
     }
     func disconnect() async {
         await perform {
@@ -152,6 +167,7 @@ final class VPNModel: ObservableObject {
         }
     }
     private func perform(_ operation: () async throws -> Void) async {
+        await autoConnectUpdate?.value
         guard !busy else { return }
         busy = true
         defer { busy = false; refreshStatus() }
@@ -210,29 +226,6 @@ final class VPNModel: ObservableObject {
             }
         } catch { /* Persisted diagnostics remain available if IPC is interrupted. */ }
     }
-    func probe() async {
-        guard !probing else { return }
-        probing = true; defer { probing = false }
-        do {
-            let validated = try profile.validated()
-            guard let url = URL(string: validated.probeURL), !validated.probeURL.isEmpty else {
-                throw ConfigurationError.invalid("请先填写 HTTPS 内网验证地址。")
-            }
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.timeoutIntervalForRequest = 12
-            configuration.timeoutIntervalForResource = 15
-            configuration.urlCache = nil
-            let session = URLSession(configuration: configuration, delegate: ProbeRedirectPolicy(), delegateQueue: nil)
-            defer { session.invalidateAndCancel() }
-            var request = URLRequest(url: url)
-            request.httpMethod = "HEAD"
-            request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-            let started = Date()
-            let (_, response) = try await session.data(for: request)
-            guard let response = response as? HTTPURLResponse else { throw ConfigurationError.invalid("未收到 HTTP 响应。") }
-            probeResult = "HTTP \(response.statusCode) · \(Int(Date().timeIntervalSince(started) * 1000)) ms · \(Date().formatted(date: .omitted, time: .standard))"
-        } catch { probeResult = "验证失败：" + error.localizedDescription }
-    }
     #if DEBUG
     private var debugValidationStarted = false
     func runDebugValidationIfRequested() async {
@@ -260,13 +253,5 @@ final class VPNModel: ObservableObject {
     #endif
     var report: String {
         "XD VPN iOS 0.1 验证报告\n系统状态：\(title)\n事件时间：\(snapshot.updatedAt)\n传输：\(snapshot.transport)\n上行包：\(snapshot.packetsToTunnel) 下行包：\(snapshot.packetsFromTunnel) 丢弃包：\(snapshot.droppedPackets)\n" + snapshot.events.joined(separator: "\n")
-    }
-}
-
-/// A redirect still proves an HTTP response from the requested endpoint; do not follow it to a public login page.
-private final class ProbeRedirectPolicy: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
     }
 }
