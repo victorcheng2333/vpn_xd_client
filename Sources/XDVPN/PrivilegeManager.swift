@@ -34,7 +34,7 @@ enum PrivilegeStatus: Equatable {
         case .requiresApproval: "请在系统设置的「登录项与扩展」中允许 XD VPN 后台服务。返回应用后会自动检测。"
         case .needsMigration: "新服务已就绪。请先断开并退出旧版 XD VPN，再点击「迁移旧版授权」。原有 VPN 配置和密码会保留。"
         case .needsUpdate: "请先断开 VPN，再重新注册系统服务，使其与当前应用版本一致。"
-        case .needsRepair: "系统服务暂未响应。请先断开 VPN，再重新注册；若仍失败，请检查系统设置中的后台服务是否允许运行。"
+        case .needsRepair: "请先断开并退出其他版本的 XD VPN。重新注册会停止旧服务、等待清理完成，再启用当前版本；若仍失败，请检查系统设置中的后台服务。"
         case .invalidSignature: "请重新下载公司签名并完成 Apple 公证的完整安装包。"
         case .moveToApplications: "请将应用拖入 Applications 文件夹，从该位置重新打开。"
         default: "首次连接前需要启用 VPN 系统服务，并在 macOS 系统设置中批准。日常连接无需重复授权。"
@@ -91,9 +91,8 @@ enum PrivilegeStatus: Equatable {
         if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); return }
         if service.status == .enabled {
             let connection = HelperConnection(); defer { connection.close() }
-            let remote = try await connection.status()
-            guard !remote.busy else { throw VPNError.unavailable("请先断开所有 XD VPN 会话，等待网络清理结束。") }
-            try await service.unregister()
+            try await ServiceRegistration.unregisterForReplacement(checkBusy: { try await connection.status().busy },
+                                                                   unregister: { try await service.unregister() })
             try await ServiceRegistration.registerAfterUnregister(status: { service.status }, register: { try service.register() })
         } else {
             try service.register()
@@ -123,6 +122,24 @@ enum PrivilegeStatus: Equatable {
 }
 
 @MainActor enum ServiceRegistration {
+    /// Explicit user-requested replacement only; never used by status polling
+    /// or auto-connect. Replacing an App can invalidate a still-running old
+    /// helper's dynamic signature, so an authenticated status reply is not
+    /// always available. In that case, use SMAppService's managed termination
+    /// and await exit; do not relax XPC authentication or kill a PID directly.
+    /// The daemon handles SIGTERM by stopping its engine and cleanup children
+    /// before exit. A known active session continues to block replacement.
+    static func unregisterForReplacement(checkBusy: () async throws -> Bool,
+                                         unregister: () async throws -> Void) async throws {
+        let busy: Bool?
+        do { busy = try await checkBusy() }
+        catch is CancellationError { throw CancellationError() }
+        catch { busy = nil }
+        try Task.checkCancellation()
+        guard busy != true else { throw VPNError.unavailable("请先断开所有 XD VPN 会话，等待网络清理结束。") }
+        try await unregister()
+    }
+
     /// The async unregister callback waits for process exit, but macOS can
     /// briefly retain the disabled BTM disposition. Retry only that EPERM
     /// transition, after a successful unregister; never retry approval/signature

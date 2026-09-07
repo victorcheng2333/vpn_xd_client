@@ -3,6 +3,52 @@ import ServiceManagement
 @testable import XDVPN
 
 @MainActor final class ServiceRegistrationTests: XCTestCase {
+    func testUnavailableOldPeerUsesManagedTerminationAndWaitsForExit() async throws {
+        let stopped = expectation(description: "Managed stop requested")
+        var exit: CheckedContinuation<Void, Never>?
+        var finished = false
+        let operation = Task { @MainActor in
+            try await ServiceRegistration.unregisterForReplacement(checkBusy: {
+                throw NSError(domain: NSCocoaErrorDomain, code: NSXPCConnectionInvalid)
+            }, unregister: {
+                await withCheckedContinuation { exit = $0; stopped.fulfill() }
+            })
+            finished = true
+        }
+        await fulfillment(of: [stopped], timeout: 1)
+        XCTAssertFalse(finished, "Replacement cannot continue before old service exit")
+        exit?.resume()
+        try await operation.value
+        XCTAssertTrue(finished)
+    }
+
+    func testKnownActiveSessionBlocksReplacement() async {
+        do {
+            try await ServiceRegistration.unregisterForReplacement(checkBusy: { true }, unregister: {
+                XCTFail("Must leave a known active service running")
+            })
+            XCTFail("Expected busy rejection")
+        } catch {}
+    }
+
+    func testCancelledPeerQueryDoesNotStopService() async {
+        do {
+            try await ServiceRegistration.unregisterForReplacement(checkBusy: { throw CancellationError() }, unregister: {
+                XCTFail("Cancellation must not become permission to stop")
+            })
+            XCTFail("Expected cancellation")
+        } catch { XCTAssertTrue(error is CancellationError) }
+    }
+
+    func testManagedStopFailureReachesCaller() async {
+        do {
+            try await ServiceRegistration.unregisterForReplacement(checkBusy: { false }, unregister: {
+                throw NSError(domain: "ManagedStopFailure", code: 42)
+            })
+            XCTFail("Registration must not proceed after failed termination")
+        } catch { XCTAssertEqual((error as NSError).domain, "ManagedStopFailure") }
+    }
+
     func testRetriesTransientDisabledDispositionAfterUnregister() async throws {
         for domain in [NSPOSIXErrorDomain, "SMAppServiceErrorDomain"] {
             var attempts = 0, waits = 0

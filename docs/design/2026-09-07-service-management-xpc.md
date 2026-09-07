@@ -19,3 +19,5 @@
 参考：Apple SMAppService、NSXPCConnection.setCodeSigningRequirement 文档。
 
 重新注册使用异步 unregister，等待旧进程退出后再 register。本机验收发现，macOS 的后台项目状态可能在退出回调后短暂保持 disabled，使 register 返回 EPERM。仅对此操作中成功注销后的 notRegistered／EPERM 状态，间隔 750 ms 最多重试 3 次；签名无效、用户拒绝、其他错误及取消均不重试，requiresApproval 返回系统批准流程。首次注册不使用该重试。使用同一 SMAppService 实例完成注销与注册，不直接操作 launchd 或后台项目数据库。API 语义见 [Apple 异步注销文档](https://developer.apple.com/documentation/servicemanagement/smappservice/unregister(completionhandler:))；状态同步延迟是本机日志观察，不是 Apple 对所有系统版本的保证。
+
+手动覆盖 App 后，旧进程的动态签名检查可能因原文件已被替换而失败。显式「重新注册」不能以取得旧助手的可信回复为绝对前提：可信状态报告忙碌时阻止替换；无法取得可信状态时，改由 SMAppService 正常注销，并等待退出回调后注册新版。此路径不绕过 XPC 签名、不发送未经认证的控制命令，也不直接操作 PID。助手收到 SIGTERM 后使用受保护的旧运行副本清理引擎，再退出；页面明确提示先断开并退出其他版本，此恢复可能停止无法查询状态的旧会话。状态轮询和自动连接不触发该恢复，用户取消及注销失败均阻止继续注册。
