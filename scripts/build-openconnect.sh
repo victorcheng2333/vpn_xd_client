@@ -30,7 +30,9 @@ VPNC_SHA=f0c4d936a382f07711263242699b5e2d85d1ace37136bb78785d352997c17742
 download() {
     local url="$1" name="$2" expected="$3"
     if [ ! -f "$DOWNLOADS/$name" ]; then
-        curl --fail --location --connect-timeout 20 --max-time 300 "$url" -o "$DOWNLOADS/$name.part"
+        curl --fail --location --connect-timeout 20 --max-time 300 \
+            --retry 3 --retry-all-errors --retry-delay 2 --retry-max-time 600 \
+            "$url" -o "$DOWNLOADS/$name.part"
         mv "$DOWNLOADS/$name.part" "$DOWNLOADS/$name"
     fi
     [ "$(shasum -a 256 "$DOWNLOADS/$name" | awk '{print $1}')" = "$expected" ] || {
