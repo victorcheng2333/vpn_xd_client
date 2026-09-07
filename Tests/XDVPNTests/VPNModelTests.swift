@@ -868,10 +868,19 @@ import VPNCore
     }
 
     func testCooldownSurvivesQuickRecoveryAndRetainsLatestNetworkChange() async {
+        // This test checks cooldown/coalescing, not the recovery timeout. Keep
+        // that independent deadline outside the asynchronous wait budget so a
+        // loaded CI runner cannot time out the fake tunnel before its reply.
+        model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+                         recoveryDelay: .milliseconds(20), recoveryTimeout: .seconds(10),
+                         recoveryCooldown: .milliseconds(150), engineLocator: { "/fake/openconnect" })
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
-        model.physicalNetworkChanged(); await letRecoveryRun()
+        model.physicalNetworkChanged()
+        await waitUntil { helper.commandTimes.filter { $0.0 == .reconnect }.count == 1 }
+        XCTAssertEqual(model.state, .reconnecting)
         helper.onEvent?(.init(.connected, "quick recovery"))
+        XCTAssertEqual(model.state, .connected)
         // Queue both notifications before yielding, so scheduler load cannot
         // move the second notification outside the cooldown being tested.
         model.physicalNetworkChanged()

@@ -6,14 +6,14 @@
 
 ## 直接使用
 
-**当前源码的目标正式版本为 1.1.20（build 29）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
+**当前源码的目标正式版本为 1.1.21（build 30）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
 
 按 Mac 芯片选择对应产物；打开 DMG 后，将应用拖到旁边的「Applications」文件夹：
 
 | Mac 芯片 | 默认输出 |
 | --- | --- |
-| Intel | `build/XD-VPN-1.1.20-macOS-x86_64.dmg` |
-| Apple Silicon（M 系列） | `build/XD VPN 1.1.20-arm64.app`、`build/XD-VPN-1.1.20-macOS-arm64.dmg` |
+| Intel | `build/XD-VPN-1.1.21-macOS-x86_64.dmg` |
+| Apple Silicon（M 系列） | `build/XD VPN 1.1.21-arm64.app`、`build/XD-VPN-1.1.21-macOS-arm64.dmg` |
 
 1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`；已保存密码时输入框显示 `******`。
 2. 点击「保存配置」。密码存入 macOS 登录钥匙串，普通配置中不包含密码。
@@ -89,11 +89,11 @@ bash scripts/test.sh -c release
 python3 -m unittest discover -s Tests/ReleaseTests -v
 bash scripts/test-packaging.sh
 
-# 测试分发：默认 test 渠道，显式构建号；产物名带 -test.23
-BUILD_NUMBER=30 bash scripts/package.sh
+# 测试分发：默认 test 渠道，显式构建号；产物名带 -test.31
+BUILD_NUMBER=31 bash scripts/package.sh
 ```
 
-正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.20`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.20` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
+正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.21`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.21` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
 
 客户端菜单「检查更新…」及侧栏版本号可打开更新窗口，正式版启动时按 24 小时间隔检查 GitHub Latest。私有仓库使用只存本机钥匙串的只读 Token；下载包通过大小和 SHA-256 校验后才可用于安装。升级前断开并退出，拖入 Applications，按提示升级系统助手；不自动替换运行中的应用或助手。
 
@@ -120,7 +120,7 @@ App 与服务在激活 XPC 连接前双向约束公司 Developer ID、Team ID、
 
 服务一次仅允许一个控制连接拥有隧道，拒绝其他连接操作或在清理中抢占。通信失效或服务收到停止信号时，保留会话锁直到现有引擎停止及清理流程完成。日常移除服务先等待会话结束，再注销 SMAppService。
 
-OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 stdin 传递，不放入命令行、环境变量、日志或临时文件。root 会话锁避免上次退出清理与下次启动重叠。应用关闭通信或崩溃时，助手只向自己创建的 OpenConnect PID 发出 SIGINT；8 秒后仍未结束则向同一 PID 发 SIGTERM，40 秒后仍无响应才向同一 PID 发 SIGKILL，普通停止信号不发送到整个进程组。重连前的 attempt-reconnect 阶段只执行原生服务器路由更新和读回核验，不再启动仅重复路由工作的 vpnc-script；物理出口尚未就绪时暂缓，真实路由错误仍报告失败。其他阶段的网络脚本由固定助手入口启动，在执行任何脚本代码前以 posix_spawn 建立独立进程组；脚本超过 15 秒时结束该脚本组。reconnect 超时返回非致命结果，保留现有会话由 OpenConnect 继续恢复；connect 超时仍按配置失败清理。disconnect 在脚本前先删除本次 IPv4/DNS 状态、保留归属标记，脚本结束后再次删除并复核；即使脚本超时，只要原生复核通过就正常结束断开。这些时间是本客户端的停止预算。连接状态只由已知规则改变；其他引擎输出经脱敏后作为独立诊断写入助手与 App 的滚动日志，界面最多显示 300 条状态与错误。普通 stderr 错误不会直接触发 UI 拆隧道。
+OpenConnect 在助手中以前台子进程运行。密码经双向验证的 XPC 和引擎 stdin 传递，不放入命令行、环境变量、日志或临时文件。root 会话锁避免上次退出清理与下次启动重叠。应用关闭通信或崩溃时，助手只向自己创建的 OpenConnect PID 发出 SIGINT；8 秒后仍未结束则向同一 PID 发 SIGTERM，40 秒后仍无响应才向同一 PID 发 SIGKILL，普通停止信号不发送到整个进程组。重连前的 attempt-reconnect 阶段只执行原生服务器路由更新和读回核验，不再启动仅重复路由工作的 vpnc-script；物理出口尚未就绪时暂缓，真实路由错误仍报告失败。其他阶段的网络脚本由固定助手入口启动，在执行任何脚本代码前以 posix_spawn 建立独立进程组；脚本超过 15 秒时结束该脚本组。reconnect 超时返回非致命结果，保留现有会话由 OpenConnect 继续恢复；connect 超时仍按配置失败清理。disconnect 在脚本前先删除本次 IPv4/DNS 状态、保留归属标记，脚本结束后再次删除并复核；即使脚本超时，只要原生复核通过就正常结束断开。这些时间是本客户端的停止预算。连接状态只由已知规则改变；其他引擎输出经脱敏后作为独立诊断写入助手与 App 的滚动日志，界面最多显示 300 条状态与错误。普通 stderr 错误不会直接触发 UI 拆隧道。
 
 助手在脚本写入前，将本次 PID、utun、分配地址和 DNS 记录到 root 私有目录，并写入独立的会话归属标记。disconnect 钩子执行前后、以及 OpenConnect 退出后，均通过 SystemConfiguration API 核对并删除本次 `State:/Network/Service/utunN/{IPv4,DNS}` 残留；这一步不执行 route、DNS 查询或 shell。归属不匹配、地址／DNS 被更改、接口已被其他连接复用或删除结果未通过复核时，报告具体 PID、utun、键名及记录目录，并阻止未清理时继续登录。退出后给接口异步销毁最多 2 秒，每次重读归属与地址；清理失败后再次连接先重试。新助手也会检查本客户端的私有遗留记录；助手和脚本的共享锁、存活 PID、同名接口和归属检查共同保护仍在使用的配置。旧版本 3 的无锁记录至少等待 60 秒，避免清理仍在运行的旧脚本。详情见 [清理设计与边界](docs/design/2026-09-06-network-cleanup.md)。
 
@@ -130,12 +130,12 @@ OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 st
 
 自动化测试覆盖输入边界、密码传输、不可信参数不经 shell 执行、套接字身份检查、连接建立识别、错误分类、子进程正常清理、Auto Connect 取消／恢复、睡眠／同为在线的 Wi-Fi 切换、网络通知合并、恢复超时后顺序重建、路由变化过滤、权限安装脚本解析、退出偏好等。测试使用本地替身进程；另有内置 OpenConnect 对 `127.0.0.1:1` 的失败路径测试，不访问公司 VPN。
 
-自动化测试覆盖离线暂停、在线恢复、手动断开，以及慢清理子进程超过 TERM 升级期限、OpenConnect 异常退出／不响应、配置删除失败、误删保护和重复清理。另运行内置 vpnc-script 的实际逻辑，以隔离文件与命令替身重现路由处理阻塞、尚未执行 scutil 的路径，再验证助手的原生清理策略。动态存储写入测试使用可注入存储；没有删除真实 VPN 的系统键，也没有切换本机 Wi-Fi。本轮另覆盖服务器路由的网关／源地址更新、内核缓存重建、归属保护、修改意图持久化及异常退出清理。历史版本 1.1.11 的首次真实连接、服务器路由添加与完整枚举核验、百度 HTTPS 及 VPN DNS 响应均已通过。当前 1.1.18 尚需升级到版本 8 助手，验收实际 Wi-Fi 切换、服务器会话恢复与断网 30–60 秒后的 DNS／路由恢复。详细记录见 `VERIFICATION.md`。
+自动化测试覆盖离线暂停、在线恢复、手动断开，以及慢清理子进程超过 TERM 升级期限、OpenConnect 异常退出／不响应、配置删除失败、误删保护和重复清理。另运行内置 vpnc-script 的实际逻辑，以隔离文件与命令替身重现路由处理阻塞、尚未执行 scutil 的路径，再验证助手的原生清理策略。动态存储写入测试使用可注入存储；没有删除真实 VPN 的系统键，也没有切换本机 Wi-Fi。本轮另覆盖服务器路由的网关／源地址更新、内核缓存重建、归属保护、修改意图持久化及异常退出清理。历史版本 1.1.11 的首次真实连接、服务器路由添加与完整枚举核验、百度 HTTPS 及 VPN DNS 响应均已通过。本轮已完成新版系统服务升级、真实 VPN 连接、内网页面访问、手动断开清理、约 20 秒 Wi-Fi 中断恢复和短暂睡眠／唤醒恢复；长时间睡眠、Intel 真机及 macOS 14 真机的实网兼容仍未覆盖。详细记录见 [验证记录](VERIFICATION.md)。
 
 该版本针对示例中的用户名／密码认证。需要短信验证码、交互式 MFA、浏览器 SSO、设备证书或 CSD/HostScan 的服务器不在当前支持范围；不会把公司二次认证绕过去。日志遇到额外认证要求会停止重试。示例脚本也提示，公司 VPN 可能无法在办公网络内使用。
 
 开发参考：[公司示例脚本](https://git.tapsvc.com/-/snippets/92/raw/master/bin/xd-vpn)、[OpenConnect 官方手册](https://www.infradead.org/openconnect/manual.html)。
 
-内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "build/XD VPN 1.1.20-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
+内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "build/XD VPN 1.1.21-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
 
 应用内保留第三方许可证；分发 DMG 不附带源码归档和重建脚本，构建用源码仍缓存在 `.build/openconnect/downloads/`。构建选项依据 [OpenConnect 官方构建说明](https://www.infradead.org/openconnect/building.html)，许可证见 [OpenConnect 官方许可证](https://www.infradead.org/openconnect/licence.html)。
