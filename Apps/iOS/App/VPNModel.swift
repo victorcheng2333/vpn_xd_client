@@ -56,7 +56,6 @@ final class VPNModel: ObservableObject {
     }
     func load() async {
         #if targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--preview-saved-password") { hasPassword = true }
         if ProcessInfo.processInfo.arguments.contains("--preview-connecting") { status = .connecting }
         if ProcessInfo.processInfo.arguments.contains("--preview-connected") { status = .connected }
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
@@ -68,9 +67,10 @@ final class VPNModel: ObservableObject {
         do {
             let managers = try await NETunnelProviderManager.loadAllFromPreferences()
             manager = managers.first { ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == RuntimeConfiguration.providerID }
-            if let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol {
+            let proto = manager?.protocolConfiguration as? NETunnelProviderProtocol
+            hasPassword = proto?.passwordReference != nil
+            if let proto {
                 if !didLoadProfile { profile = try VPNProfile.decode(proto.providerConfiguration); didLoadProfile = true }
-                hasPassword = proto.passwordReference != nil
             }
             refreshStatus()
             await refreshDiagnostics()
