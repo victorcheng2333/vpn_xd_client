@@ -20,6 +20,7 @@ signal(SIGINT, SIG_IGN)
 
 do {
     let bundle = try ServiceBundle.runningHelper()
+    let runtime = try ServiceRuntime(source: bundle)
     let legacy = LegacyAuthorization()
     let controller = HelperSessionController(identity: bundle.identity, validate: { try bundle.revalidate() },
         legacyPresent: { legacy.isPresent }, retireLegacy: { try legacy.retire() },
@@ -30,8 +31,8 @@ do {
             let log = HelperDiagnosticLog(userID: owner)
             let logLock = NSLock()
             var logFailed = false
-            return TunnelEngine(executable: bundle.engine, networkSessionFactory: { try TunnelNetworkSession.create() },
-                networkScriptHelper: bundle.helper) { value in
+            return TunnelEngine(executable: runtime.bundle.engine, networkSessionFactory: { try TunnelNetworkSession.create() },
+                networkScriptHelper: runtime.bundle.helper) { value in
                 logLock.lock()
                 var warn = false
                 do { try log.append(value); logFailed = false }
@@ -53,13 +54,13 @@ do {
         let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
         source.setEventHandler {
             listener.suspend()
-            controller.shutdown { exit(0) }
+            controller.shutdown { runtime.removeAfterShutdown(); exit(0) }
         }
         source.resume()
         return source
     }
     listener.resume()
-    withExtendedLifetime((delegate, signals)) { dispatchMain() }
+    withExtendedLifetime((delegate, signals, runtime)) { dispatchMain() }
 } catch {
     Logger(subsystem: "com.xd.vpn.helper", category: "startup").error("Service validation failed: \(error.localizedDescription, privacy: .public)")
     exit(78)

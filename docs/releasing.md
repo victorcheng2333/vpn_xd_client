@@ -133,6 +133,8 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.19 \
 
 新助手位于 `Contents/Library/LaunchServices/com.xd.vpn.helper`，配置位于 `Contents/Library/LaunchDaemons/com.xd.vpn.helper.plist`。两个文件必须进入最终 App 签名；助手和引擎要求 Tools UG Developer ID 签名及 hardened runtime。macOS 要求包含 LaunchDaemon 的 App 完成公证。不要直接从 DMG 或 build 目录注册服务；先放入 `/Applications`。
 
+服务会在 root 私有目录中建立并再次验证运行副本，固定当前引擎和网络清理程序。替换 `/Applications` 中的 App 不会影响活动连接的清理；更新后的新连接仍需重新注册。`--service-command verify-bundle` 可在启用服务前验证公司签名、包完整性以及副本复制／权限收紧后签名仍有效。
+
 签名／公证通过不代表系统服务已经批准。实际验收需覆盖启用、系统设置批准、构建握手、另一连接拒绝、失联清理、移除与重新注册。可从已安装 App 执行 `Contents/MacOS/XDVPN --service-command status` 或 `smoke`，诊断路径不创建 VPNModel、不读取 VPN 凭据、不启动 VPN 引擎。`register`、`unregister`、`migrate` 是明确改变本机服务状态的管理命令。
 
 旧版授权在新服务可用之前保留；旧版仍运行或正在清理时必须阻止迁移。测试通过后仍须在真实服务器验证连接、网络切换、退出清理，不能将无网络的 smoke 结果当作真实 VPN 验收。

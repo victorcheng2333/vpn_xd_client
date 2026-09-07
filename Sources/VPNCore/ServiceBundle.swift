@@ -37,6 +37,10 @@ public struct ServiceBundle {
         }
     }
 
+    func hasSamePayload(as other: ServiceBundle) -> Bool {
+        identity.protocolVersion == other.identity.protocolVersion && identity.build == other.identity.build && digest == other.digest
+    }
+
     public static func runningHelper() throws -> ServiceBundle {
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         guard proc_pidpath(getpid(), &buffer, UInt32(buffer.count)) > 0 else {

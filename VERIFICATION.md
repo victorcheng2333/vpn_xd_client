@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-09-07：SMAppService 与双向签名 XPC 迁移（待系统验收）
+
+- 分支：`codex/service-management-xpc`。保留 OpenConnect 及原有恢复、网络归属核验和清理逻辑，助手协议升级为 9。正式 Release `v1.1.19` 未替换。
+- ARM 完整 Swift 回归 **199 项通过，0 失败**；Intel 经 Rosetta 执行完整回归 **199 项通过，0 失败**。日志分别为 `.build/xpc-final-arm-tests.log` 和 `.build/xpc-final-intel-tests.log`。未使用真实 VPN 账号。
+- 发布规则 Python 测试 **14 项通过**；架构、最低系统、渠道及正式版本保护脚本通过。日志 `.build/xpc-release-tests.log`、`.build/xpc-packaging-tests.log`。
+- 新测试覆盖内核 XPC 拒绝未签名客户端、构建／会话所有权校验、重复会话、异常断连与子进程停止、清理期间锁保留、旧授权迁移失败回滚和启动竞争。私有运行副本测试覆盖源 App 替换后内容保持、链接拒绝、权限收紧和生命周期清理。
+- 已发现并修复：签名要求字符串的语法问题、停止回调滞留导致会话锁未释放，以及从可替换 App 直接运行引擎／清理脚本的风险。生产服务只执行复制后再次验证过的 root 私有运行副本。
+- **尚未通过本轮新包的 Apple 公证。** 本机 Developer ID 正常，但 `notarytool` 默认查找及指定登录钥匙串均返回找不到 `xdvpn-notary` profile；已请用户通过本机隐藏输入恢复凭据。历史 test.23 / v1.1.19 公证结果不作为新版证据。
+- **尚未注册、批准或实际运行新 LaunchDaemon，尚未迁移本机旧授权。** 系统只读检查仍有旧版 App 运行，旧 sudoers／助手／引擎保留。实际 XPC smoke、服务启停、迁移和真实 VPN 网络切换／退出清理仍待验收，自动化结果不替代这些项目。
+
 ## 2026-09-07：安装包实际 Apple 公证通过
 
 本轮对现有公司签名的 `1.1.19-test.23 / arm64` 测试包完成了实际公证，不是仅验证账号凭据，也未发布 GitHub Release。

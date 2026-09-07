@@ -12,8 +12,9 @@ import VPNCore
             case "migrate": try await PrivilegeManager.migrate()
             case "status": break
             case "verify-bundle":
-                _ = try ServiceBundle(url: Bundle.main.bundleURL)
-                print("Company signature, hardened runtime and bundled service verified.")
+                let bundle = try ServiceBundle(url: Bundle.main.bundleURL)
+                try ServiceRuntime.verifyCopy(source: bundle)
+                print("Company signature, hardened runtime, bundled service and sealed runtime copy verified.")
             case "smoke": try await smoke()
             default: throw VPNError.invalidProfile("Unknown service command")
             }
