@@ -7,6 +7,7 @@
 - 发布规则 Python 测试 **14 项通过**；架构、最低系统、渠道及正式版本保护脚本通过。日志 `.build/xpc-release-tests.log`、`.build/xpc-packaging-tests.log`。
 - 新测试覆盖内核 XPC 拒绝未签名客户端、构建／会话所有权校验、重复会话、异常断连与子进程停止、清理期间锁保留、旧授权迁移失败回滚和启动竞争。私有运行副本测试覆盖源 App 替换后内容保持、链接拒绝、权限收紧和生命周期清理。
 - 已发现并修复：签名要求字符串的语法问题、停止回调滞留导致会话锁未释放，以及从可替换 App 直接运行引擎／清理脚本的风险。生产服务只执行复制后再次验证过的 root 私有运行副本。
+- 运行代码提交 `319dad8` 的 ARM／Intel `1.1.19-test.24` App 均已实际完成 Tools UG Developer ID 签名。两个架构各自执行 `--service-command verify-bundle` 成功：完整包、hardened runtime 和权限收紧后的运行副本签名均通过。内置引擎的移位运行、系统依赖、可信 TLS、不可信证书／主机名不符拒绝验证通过。日志 `.build/xpc-{arm,intel}-bundle-verification.log`、`.build/xpc-{arm,intel}-engine.log`。
 - **尚未通过本轮新包的 Apple 公证。** 本机 Developer ID 正常，但 `notarytool` 默认查找及指定登录钥匙串均返回找不到 `xdvpn-notary` profile；已请用户通过本机隐藏输入恢复凭据。历史 test.23 / v1.1.19 公证结果不作为新版证据。
 - **尚未注册、批准或实际运行新 LaunchDaemon，尚未迁移本机旧授权。** 系统只读检查仍有旧版 App 运行，旧 sudoers／助手／引擎保留。实际 XPC smoke、服务启停、迁移和真实 VPN 网络切换／退出清理仍待验收，自动化结果不替代这些项目。
 
