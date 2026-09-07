@@ -11,7 +11,7 @@
 - 公共 `packetFlow` 经非阻塞 datagram socketpair 桥接 IP 包；显式处理 Darwin 地址族前缀、MTU、丢包与背压。
 - 服务端 IPv4/IPv6 地址、分流路由、DNS/搜索域和 MTU 转成 NE 设置。证书由系统 SecTrust 验证完整链和主机名，禁止忽略证书错误。
 - TLS、可选 DTLS；库内会话重连，换网合并通知后使用命令管道暂停/恢复并刷新缓存的网关地址。每个 C 会话只由一个 worker 操作。
-- 基于内网域名的 On Demand；手动断开先保存暂停规则，重新连接才恢复。主 App 不使用后台保活计时器。
+- 首页「自动连接」开关：启用后由系统在网络连接请求时自动建立 VPN；关闭开关停止自动触发，当前连接不主动断开。手动「断开」先暂停系统自动连接，重新打开 App 不恢复，点击连接或重新开启开关才恢复。旧版本域名规则保持原范围，直到用户主动修改新开关。主 App 不使用后台保活计时器。
 - 自动冷启动五分钟最多三次，认证/证书错误持久化暂停，防止 Extension 重启后继续提交密码。系统规则禁用失败时，持久化门禁仍会拒绝继续认证；是否存在系统重复拉起须真机验收。
 - 最近 64 条结构化事件、真实桥接包计数、手动 HTTPS HEAD 内网检查和系统分享。诊断不保留引擎原始日志、密码、Cookie 或 Token。
 
@@ -49,7 +49,7 @@ Apps/iOS/.build/xcode-iphoneos/Build/Products/Debug-iphoneos/XDVPN.app
 1. 将 `Configuration/Signing.example.xcconfig` 复制为 `Configuration/Signing.local.xcconfig`，填写实际 `DEVELOPMENT_TEAM`、唯一 `XDVPN_BUNDLE_ID` 和 `XDVPN_APP_GROUP`。
 2. 在 Xcode 打开 `XDVPN.xcodeproj`，选择 `XDVPN-iOS` scheme 和连接的 iPhone，确认 App/PacketTunnel 两个 target 使用同一个开发团队。
 3. 开发者账号及 provisioning profile 必须包含 Network Extensions（packet-tunnel-provider）、App Groups 和共享 Keychain 权限；App ID 与 Extension ID 分别为配置值及其 `.PacketTunnel` 后缀。让 Xcode 完成匹配签名后 Run。
-4. 在手机打开设置页，填写本人获授权的测试账号。先关闭按需恢复，保存并允许添加 VPN 配置，手动连接验证。
+4. 在手机打开设置页，填写本人获授权的测试账号。保存并允许添加 VPN 配置，先在首页保持「自动连接」关闭，手动连接验证。
 
 2026-09-06 真机检查：已连接并配对实体 iPhone 17 Pro（iOS 26.6.1），开发者模式启用，Xcode 已将其识别为可运行目标。实际启用签名的构建在 App 和 PacketTunnel 两个 target 均报 `requires a development team`，尚未安装或运行。
 
@@ -68,11 +68,11 @@ Tools UG 开发签名现已可用。已在独立 `codex/ios-support` worktree �
 | 1 | 手动连接，打开仅内网可访问的 HTTPS 地址 | 系统连接、隧道地址、真实上/下行包和业务响应均正确 |
 | 2 | 分别关闭/开启 DTLS | TLS 可用；允许 UDP 的网络观测 DTLS；禁止 UDP 时能使用 TLS |
 | 3 | 已连接时 Wi-Fi ↔ 蜂窝，断网后恢复 | 不重复并发登录，恢复事件可解释，业务重新可用 |
-| 4 | 断开后配置内网域名并启用按需恢复，再点击连接 | 锁屏 5/30 分钟或隔夜后，直接打开内网业务 App，不先打开 XD VPN |
+| 4 | 在首页启用「自动连接」 | 由系统触发连接；锁屏 5/30 分钟或隔夜后，直接打开内网业务 App，不先打开 XD VPN |
 | 5 | 手动断开 | 网络变化或重新打开 App 后仍暂停，重新点击连接才重新启用 |
 | 6 | 使用测试环境验证过期会话/错误证书等 | 停止无效认证，界面解释原因，不持续提交错误密码 |
 
-按需规则匹配域名后由系统评估可达性；可选验证 URL 也会用于系统探测，非 HTTP 200 会触发 VPN。请选择公司允许探测的、只在内网可访问的 HTTPS 地址。系统状态和包计数不等于业务成功；HEAD 结果可能是 401/403/302，表示收到该服务响应，不代表业务授权通过。探测不跟随重定向。
+新「自动连接」使用系统 Connect 规则，不要求输入内网域名，HTTPS 验证地址仅用于手动诊断。旧版本保存的域名与探测规则继续按原条件工作，重新开启新开关后才切换规则。请选择公司允许探测的、只在内网可访问的 HTTPS 验证地址。系统状态和包计数不等于业务成功；HEAD 结果可能是 401/403/302，表示收到该服务响应，不代表业务授权通过。探测不跟随重定向。
 
 On Demand 不能保证每次解锁立即连接，网关要求 MFA、首次解锁前凭据不可用、系统终止等情况不能由客户端绕过。恢复耗时、耗电、NAT64、服务端会话策略和实际 On Demand 行为仍须真机验证。
 

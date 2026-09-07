@@ -32,19 +32,25 @@ struct ContentView: View {
                             Button {
                                 Task { if model.active || model.onDemandActive { await model.disconnect() } else { await model.connect() } }
                             } label: {
-                                HStack { if connectionAppearance.showsProgress { ProgressView().tint(.white) }; Text(model.active || model.onDemandActive ? "断开并暂停恢复" : "连接 VPN") }
+                                HStack { if connectionAppearance.showsProgress { ProgressView().tint(.white) }; Text(model.active || model.onDemandActive ? "断开" : "连接 VPN") }
                                     .font(.headline).frame(maxWidth: .infinity).frame(minHeight: 48)
                             }.buttonStyle(.borderedProminent).tint(connectionAppearance == .idle ? brand : connectionAppearance.color).disabled(model.busy)
                         }.padding(24).frame(maxWidth: .infinity).background(.background, in: RoundedRectangle(cornerRadius: 24))
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle("自动连接", isOn: Binding(get: { model.profile.automaticConnectionEnabled }, set: { enabled in
+                                Task { await model.setAutoConnect(enabled) }
+                            }))
+                            .disabled(model.busy || !model.hasPassword || model.status == .disconnecting)
+                            Text(model.autoConnectDescription).font(.footnote).foregroundStyle(.secondary)
+                        }.padding(20).background(.background, in: RoundedRectangle(cornerRadius: 20))
                         VStack(spacing: 16) {
                             row("服务器", model.profile.server)
                             row("隧道地址", model.active ? model.snapshot.address : "—")
-                            row("按需恢复", model.onDemandActive ? "已启用" : "已暂停")
                         }.padding(20).background(.background, in: RoundedRectangle(cornerRadius: 20))
                         if let message = model.message {
                             Label(message, systemImage: "info.circle").font(.subheadline).foregroundStyle(.secondary).textSelection(.enabled)
                         }
-                        Text("首次连接会请求添加系统 VPN 配置。按需恢复需在设置中启用，并由内网域名访问触发。")
+                        Text("首次连接会请求添加系统 VPN 配置。")
                             .font(.footnote).foregroundStyle(.secondary)
                     }.padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
                 }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("XD VPN")
@@ -63,14 +69,8 @@ struct ContentView: View {
                             Text("用于网关下发默认路由的配置。网关仅支持 IPv4 时，IPv6 将被阻断；系统蜂窝服务、推送与设备通信按系统规则处理。")
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
-                        Toggle("连接后启用按需恢复", isOn: $model.profile.onDemand)
-                        if model.profile.onDemand {
-                            TextField("内网域名，以逗号分隔", text: $model.profile.domains, axis: .vertical).textInputAutocapitalization(.never).autocorrectionDisabled()
-                        }
                         TextField("HTTPS 内网验证地址（可选）", text: $model.profile.probeURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    } header: { Text("恢复验证") } footer: {
-                        Text("按需连接在域名解析或验证地址探测失败时触发，不保证每次解锁立即连接。启用后，系统可能在后台探测此地址。手动断开会暂停，重新连接才启用。")
-                    }.disabled(model.active || model.onDemandActive || model.busy)
+                    } header: { Text("连接选项") }.disabled(model.active || model.onDemandActive || model.busy)
                     Section {
                         Button("保存配置") { Task { await model.save() } }.disabled(model.active || model.onDemandActive || model.busy)
                     } footer: { Text("密码保存在本机钥匙串，首次解锁后可供隧道后台读取。首版支持 AnyConnect 用户名/密码认证，暂不支持 SSO、MFA、客户端证书及终端合规检查。") }

@@ -12,9 +12,13 @@ struct VPNProfile: Codable, Equatable {
     var useDTLS = true
     // Optional for compatibility with profiles saved before this setting existed.
     var fullTunnel: Bool? = nil
+    // Nil preserves the narrower domain rules of configurations saved by the prototype.
+    var autoConnect: Bool? = nil
     var onDemand = false
     var domains = ""
     var probeURL = ""
+
+    var automaticConnectionEnabled: Bool { autoConnect ?? onDemand }
 
     func validated() throws -> VPNProfile {
         var result = self
@@ -32,7 +36,7 @@ struct VPNProfile: Codable, Equatable {
               ![result.username, result.group, result.server].contains(where: { $0.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) }) else {
             throw ConfigurationError.invalid("请填写用户名，并检查字段长度和换行符。")
         }
-        if onDemand && domainList.isEmpty { throw ConfigurationError.invalid("按需连接需要至少一个内网域名，例如 intranet.example.com。") }
+        if autoConnect == nil && onDemand && domainList.isEmpty { throw ConfigurationError.invalid("按需连接需要至少一个内网域名，例如 intranet.example.com。") }
         for domain in domainList {
             guard domain.utf8.count <= 253, domain.contains("."),
                   domain.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({

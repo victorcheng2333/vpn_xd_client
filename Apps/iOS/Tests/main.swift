@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import NetworkExtension
 
 var checks = 0
 func expect(_ condition: Bool, _ name: String) {
@@ -101,4 +102,35 @@ rejects("pause survives timeout window") { try restored.begin(now: now.addingTim
 var expired = policy
 try expired.begin(now: now.addingTimeInterval(600))
 expect(expired.attempts.count == 1, "old transient attempts expire")
+
+// Automatic-connection migration and system rules.
+var automatic = VPNProfile()
+automatic.username = "tester"
+expect(!automatic.automaticConnectionEnabled && automatic.makeOnDemandRules().isEmpty, "automatic connection defaults off")
+automatic.onDemand = true
+automatic.domains = "intranet.example.com"
+automatic.probeURL = "https://intranet.example.com/health"
+let legacyRules = automatic.makeOnDemandRules()
+expect(automatic.automaticConnectionEnabled, "legacy preference remains enabled")
+expect(legacyRules.first is NEOnDemandRuleEvaluateConnection, "legacy domain trigger is not broadened")
+let legacyRule = (legacyRules.first as? NEOnDemandRuleEvaluateConnection)?.connectionRules?.first
+expect(legacyRule?.matchDomains == ["intranet.example.com"], "legacy domain scope preserved")
+expect(legacyRule?.probeURL?.absoluteString == automatic.probeURL, "legacy probe preserved")
+automatic.autoConnect = false
+expect(!automatic.automaticConnectionEnabled && automatic.makeOnDemandRules().isEmpty, "explicit off overrides legacy on")
+automatic.autoConnect = true
+automatic.domains = ""
+expect(try automatic.validated().automaticConnectionEnabled, "new auto-connect needs no internal domain")
+expect(automatic.makeOnDemandRules().count == 1, "one system connection rule")
+let automaticRule = automatic.makeOnDemandRules().first
+expect(automaticRule is NEOnDemandRuleConnect && automaticRule?.interfaceTypeMatch == .any, "auto-connect covers Wi-Fi and cellular")
+expect(automaticRule?.probeURL == nil && automaticRule?.dnsSearchDomainMatch == nil, "manual probe does not gate automatic connection")
+let roundTrip = try VPNProfile.decode(automatic.configuration)
+expect(roundTrip.autoConnect == true, "automatic connection persists")
+var oldAutomatic = try JSONSerialization.jsonObject(with: JSONEncoder().encode(automatic)) as! [String: Any]
+oldAutomatic.removeValue(forKey: "autoConnect")
+oldAutomatic["domains"] = "intranet.example.com"
+let restoredAutomatic = try VPNProfile.decode(["version": 1, "profile": JSONSerialization.data(withJSONObject: oldAutomatic)])
+expect(restoredAutomatic.autoConnect == nil && restoredAutomatic.makeOnDemandRules().first is NEOnDemandRuleEvaluateConnection, "old saved profiles retain domain rules after decode")
+
 print("Passed \(checks) iOS configuration, routing, packet and recovery checks.")

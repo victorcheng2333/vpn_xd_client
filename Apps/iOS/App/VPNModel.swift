@@ -23,6 +23,7 @@ final class VPNModel: ObservableObject {
 
     var active: Bool { [.connecting, .connected, .reasserting, .disconnecting].contains(status) }
     var title: String {
+        if startingConnection { return "正在连接" }
         switch status {
         case .connected: return "已连接"
         case .connecting: return "正在连接"
@@ -30,6 +31,16 @@ final class VPNModel: ObservableObject {
         case .disconnecting: return "正在断开"
         default: return "尚未连接"
         }
+    }
+    var autoConnectDescription: String {
+        if !hasPassword { return "先在设置中保存账号，即可开启自动连接。" }
+        if profile.automaticConnectionEnabled && !onDemandActive {
+            return "自动连接已暂停，点「连接 VPN」恢复。"
+        }
+        if profile.autoConnect == nil && profile.onDemand {
+            return "访问已配置的内网时自动连接；手动断开后保持断开。"
+        }
+        return "需要联网时自动连接，掉线后自动重试；手动断开后保持断开。"
     }
     init() {
         observer = NotificationCenter.default.publisher(for: .NEVPNStatusDidChange).receive(on: DispatchQueue.main).sink { [weak self] notification in
@@ -78,7 +89,7 @@ final class VPNModel: ObservableObject {
             try await self.saveConfiguration()
             guard let manager = self.manager else { throw ConfigurationError.invalid("VPN 配置尚未保存。") }
             try self.store.write(RecoveryPolicy(), name: "recovery")
-            manager.isOnDemandEnabled = self.profile.onDemand
+            manager.isOnDemandEnabled = self.profile.automaticConnectionEnabled
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
             if manager.connection.status == .disconnected || manager.connection.status == .invalid {
@@ -92,6 +103,41 @@ final class VPNModel: ObservableObject {
             self.message = nil
         }
     }
+    func setAutoConnect(_ enabled: Bool) async {
+        await perform {
+            guard let manager = self.manager,
+                  let proto = manager.protocolConfiguration as? NETunnelProviderProtocol,
+                  proto.passwordReference != nil else {
+                throw ConfigurationError.invalid("请先在设置中保存账号配置。")
+            }
+            if enabled {
+                let policy = try self.store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy())
+                if policy.blockedReason != nil {
+                    throw ConfigurationError.invalid("请先处理连接错误，再点击「连接 VPN」重试。")
+                }
+            }
+            // Only change the saved automatic-connection preference, never unsaved account edits.
+            var saved = try VPNProfile.decode(proto.providerConfiguration)
+            saved.autoConnect = enabled
+            let previousConfiguration = proto.providerConfiguration
+            let previousRules = manager.onDemandRules
+            let previouslyEnabled = manager.isOnDemandEnabled
+            proto.providerConfiguration = try saved.configuration
+            manager.onDemandRules = saved.makeOnDemandRules()
+            manager.isOnDemandEnabled = enabled
+            do { try await manager.saveToPreferences() }
+            catch {
+                proto.providerConfiguration = previousConfiguration
+                manager.onDemandRules = previousRules
+                manager.isOnDemandEnabled = previouslyEnabled
+                try? await manager.loadFromPreferences()
+                throw error
+            }
+            self.profile.autoConnect = enabled
+            try await manager.loadFromPreferences()
+            self.message = nil
+        }
+    }
     func disconnect() async {
         await perform {
             guard let manager = self.manager else { return }
@@ -99,9 +145,9 @@ final class VPNModel: ObservableObject {
             manager.isOnDemandEnabled = false
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
-            guard !manager.isOnDemandEnabled else { throw ConfigurationError.invalid("按需恢复未能暂停，请在系统 VPN 设置中关闭。") }
+            guard !manager.isOnDemandEnabled else { throw ConfigurationError.invalid("无法关闭自动连接，请在系统 VPN 设置中关闭后再断开。") }
             manager.connection.stopVPNTunnel()
-            self.message = "已暂停按需恢复；再次点击连接后才会重新启用。"
+            self.message = nil
         }
     }
     private func perform(_ operation: () async throws -> Void) async {
@@ -112,7 +158,7 @@ final class VPNModel: ObservableObject {
         catch { message = error.localizedDescription }
     }
     private func saveConfiguration() async throws {
-        guard !active, !onDemandActive else { throw ConfigurationError.invalid("请先断开并暂停按需恢复，再修改或保存配置。") }
+        guard !active, !onDemandActive else { throw ConfigurationError.invalid("请先断开 VPN，再修改或保存配置。") }
         let validated = try profile.validated()
         let manager = self.manager ?? NETunnelProviderManager()
         let old = manager.protocolConfiguration as? NETunnelProviderProtocol
@@ -133,14 +179,10 @@ final class VPNModel: ObservableObject {
         proto.includeAllNetworks = validated.fullTunnel == true
         proto.excludeLocalNetworks = false
         // Preserve OS cellular services, APNs and USB device communication exceptions.
-        let evaluate = NEOnDemandRuleEvaluateConnection()
-        let rule = NEEvaluateConnectionRule(matchDomains: validated.domainList, andAction: .connectIfNeeded)
-        if !validated.probeURL.isEmpty { rule.probeURL = URL(string: validated.probeURL) }
-        evaluate.connectionRules = [rule]
         manager.protocolConfiguration = proto
         manager.localizedDescription = "XD VPN 验证版"
         manager.isEnabled = true
-        manager.onDemandRules = validated.onDemand ? [evaluate] : []
+        manager.onDemandRules = validated.makeOnDemandRules()
         manager.isOnDemandEnabled = false
         do { try await manager.saveToPreferences() }
         catch {
@@ -157,7 +199,7 @@ final class VPNModel: ObservableObject {
     func refreshDiagnostics() async {
         if let saved = try? store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot()) { snapshot = saved }
         if let policy = try? store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy()), let reason = policy.blockedReason {
-            message = "自动恢复已暂停：" + reason
+            message = "自动连接已暂停：" + reason
         }
         guard let session = manager?.connection as? NETunnelProviderSession, [.connected, .reasserting].contains(session.status) else { return }
         do {
@@ -202,6 +244,7 @@ final class VPNModel: ObservableObject {
         for _ in 0..<30 {
             await refreshDiagnostics()
             let result: [String: Any] = ["status": title, "message": message ?? "", "report": report,
+                                      "autoConnect": profile.automaticConnectionEnabled, "automaticConnectionActive": onDemandActive,
                                       "phase": snapshot.phase, "transport": snapshot.transport,
                                       "packetsToTunnel": snapshot.packetsToTunnel,
                                       "packetsFromTunnel": snapshot.packetsFromTunnel]
