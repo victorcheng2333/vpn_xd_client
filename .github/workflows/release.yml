@@ -1,0 +1,121 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing stable tag, e.g. v1.1.19'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: stable-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+  RELEASE_REPOSITORY: ${{ vars.RELEASE_REPOSITORY || github.repository }}
+  BUILD_CHANNEL: release
+
+jobs:
+  validate:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate version, tag, clean checkout and release ordering
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+        run: |
+          python3 scripts/version.py --check-git
+          python3 scripts/github-release.py check
+          python3 -m unittest discover -s Tests/ReleaseTests -v
+          bash scripts/test-packaging.sh
+
+  build:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    env:
+      ARCHS: ${{ matrix.arch }}
+      NOTARIZE: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: .build/openconnect/downloads
+          key: openconnect-sources-${{ hashFiles('scripts/build-openconnect.sh') }}
+      - name: Configure company signing and mandatory notarization
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          bash scripts/ci-signing.sh
+      - name: Build application and test native runtime
+        run: |
+          bash scripts/build.sh
+          bash scripts/test.sh -c release
+          VERSION="$(python3 scripts/version.py --field version)"
+          python3 scripts/verify-bundled-engine.py "build/XD VPN $VERSION-$ARCHS.app" --arch "$ARCHS"
+      - name: Package tested application
+        run: |
+          VERSION="$(python3 scripts/version.py --field version)"
+          SKIP_BUILD=1 APP_OUTPUT="$PWD/build/XD VPN $VERSION-$ARCHS.app" bash scripts/package.sh
+          if [ "$ARCHS" = arm64 ]; then
+            tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: |
+            build/*.dmg
+            build/*.sha256
+            build/third-party-sources.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/xdvpn-signing.keychain-db" || true
+
+  publish:
+    needs: build
+    runs-on: macos-15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: build
+      - name: Publish only after all assets pass SHA-256 verification
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          NOTARIZE: '1'
+        run: |
+          python3 scripts/version.py --check-git
+          python3 scripts/release-notes.py > build/release-notes.md
+          python3 scripts/github-release.py publish

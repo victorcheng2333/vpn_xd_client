@@ -2,6 +2,7 @@ import SwiftUI
 import VPNCore
 
 struct ContentView: View {
+    @EnvironmentObject var updates: UpdateManager
     @EnvironmentObject var model: VPNModel
     var body: some View {
         HStack(spacing: 0) {
@@ -74,7 +75,7 @@ struct ContentView: View {
                 Circle().fill(model.engineAvailable ? Color(hex: 0xA6D6BA) : .orange).frame(width: 5, height: 5)
                 Text(model.engineAvailable ? "内置引擎就绪" : "内置引擎缺失").font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
                 Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.1").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.25))
+                Button(updates.displayVersion) { updates.showPanel = true }.buttonStyle(.plain).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.25))
             }.padding(.horizontal, 24).padding(.vertical, 24)
         }.frame(width: 204).background(Palette.sidebar).foregroundStyle(.white)
     }

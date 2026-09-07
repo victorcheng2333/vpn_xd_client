@@ -3,11 +3,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/architectures.sh
-export BUILD_CHANNEL="${BUILD_CHANNEL:-release}"
+export BUILD_CHANNEL="${BUILD_CHANNEL:-test}"
 case "$BUILD_CHANNEL" in
     release|test) ;;
     *) echo 'Packaging requires BUILD_CHANNEL=release or test.' >&2; exit 1 ;;
 esac
+python3 scripts/version.py > /dev/null
+if [ "$BUILD_CHANNEL" = release ]; then
+    [ "${NOTARIZE:-1}" = 1 ] || { echo 'Release requires Apple notarization; NOTARIZE must be 1.' >&2; exit 1; }
+    export NOTARIZE=1
+    export NOTARY_KEYCHAIN_PROFILE="${NOTARY_KEYCHAIN_PROFILE:-xdvpn-notary}"
+    python3 scripts/version.py --check-git > /dev/null
+fi
+source scripts/signing.sh
+xdvpn_configure_signing
 # Default delivery: an ARM app plus ARM and Intel DMGs.
 if [ "${ARCHS+x}" != x ] && [ "${APP_OUTPUT+x}" != x ]; then
     ARCHS=arm64 bash scripts/package.sh
@@ -31,9 +40,19 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
 fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
-APP_CHANNEL="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNBuildChannel' "$APP/Contents/Info.plist" 2>/dev/null || echo release)"
+APP_CHANNEL="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNBuildChannel' "$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
 if [ "$APP_CHANNEL" != "$BUILD_CHANNEL" ]; then
     echo "Build channel mismatch: expected $BUILD_CHANNEL, got $APP_CHANNEL" >&2; exit 1
+fi
+if [ "$BUILD_CHANNEL" = release ]; then
+    APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
+    EXPECTED_BUILD="$(python3 scripts/version.py --field build)"
+    [ "$VERSION" = "$SOURCE_VERSION" ] && [ "$APP_BUILD" = "$EXPECTED_BUILD" ] || { echo 'Release app version/build mismatch.' >&2; exit 1; }
+    APP_REVISION="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNSourceRevision' "$APP/Contents/Info.plist")"
+    APP_REPOSITORY="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNReleaseRepository' "$APP/Contents/Info.plist")"
+    [ "$APP_REVISION" = "$(git rev-parse HEAD)" ] && [ "$APP_REPOSITORY" = "$(python3 scripts/version.py --field repository)" ] || {
+        echo 'Release app source revision/repository mismatch.' >&2; exit 1;
+    }
 fi
 PACKAGE_VERSION="$VERSION"
 OUTPUT_DIRECTORY="$PWD/build"
@@ -54,9 +73,24 @@ case "$TARGET_ARCHS" in
     x86_64) ARCH=x86_64; MACHINE='Intel Mac' ;;
 esac
 codesign --verify --deep --strict "$APP"
+if [ "$BUILD_CHANNEL" = release ]; then
+    source scripts/signing.sh
+    for target in "$APP" "$APP/Contents/Helpers/XDVPNHelper" "$APP/Contents/Resources/OpenConnect/openconnect"; do
+        xdvpn_verify_release_signature "$target"
+    done
+fi
 test -x "$APP/Contents/Resources/OpenConnect/openconnect"
 test -x "$APP/Contents/Resources/OpenConnect/vpnc-script"
-STAGE="$PWD/.build/distribution/$ARCH/XD VPN $PACKAGE_VERSION"
+SIGNING_NOTE='此包使用本地签名，未做 Apple 公证；若 macOS 阻止打开，请联系发布者或公司 IT。'
+APP_SIGNING_DETAILS="$(codesign -d --verbose=4 "$APP" 2>&1)"
+if [[ "$APP_SIGNING_DETAILS" = *'Authority=Developer ID Application:'* ]]; then
+    SIGNING_NOTE='此包使用公司 Developer ID 签名，未做 Apple 公证；若 macOS 阻止打开，请联系发布者或公司 IT。'
+fi
+if [ "${NOTARIZE:-0}" = 1 ]; then
+    bash scripts/notarize.sh "$APP"
+    SIGNING_NOTE='此包已使用 Developer ID 签名并通过 Apple 公证。'
+fi
+STAGE="$PWD/.build/distribution/$BUILD_CHANNEL/$ARCH/XD VPN $PACKAGE_VERSION"
 rm -rf "$STAGE"
 mkdir -p "$STAGE" "$OUTPUT_DIRECTORY"
 ditto "$APP" "$STAGE/XD VPN.app"
@@ -75,7 +109,7 @@ XD VPN 内置引擎版
 4. 返回连接页，点击「连接 VPN」。
 
 升级前请先断开并退出旧版。原有 XD VPN 配置和钥匙串密码可继续使用。
-当前版本为本地签名，未做 Apple 公证；若 macOS 阻止打开，请联系发送者或公司 IT。
+${SIGNING_NOTE}
 不支持验证码、浏览器 SSO 或交互式 MFA 登录。
 
 运行所需的引擎、网络脚本和第三方许可证均保留在 XD VPN.app 内，
@@ -84,4 +118,13 @@ EOF
 OUTPUT="$OUTPUT_DIRECTORY/XD-VPN-$PACKAGE_VERSION-macOS-$ARCH.dmg"
 hdiutil create -ov -volname "XD VPN $PACKAGE_VERSION" -srcfolder "$STAGE" -format UDZO "$OUTPUT"
 hdiutil verify "$OUTPUT"
+if [ "$BUILD_CHANNEL" = release ] || [ "${NOTARIZE:-0}" = 1 ]; then
+    source scripts/signing.sh
+    xdvpn_sign com.xd.vpn.disk-image "$OUTPUT"
+    codesign --verify --strict "$OUTPUT"
+fi
+if [ "${NOTARIZE:-0}" = 1 ]; then
+    bash scripts/notarize.sh "$OUTPUT"
+fi
+(cd "$OUTPUT_DIRECTORY" && shasum -a 256 "$(basename "$OUTPUT")" > "$(basename "$OUTPUT").sha256")
 printf 'Packaged: %s\n' "$OUTPUT"

@@ -4,6 +4,7 @@ import AppKit
 @main struct XDVPNApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model: VPNModel
+    @StateObject private var updates = UpdateManager()
     @StateObject private var loginItem = LoginItemManager()
 
     init() {
@@ -13,7 +14,9 @@ import AppKit
     }
     var body: some Scene {
         Window("XD VPN", id: "main") {
-            ContentView().environmentObject(model).environmentObject(loginItem)
+            ContentView().environmentObject(model).environmentObject(loginItem).environmentObject(updates)
+                .sheet(isPresented: $updates.showPanel) { UpdateView(updates: updates) }
+                .task { await updates.checkAutomatically() }
                 .onAppear { delegate.model = model; NSApp.activate(ignoringOtherApps: true) }
         }
         .windowStyle(.hiddenTitleBar)
@@ -21,6 +24,9 @@ import AppKit
         .defaultSize(width: 1040, height: 740)
         .commands {
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("检查更新…") { updates.showPanel = true; delegate.showWindow(); Task { await updates.check() } }
+            }
             CommandGroup(replacing: .appSettings) {
                 Button("VPN 配置…") { model.page = .profile; delegate.showWindow() }.keyboardShortcut(",", modifiers: .command)
             }

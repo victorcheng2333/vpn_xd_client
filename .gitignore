@@ -4,3 +4,6 @@ build/
 dist/
 .DS_Store
 *.xcuserstate
+
+__pycache__/
+*.pyc

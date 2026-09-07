@@ -107,7 +107,8 @@ fi
 cp "$TARGET_ROOT/openconnect" "$RUNTIME/openconnect"
 cp "$DOWNLOADS/vpnc-script" "$RUNTIME/vpnc-script"
 chmod 755 "$RUNTIME/openconnect" "$RUNTIME/vpnc-script"
-codesign --force --sign "${SIGNING_IDENTITY:--}" --identifier com.xd.vpn.openconnect "$RUNTIME/openconnect"
+source scripts/signing.sh
+xdvpn_sign com.xd.vpn.openconnect "$RUNTIME/openconnect"
 codesign --verify --strict "$RUNTIME/openconnect"
 xdvpn_verify_engine "$RUNTIME/openconnect" "$ARCH"
 cp "$SOURCES/openconnect-$OPENCONNECT_VERSION/COPYING.LGPL" "$LICENSES/OpenConnect-LGPL-2.1.txt"
