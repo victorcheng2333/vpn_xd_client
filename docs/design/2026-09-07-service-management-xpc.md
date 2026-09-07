@@ -17,3 +17,5 @@
 签名接受／拒绝、协议及构建不匹配、未握手命令、越权连接、重复会话、失联清理、清理中重入、畸形及超长报文、注册各状态、旧版迁移路径／锁／回滚；继续运行现有全部引擎、恢复、清理与发布测试。实际注册需 macOS 用户批准，真实 VPN 验收需单独记录，不能由 mock 测试替代。
 
 参考：Apple SMAppService、NSXPCConnection.setCodeSigningRequirement 文档。
+
+重新注册使用异步 unregister，等待旧进程退出后再 register。本机验收发现，macOS 的后台项目状态可能在退出回调后短暂保持 disabled，使 register 返回 EPERM。仅对此操作中成功注销后的 notRegistered／EPERM 状态，间隔 750 ms 最多重试 3 次；签名无效、用户拒绝、其他错误及取消均不重试，requiresApproval 返回系统批准流程。首次注册不使用该重试。使用同一 SMAppService 实例完成注销与注册，不直接操作 launchd 或后台项目数据库。API 语义见 [Apple 异步注销文档](https://developer.apple.com/documentation/servicemanagement/smappservice/unregister(completionhandler:))；状态同步延迟是本机日志观察，不是 Apple 对所有系统版本的保证。

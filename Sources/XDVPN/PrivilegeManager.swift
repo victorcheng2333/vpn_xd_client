@@ -87,14 +87,17 @@ enum PrivilegeStatus: Equatable {
     static func install() async throws {
         guard supportedLocation(Bundle.main.bundleURL) else { throw VPNError.unavailable("请先将应用拖入 Applications，再启用系统服务。") }
         _ = try ServiceBundle(url: Bundle.main.bundleURL)
+        let service = self.service
         if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems(); return }
         if service.status == .enabled {
             let connection = HelperConnection(); defer { connection.close() }
             let remote = try await connection.status()
             guard !remote.busy else { throw VPNError.unavailable("请先断开所有 XD VPN 会话，等待网络清理结束。") }
             try await service.unregister()
+            try await ServiceRegistration.registerAfterUnregister(status: { service.status }, register: { try service.register() })
+        } else {
+            try service.register()
         }
-        try service.register()
         if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
     }
 
@@ -116,5 +119,34 @@ enum PrivilegeStatus: Equatable {
         }
         // Async completion waits for termination before any later registration.
         try await service.unregister()
+    }
+}
+
+@MainActor enum ServiceRegistration {
+    /// The async unregister callback waits for process exit, but macOS can
+    /// briefly retain the disabled BTM disposition. Retry only that EPERM
+    /// transition, after a successful unregister; never retry approval/signature
+    /// failures or use another registration mechanism.
+    static func registerAfterUnregister(
+        status: () -> SMAppService.Status,
+        register: () throws -> Void,
+        waitForSync: () async throws -> Void = { try await Task.sleep(for: .milliseconds(750)) }
+    ) async throws {
+        for attempt in 0..<4 {
+            try Task.checkCancellation()
+            if status() == .requiresApproval { return }
+            do { try register(); return }
+            catch {
+                let current = status()
+                if current == .requiresApproval { return }
+                let failure = error as NSError
+                // The SDK exports the domain constant only from macOS 15;
+                // its stable string also supports the macOS 14 deployment.
+                guard attempt < 3, current == .notRegistered,
+                      [NSPOSIXErrorDomain, "SMAppServiceErrorDomain"].contains(failure.domain),
+                      failure.code == Int(EPERM) else { throw error }
+                try await waitForSync()
+            }
+        }
     }
 }

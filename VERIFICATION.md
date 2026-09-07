@@ -1,5 +1,16 @@
 # 验证记录
 
+## 2026-09-07：修复已安装系统服务启动失败，完成旧授权实机迁移
+
+- test.25 安装后，launchd 重复退出 `78 / EX_CONFIG`，实际助手日志为「运行副本目录权限异常」。本机 `/private/var/run` 为正常的 `root:daemon 0775`，与此前执行副本要求的不可组写父目录冲突。提交 `05253e0` 将执行副本迁到严格验证的 `/Library/PrivilegedHelperTools/com.xd.vpn.runtime`（root:wheel 0700），没有放宽可执行内容权限。旧锁目录只接受可信系统组的组写模式，锁文件与旧授权文件仍严格验证。
+- ARM 与 Intel（Rosetta）各 **212 项完整回归通过，0 失败**，含运行目录与迁移路径安全拒绝用例；日志 `.build/test26-final-{arm,intel}.log`。Intel 筛选测试遇到 SwiftPM 宿主架构发现问题，后续使用完整未筛选的 Intel XCTest 复验通过。
+- `build/XD-VPN-1.1.19-test.26-macOS-arm64.dmg`，4,575,529 字节，SHA-256 `382b579eeef808d930992852220fa3958715118291a60badda926c9bfba2598f`。App 公证 `d25cb292-4d72-47f3-be58-9ba105e0dbc6`、DMG 公证 `4dd65ffd-2b06-4484-b7a9-5243dfeaf535` 均 Accepted、staple 成功；只读挂载后 Gatekeeper、签名、版本、架构及运行副本验证通过。记录 `.build/test26-verification.json`。
+- 已将 `/Applications/XD VPN.app` 原子替换为 test.26，原 test.25 备份为 `build/installed-backups/XD VPN-test25.app`。新 `probe` 命令使用实际双向签名 XPC 检查，确认后台服务已启动、构建一致且空闲。旧版退出 78 的记录不代表新进程仍失败。
+- 实机重新注册时观察到注销完成后立即 register 返回 Operation not permitted；后台日志显示 `disabled, allowed, notified`。正常界面再次启用成功，无新增批准要求。后续提交加入有限的状态同步重试，首次注册及批准／签名拒绝不重试。
+- 用户明确授权后，实际从连接页完成旧授权迁移。旧规则、旧助手、旧引擎三个固定目的路径均已不存在，恢复备份父目录为 root:wheel 0700；`probe` 确认 `legacyAuthorization=false`。配置和钥匙串不变。
+- 实际 `--service-command smoke` 通过：公司签名及构建匹配、独占空会话、断连清理、过期构建拒绝、清理后重新创建会话。日志 `.build/test26-installed-smoke.log` 与 `.build/test26-after-migration-probe.log`。实际界面服务提示隐藏、主按钮恢复「连接 VPN」，自动连接与开机启动均关闭。
+- 未启动真实 VPN 引擎、读取 VPN 密码或操作实际 Wi-Fi；网络连接、切换和退出时 DNS／路由还原仍需实网验收。未推送或发布正式 Release。
+
 ## 2026-09-07：新版界面本地测试包 test.25 公证完成
 
 - 产物：`build/XD-VPN-1.1.19-test.25-macOS-arm64.dmg`，4,570,206 字节；源提交 `9df6d5f61e13415983f9664ed0967957bd2474f1`。包含 SMAppService／XPC 新架构及独立授权页移除后的界面。测试渠道，不发布 GitHub Release。

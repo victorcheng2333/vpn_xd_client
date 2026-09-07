@@ -29,6 +29,8 @@ import VPNCore
             return 0
         } catch {
             fputs("System service: \(error.localizedDescription)\n", stderr)
+            let detail = error as NSError
+            fputs("Error domain: \(detail.domain), code: \(detail.code)\n", stderr)
             return 1
         }
     }
