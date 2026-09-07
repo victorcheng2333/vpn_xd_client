@@ -2,13 +2,13 @@
 
 ## 版本约定
 
-唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.19 / build 22**。
+唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.20 / build 29**。
 
 | 渠道 | 界面版本示例 | DMG | GitHub Release / 自动更新 |
 | --- | --- | --- | --- |
-| development | `1.1.19-dev.22` | 默认不打包 | 不发布、不参与正式更新 |
-| test | `1.1.19-test.23` | 文件名含 `-test.23` | 不发布、不参与正式更新 |
-| release | `1.1.19` | 文件名只含正式版本与芯片 | 仅 `v1.1.19` 正式标签 |
+| development | `1.1.20-dev.29` | 默认不打包 | 不发布、不参与正式更新 |
+| test | `1.1.20-test.30` | 文件名含 `-test.30` | 不发布、不参与正式更新 |
+| release | `1.1.20` | 文件名只含正式版本与芯片 | 仅 `v1.1.20` 正式标签 |
 
 开发／测试的构建号不占用正式版本，也不与正式版本比较大小。测试分发应显式使用新的构建号。正式版必须同时满足：标签匹配 plist、标签指向 HEAD、工作区干净、构建号匹配版本文件，且版本大于所有已发布的正式版本。不会回写或自动递增源文件。已发布版本禁止覆盖或降级；修复必须使用新版本。失败时仅能恢复尚未发布的同名草稿。
 
@@ -56,10 +56,10 @@ python3 -m unittest discover -s Tests/ReleaseTests -v
 bash scripts/test-packaging.sh
 
 # 默认 package 渠道为 test，必须给构建号；不会意外产出正式包
-BUILD_NUMBER=23 bash scripts/package.sh
+BUILD_NUMBER=30 bash scripts/package.sh
 
 # 只构建、分发一个芯片的公司签名测试包
-BUILD_CHANNEL=test BUILD_NUMBER=23 ARCHS=arm64 \
+BUILD_CHANNEL=test BUILD_NUMBER=30 ARCHS=arm64 \
   SIGNING_IDENTITY='Developer ID Application: Tools UG (KQY8A3BNVG)' \
   bash scripts/package.sh
 ```
@@ -68,21 +68,21 @@ BUILD_CHANNEL=test BUILD_NUMBER=23 ARCHS=arm64 \
 
 ## 本地打包、公证后上传 GitHub Release（默认流程）
 
-先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.19`；正式发布必须递增版本，不能把旧测试包重命名发布。
+先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.20`；正式发布必须递增版本，不能把旧测试包重命名发布。
 
 ```bash
 # 在已提交的版本提交上创建标签
-git tag -a v1.1.19 -m 'XD VPN 1.1.19'
+git tag -a v1.1.20 -m 'XD VPN 1.1.20'
 
 # 本地构建、测试、签名、公证、打包和复核，不上传 GitHub Release
-bash scripts/release.sh prepare v1.1.19
+bash scripts/release.sh prepare v1.1.20
 
 # 确保版本提交和标签均已推送到源仓库
 git push origin main
-git push origin v1.1.19
+git push origin v1.1.20
 
 # 仅上传已验证的产物，再将草稿发布为正式 Latest
-bash scripts/release.sh publish v1.1.19
+bash scripts/release.sh publish v1.1.20
 ```
 
 `prepare` 使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
@@ -109,7 +109,7 @@ Actions → Release → Run workflow，输入已有并已推送的正式标签�
 ## 单独本机正式打包
 
 ```bash
-BUILD_CHANNEL=release RELEASE_TAG=v1.1.19 \
+BUILD_CHANNEL=release RELEASE_TAG=v1.1.20 \
   NOTARY_KEYCHAIN_PROFILE=xdvpn-notary bash scripts/package.sh
 ```
 
@@ -117,9 +117,9 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.19 \
 
 ## 私有仓库与客户端更新
 
-默认源为 `victorcheng2333/vpn_xd_client`，目前是私有仓库。正式应用每次启动时检查距离上次成功检查是否超过 24 小时；菜单「检查更新…」可随时重试，侧栏版本号也可打开更新窗口。自动检查失败不打断 VPN。开发／测试应用不检查或安装正式更新。
+默认源为 `victorcheng2333/vpn_xd_client`，当前为公开仓库，可匿名检查和下载更新。正式应用每次启动时检查距离上次成功检查是否超过 24 小时；菜单「检查更新…」可随时重试，侧栏版本号也可打开更新窗口。自动检查失败不打断 VPN。开发／测试应用不检查或安装正式更新。
 
-使用者在更新窗口的「私有仓库访问设置」中保存自己的 GitHub fine-grained Token，只授予此仓库 **Contents: Read-only**。账户必须本来就有访问该仓库的权限，组织要求 SSO 时还需要授权。Token 仅进入本机钥匙串，使用独立于 VPN 密码的服务名称，不进入配置文件、日志或安装包；只向 `api.github.com` 发送，下载重定向到 GitHub CDN 时移除 Authorization。
+仅当改用私有发布仓库时，使用者需要在更新窗口的「私有仓库访问设置」中保存自己的 GitHub fine-grained Token，只授予此仓库 **Contents: Read-only**。账户必须本来就有访问该仓库的权限，组织要求 SSO 时还需要授权。Token 仅进入本机钥匙串，使用独立于 VPN 密码的服务名称，不进入配置文件、日志或安装包；只向 `api.github.com` 发送，下载重定向到 GitHub CDN 时移除 Authorization。
 
 客户端从 GitHub `/releases/latest` 读取正式版本，按数字比较版本，忽略草稿、预发布、同版本及更旧版本；根据运行中应用架构选取 DMG。检查资产名称、仓库 URL、大小及 GitHub 的 SHA-256 digest。下载到临时文件，流式复核大小和 SHA-256 后才移入「下载」中的独立目录，失败丢弃临时文件。网络失败、无权限、限流、校验错误均明确显示，不误报为最新版。
 

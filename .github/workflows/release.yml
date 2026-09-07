@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing stable tag, e.g. v1.1.19'
+        description: 'Existing stable tag, e.g. v1.1.20'
         required: true
         type: string
 permissions:
