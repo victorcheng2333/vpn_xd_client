@@ -106,6 +106,7 @@ class VersionTests(unittest.TestCase):
         with patch.dict(os.environ, {'RELEASE_TAG': version.metadata('development')['tag']}), \
              patch.object(sys, 'argv', ['github-release.py', 'publish']), \
              patch.object(release, 'validate', return_value=None), \
+             patch.object(release.Path, 'is_file', return_value=False), \
              patch.object(release, 'gh') as gh, \
              self.assertRaises(ValueError):
             release.main()
