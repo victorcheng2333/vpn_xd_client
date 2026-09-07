@@ -89,4 +89,38 @@ final class LegacyAuthorizationTests: XCTestCase {
             }
         }
     }
+    func testSystemGroupWritableLockDirectoryCanMigrateWithPrivateLocks() throws {
+        try fixture { root in
+            let run = root.appendingPathComponent("private/var/run")
+            chmod(run.path, 0o775)
+            var info = stat(); XCTAssertEqual(lstat(run.path, &info), 0)
+            var lease: SessionLease? = try SessionLease(path: run.appendingPathComponent("com.xd.vpn.501.lock").path, owner: getuid(), timeout: 0)
+            let migration = LegacyAuthorization(root: root, owner: getuid(), trustedRuntimeGroup: info.st_gid)
+            XCTAssertThrowsError(try migration.retire(), "Shared directory does not bypass the active-session lock")
+            withExtendedLifetime(lease) {}
+            lease = nil
+            try migration.retire()
+            XCTAssertFalse(migration.isPresent)
+        }
+    }
+
+    func testPublicUntrustedGroupAndLinkedLockDirectoriesRemainRejected() throws {
+        for kind in ["public", "untrusted-group", "symlink", "writable-lock"] {
+            try fixture { root in
+                let run = root.appendingPathComponent("private/var/run")
+                chmod(run.path, kind == "public" ? 0o777 : 0o775)
+                var info = stat(); XCTAssertEqual(lstat(run.path, &info), 0)
+                if kind == "symlink" {
+                    try FileManager.default.removeItem(at: run)
+                    try FileManager.default.createSymbolicLink(at: run, withDestinationURL: root)
+                } else if kind == "writable-lock" {
+                    let path = run.appendingPathComponent("com.xd.vpn.501.lock")
+                    try Data().write(to: path); chmod(path.path, 0o666)
+                }
+                let trustedGroup = kind == "untrusted-group" ? nil : Optional(info.st_gid)
+                XCTAssertThrowsError(try LegacyAuthorization(root: root, owner: getuid(), trustedRuntimeGroup: trustedGroup).retire(), kind)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: root.appendingPathComponent(rule).path))
+            }
+        }
+    }
 }

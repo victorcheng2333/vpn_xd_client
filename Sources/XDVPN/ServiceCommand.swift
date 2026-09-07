@@ -11,6 +11,13 @@ import VPNCore
             case "unregister": try await PrivilegeManager.uninstall()
             case "migrate": try await PrivilegeManager.migrate()
             case "status": break
+            case "probe":
+                let connection = HelperConnection(); defer { connection.close() }
+                let remote = try await connection.status()
+                guard remote.identity == (try HelperIdentity.read(bundle: Bundle.main.bundleURL)) else {
+                    throw VPNError.unavailable("运行中的服务与当前应用不匹配。")
+                }
+                print("Trusted XPC service responded: matching build, busy=\(remote.busy), legacyAuthorization=\(remote.legacyAuthorization). No VPN connection started.")
             case "verify-bundle":
                 let bundle = try ServiceBundle(url: Bundle.main.bundleURL)
                 try ServiceRuntime.verifyCopy(source: bundle)

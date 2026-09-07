@@ -59,4 +59,45 @@ final class ServiceRuntimeTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: another.directory.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
+
+    func testProtectedStorageWorksWithoutPrivateVarRunPermissions() throws {
+        let run = root.appendingPathComponent("run")
+        try FileManager.default.createDirectory(at: run, withIntermediateDirectories: false)
+        chmod(run.path, 0o775) // The actual macOS root:daemon runtime-directory mode.
+        XCTAssertThrowsError(try PrivateRuntimeCopy(source: source, parent: run, owner: geteuid()))
+        let storage = try RuntimeStorage.prepare(root: root, owner: geteuid())
+        XCTAssertEqual(storage.path, root.appendingPathComponent("PrivilegedHelperTools/com.xd.vpn.runtime").path)
+        let copy = try PrivateRuntimeCopy(source: source, parent: storage, owner: geteuid())
+        XCTAssertEqual(try String(contentsOf: copy.app.appendingPathComponent("engine")), "original")
+        var info = stat(); XCTAssertEqual(lstat(storage.path, &info), 0)
+        XCTAssertEqual(info.st_uid, geteuid())
+        XCTAssertEqual(info.st_mode & 0o777, 0o700)
+        XCTAssertEqual(try RuntimeStorage.prepare(root: root, owner: geteuid()), storage)
+    }
+
+    func testStorageRejectsUnsafeAncestorAndSymlinkWithoutChangingIt() throws {
+        chmod(root.path, 0o775)
+        XCTAssertThrowsError(try RuntimeStorage.prepare(root: root, owner: geteuid()))
+        chmod(root.path, 0o700)
+        let shared = root.appendingPathComponent("PrivilegedHelperTools")
+        try FileManager.default.createSymbolicLink(at: shared, withDestinationURL: source)
+        XCTAssertThrowsError(try RuntimeStorage.prepare(root: root, owner: geteuid()))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.appendingPathComponent("com.xd.vpn.runtime").path))
+    }
+
+    func testStorageRejectsAnExistingPublicRuntimeDirectory() throws {
+        let storage = try RuntimeStorage.prepare(root: root, owner: geteuid())
+        chmod(storage.path, 0o755)
+        XCTAssertThrowsError(try RuntimeStorage.prepare(root: root, owner: geteuid()))
+        var info = stat(); XCTAssertEqual(lstat(storage.path, &info), 0)
+        XCTAssertEqual(info.st_mode & 0o777, 0o755, "Do not silently change an unexpected existing directory")
+    }
+
+    func testProductionStorageAnchorIsActuallyRootOwnedAndProtected() {
+        var info = stat()
+        XCTAssertEqual(lstat(RuntimeStorage.systemRoot.path, &info), 0)
+        XCTAssertEqual(info.st_uid, 0)
+        XCTAssertEqual(info.st_mode & S_IFMT, S_IFDIR)
+        XCTAssertEqual(info.st_mode & 0o022, 0)
+    }
 }

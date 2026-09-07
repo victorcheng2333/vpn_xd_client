@@ -8,9 +8,15 @@ public struct LegacyAuthorization {
     private let owner: uid_t
     private let beforeMove: (String) throws -> Void
     private let processIsActive: () -> Bool
-    public init() { self.init(root: URL(fileURLWithPath: "/"), owner: 0, processIsActive: Self.hasRunningLegacyProcess) }
-    init(root: URL, owner: uid_t, beforeMove: @escaping (String) throws -> Void = { _ in }, processIsActive: @escaping () -> Bool = { false }) {
+    private let trustedRuntimeGroup: gid_t?
+    public init() {
+        self.init(root: URL(fileURLWithPath: "/"), owner: 0,
+                  trustedRuntimeGroup: getgrnam("daemon").map { $0.pointee.gr_gid }, processIsActive: Self.hasRunningLegacyProcess)
+    }
+    init(root: URL, owner: uid_t, trustedRuntimeGroup: gid_t? = nil,
+         beforeMove: @escaping (String) throws -> Void = { _ in }, processIsActive: @escaping () -> Bool = { false }) {
         self.root = root; self.owner = owner; self.beforeMove = beforeMove; self.processIsActive = processIsActive
+        self.trustedRuntimeGroup = trustedRuntimeGroup
     }
     private let paths = ["private/etc/sudoers.d/xd-vpn-astra", "Library/PrivilegedHelperTools/com.xd.vpn.helper",
                          "Library/PrivilegedHelperTools/com.xd.vpn.openconnect"]
@@ -37,7 +43,7 @@ public struct LegacyAuthorization {
         // Hold every legacy per-user lease while withdrawing the shared rule.
         // A live old helper keeps its lease through all network cleanup.
         let run = root.appendingPathComponent("private/var/run")
-        try validateParents(run)
+        try validateLockDirectory(run)
         func leaseNames() throws -> [String] { try fm.contentsOfDirectory(atPath: run.path).filter {
             $0.range(of: "\\Acom\\.xd\\.vpn\\.[0-9]+\\.lock\\z", options: .regularExpression) != nil
         } }
@@ -102,6 +108,19 @@ public struct LegacyAuthorization {
         while path.path != root.path && path.path != "/" {
             try validateEntry(path, directory: true)
             path.deleteLastPathComponent()
+        }
+    }
+    private func validateLockDirectory(_ url: URL) throws {
+        try validateParents(url.deletingLastPathComponent())
+        var value = stat()
+        // macOS may expose this shared directory as root:daemon 0775. It
+        // contains only legacy locks here, never executable runtime copies.
+        // SessionLease still checks each opened fd: owner, 0600, one link,
+        // regular file and O_NOFOLLOW. Active-process checks bracket migration.
+        guard lstat(url.path, &value) == 0, value.st_uid == owner,
+              value.st_mode & S_IFMT == S_IFDIR, value.st_mode & 0o002 == 0,
+              value.st_mode & 0o020 == 0 || trustedRuntimeGroup == value.st_gid else {
+            throw VPNError.unavailable("旧会话锁目录的路径或权限异常。")
         }
     }
     private func validateTree(_ url: URL) throws {
