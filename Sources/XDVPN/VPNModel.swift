@@ -82,6 +82,7 @@ struct ActivityEntry: Identifiable {
     private let recoveryDelay: Duration
     private let recoveryTimeout: Duration
     private let recoveryCooldown: Duration
+    private let recoverySleep: @Sendable (Duration) async throws -> Void
 
     var readyToConnect: Bool { profile != nil && hasPassword }
     var canEdit: Bool { !state.isActive }
@@ -114,12 +115,14 @@ struct ActivityEntry: Identifiable {
          credentials: CredentialAccess = .live, startMonitoring: Bool = true, resumeAutomatically: Bool = true,
          recoveryDelay: Duration = .seconds(1), recoveryTimeout: Duration = .seconds(3),
          recoveryCooldown: Duration = .seconds(3),
+         recoverySleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
          activityLog: RollingActivityLog? = nil, privileges: PrivilegeAccess? = nil,
          engineLocator: @escaping () -> String? = { OpenConnect.executable }) {
         self.defaults = defaults
         self.activityLog = activityLog
         self.recoveryDelay = recoveryDelay; self.recoveryTimeout = recoveryTimeout
         self.recoveryCooldown = recoveryCooldown
+        self.recoverySleep = recoverySleep
         self.bridge = bridge ?? HelperBridge()
         self.credentials = credentials
         self.engineLocator = engineLocator
@@ -509,8 +512,8 @@ struct ActivityEntry: Identifiable {
         state = .reconnecting
         guard tunnelEstablished, networkAvailable, !sleeping,
               recoveryDeadline == nil else { return }
-        recoveryDeadline = Task { [weak self, recoveryTimeout] in
-            do { try await Task.sleep(for: recoveryTimeout) } catch { return }
+        recoveryDeadline = Task { [weak self, recoveryTimeout, recoverySleep] in
+            do { try await recoverySleep(recoveryTimeout) } catch { return }
             guard !Task.isCancelled, let self else { return }
             self.recoveryDeadline = nil
             guard self.desiredConnection, self.state == .reconnecting,

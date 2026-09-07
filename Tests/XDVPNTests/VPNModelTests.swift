@@ -2,6 +2,23 @@ import XCTest
 import VPNCore
 @testable import XDVPN
 
+private actor ControlledRecoverySleep {
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func sleep() async {
+        guard !released else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func finish() {
+        released = true
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending { waiter.resume() }
+    }
+}
+
 @MainActor private final class FakeHelper: HelperControlling {
     var onEvent: ((HelperEvent) -> Void)?
     var onClose: (() -> Void)?
@@ -46,13 +63,15 @@ import VPNCore
         try model.save(VPNProfile(username: "alice"), password: "unit-test-password")
     }
 
-    private func configureModel(recoveryTimeout: Duration = .seconds(10)) {
+    private func configureModel(recoveryTimeout: Duration = .seconds(10),
+                                recoverySleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         // Most tests exercise state transitions, not timeout expiration. Keep
         // that deadline outside waitUntil's budget; deadline tests opt into a
         // short timeout explicitly. Production timing remains unchanged.
         model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
                          recoveryDelay: .milliseconds(20), recoveryTimeout: recoveryTimeout,
-                         recoveryCooldown: .milliseconds(150), engineLocator: { "/fake/openconnect" })
+                         recoveryCooldown: .milliseconds(150), recoverySleep: recoverySleep,
+                         engineLocator: { "/fake/openconnect" })
     }
 
     override func tearDown() async throws {
@@ -867,14 +886,25 @@ import VPNCore
     }
 
     func testRepeatedDeadPeerAndNetworkEventsCannotPostponeRecoveryDeadline() async {
-        configureModel(recoveryTimeout: .milliseconds(200))
+        let sleeper = ControlledRecoverySleep()
+        defer { Task { await sleeper.finish() } }
+        let armed = expectation(description: "one recovery deadline for the entire episode")
+        armed.assertForOverFulfill = true
+        configureModel(recoveryTimeout: .seconds(3), recoverySleep: { duration in
+            XCTAssertEqual(duration, .seconds(3))
+            armed.fulfill()
+            await sleeper.sleep()
+        })
         model.setAutoConnect(true); model.connect(); await letConnectRun()
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer detected"))
-        try? await Task.sleep(for: .milliseconds(120))
+        await fulfillment(of: [armed], timeout: 3)
         helper.onEvent?(.init(.reconnecting, "retry still failing"))
         model.physicalNetworkChanged()
-        try? await Task.sleep(for: .milliseconds(140))
+        await waitUntil { helper.commands.last?.kind == .reconnect }
+        XCTAssertEqual(model.state, .reconnecting)
+        await sleeper.finish()
+        await waitUntil { model.state == .disconnecting }
         XCTAssertEqual(model.state, .disconnecting)
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
     }
