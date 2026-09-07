@@ -82,6 +82,8 @@ jobs:
           if [ "$ARCHS" = arm64 ]; then
             tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
           fi
+      # Internal build artifacts include checksums and source archives.
+      # github-release.py publishes only the two architecture DMGs.
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}

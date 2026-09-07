@@ -77,7 +77,7 @@ class VersionTests(unittest.TestCase):
                 (root / 'release-notes.md').write_text('Release notes')
                 assets = [dict(name=file.name, size=file.stat().st_size,
                                digest='sha256:' + hashlib.sha256(file.read_bytes()).hexdigest())
-                          for file in root.iterdir() if file.name != 'release-notes.md']
+                          for file in root.iterdir() if file.suffix == '.dmg']
                 draft = dict(tag_name=data['tag'], draft=True, prerelease=False, assets=assets)
                 for valid in (True, False):
                     if not valid:
@@ -93,6 +93,9 @@ class VersionTests(unittest.TestCase):
                             release.main()
                             operations = [call.args[1] for call in gh.call_args_list]
                             self.assertEqual(operations, ['create', 'upload', 'edit', 'view'])
+                            self.assertEqual(gh.call_args_list[1].args,
+                                             ('release', 'upload', data['tag'], '--repo', data['repository'],
+                                              '--clobber', *[str(root / name) for name in names]))
                             self.assertIn('--draft=false', gh.call_args_list[2].args)
                             verify.assert_called_once()
                         else:

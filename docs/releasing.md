@@ -87,9 +87,9 @@ bash scripts/release.sh publish v1.1.19
 
 `prepare` 使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
 
-最终产物包括两种芯片的 `XD-VPN-<版本>-macOS-<架构>.dmg`、两个 `.dmg.sha256`、`third-party-sources.tar.gz` 和本地 `build/release-notes.md`。本地构建默认不自动建立标签、不提交代码，也不上传 Release。
+Release 仅上传两种芯片的 `XD-VPN-<版本>-macOS-<架构>.dmg`。两个 `.dmg.sha256`、`third-party-sources.tar.gz` 和 `build/release-notes.md` 保留为本地／Actions 构建产物，不作为 Release 附件上传。GitHub 自动生成的 Source code ZIP／tar.gz 链接仍会显示。本地构建默认不自动建立标签、不提交代码，也不上传 Release。
 
-`publish` 再次核对当前版本／标签／提交以及安装包内嵌信息，验证真实公证票据和公司签名，再创建草稿、上传完整产物并比较 GitHub 资产 digest。全部通过才设为正式 Latest。已发布版本不可覆盖；失败时仅可重试未发布的同名草稿。发布说明记录源码提交。第三方源码包提供对应 OpenConnect／OpenSSL／vpnc-script 源码，重建脚本位于同一标签的源码仓库。
+`publish` 再次核对当前版本／标签／提交以及安装包内嵌信息，验证真实公证票据和公司签名，再创建草稿、上传两份 DMG 并比较 GitHub 资产 digest。全部通过才设为正式 Latest。客户端直接使用 DMG 的 GitHub digest 校验更新下载，不依赖独立的校验文件。已发布版本不可覆盖；失败时仅可重试未发布的同名草稿。发布说明记录源码提交。构建归档中的第三方源码包提供对应 OpenConnect／OpenSSL／vpnc-script 源码，重建脚本位于同一标签的源码仓库。
 
 ## GitHub Actions 发布（手动备用流程）
 

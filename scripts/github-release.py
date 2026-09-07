@@ -54,12 +54,12 @@ def main():
         print(json.dumps(data)); return
     root = Path('build')
     names = [f'XD-VPN-{data["version"]}-macOS-{arch}.dmg' for arch in ('arm64', 'x86_64')]
-    names += [name + '.sha256' for name in names]
-    names += ['third-party-sources.tar.gz']
     files = [root / name for name in names]
-    if any(not file.is_file() or file.stat().st_size == 0 for file in files):
-        raise ValueError('Both architecture DMGs, checksums and corresponding third-party sources are required.')
-    for name in names[:2]:
+    # Checksums remain local build inputs; only installers appear in Releases.
+    required = files + [root / (name + '.sha256') for name in names]
+    if any(not file.is_file() or file.stat().st_size == 0 for file in required):
+        raise ValueError('Both architecture DMGs and local checksums are required.')
+    for name in names:
         expected = f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n'
         if (root / (name + '.sha256')).read_text() != expected:
             raise ValueError(f'Checksum mismatch: {name}')
