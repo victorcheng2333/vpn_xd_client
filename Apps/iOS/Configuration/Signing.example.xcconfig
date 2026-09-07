@@ -1,0 +1,4 @@
+// Copy to Signing.local.xcconfig and replace with your Apple Developer Team.
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+XDVPN_BUNDLE_ID = com.yourcompany.xdvpn.validation
+XDVPN_APP_GROUP = group.com.yourcompany.xdvpn.validation
