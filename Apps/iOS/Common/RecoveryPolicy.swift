@@ -28,6 +28,7 @@ struct RecoveryPolicy: Codable {
 }
 
 struct DiagnosticSnapshot: Codable {
+    var qualityStorageIssue: String?
     var phase = "尚未连接"
     var address = "—"
     var transport = "—"

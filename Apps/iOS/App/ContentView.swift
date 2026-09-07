@@ -3,6 +3,11 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: VPNModel
     @Environment(\.scenePhase) private var scenePhase
+    #if targetEnvironment(simulator)
+    @State private var selectedTab = ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("--preview-quality") } ? 2 : 0
+    #else
+    @State private var selectedTab = 0
+    #endif
     private let brand = Color(hex: 0x227858)
     private var connectionAppearance: ConnectionAppearance {
         if model.startingConnection { return .connecting }
@@ -14,7 +19,7 @@ struct ContentView: View {
         }
     }
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             NavigationStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
@@ -27,7 +32,7 @@ struct ContentView: View {
                             ConnectionOrbitView(appearance: connectionAppearance)
                                 .frame(height: 160)
                             Text(model.title).font(.largeTitle.bold()).foregroundStyle(connectionAppearance.color)
-                            Text(model.active ? "系统 VPN 状态；内网访问可在诊断页验证。" : "连接公司网络，验证移动端恢复能力。")
+                            Text(model.active ? "连接状态和恢复记录可在连接质量页查看。" : "连接公司网络，验证移动端恢复能力。")
                                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                             Button {
                                 Task { if model.active || model.onDemandActive { await model.disconnect() } else { await model.connect() } }
@@ -54,7 +59,7 @@ struct ContentView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }.padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
                 }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("XD VPN")
-            }.tabItem { Label("连接", systemImage: "shield") }
+            }.tabItem { Label("连接", systemImage: "shield") }.tag(0)
             NavigationStack {
                 Form {
                     Section("VPN 配置") {
@@ -72,26 +77,10 @@ struct ContentView: View {
                     } footer: { Text("密码保存在本机钥匙串，首次解锁后可供隧道后台读取。首版支持 AnyConnect 用户名/密码认证，暂不支持 SSO、MFA、客户端证书及终端合规检查。") }
                     if let message = model.message { Section { Text(message).font(.footnote).foregroundStyle(.secondary) } }
                 }.navigationTitle("设置")
-            }.tabItem { Label("设置", systemImage: "slider.horizontal.3") }
+            }.tabItem { Label("设置", systemImage: "slider.horizontal.3") }.tag(1)
             NavigationStack {
-                List {
-                    Section("连接诊断") {
-                        row("系统状态", model.title)
-                        row("最近事件", model.snapshot.phase)
-                        row("诊断更新时间", model.snapshot.updatedAt.formatted(date: .abbreviated, time: .standard))
-                        row("最近观测传输", model.snapshot.transport)
-                        row("上行 / 下行包", "\(model.snapshot.packetsToTunnel) / \(model.snapshot.packetsFromTunnel)")
-                        row("桥接丢弃包", "\(model.snapshot.droppedPackets)")
-                        Button("刷新诊断") { Task { await model.refreshDiagnostics() } }
-                    }
-                    Section("恢复事件") {
-                        ForEach(Array(model.snapshot.events.enumerated().reversed()), id: \.offset) { _, event in
-                            Text(event).font(.caption.monospaced()).textSelection(.enabled)
-                        }
-                        ShareLink(item: model.report) { Label("分享诊断报告", systemImage: "square.and.arrow.up") }
-                    }
-                }.navigationTitle("诊断")
-            }.tabItem { Label("诊断", systemImage: "waveform.path.ecg") }
+                ConnectionQualityView(model: model, isVisible: selectedTab == 2)
+            }.tabItem { Label("连接质量", systemImage: "chart.xyaxis.line") }.tag(2)
         }.tint(brand).onChange(of: scenePhase) { _, value in
             if value == .active { Task { await model.load() } }
         }

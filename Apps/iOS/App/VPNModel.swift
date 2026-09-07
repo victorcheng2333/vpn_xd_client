@@ -14,6 +14,12 @@ final class VPNModel: ObservableObject {
     @Published private(set) var onDemandActive = false
     @Published var message: String?
     @Published private(set) var snapshot = DiagnosticSnapshot()
+    @Published private(set) var quality = ConnectionQuality()
+    @Published private(set) var qualityIntent: QualityIntent?
+    @Published private(set) var qualityReadIssue: String?
+    @Published private(set) var qualityIntentIssue: String?
+    @Published private(set) var recoveryBlockedReason: String?
+    private var didLoadQualityPreview = false
     private var didLoadProfile = false
     private var loading = false
     private var autoConnectUpdate: Task<Void, Never>?
@@ -56,6 +62,32 @@ final class VPNModel: ObservableObject {
     }
     func load() async {
         #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--preview-quality"), !didLoadQualityPreview {
+            didLoadQualityPreview = true
+            let now = QualityInstant.now()
+            func sample(_ offset: Double) -> QualityInstant {
+                QualityInstant(date: now.date.addingTimeInterval(offset), continuous: now.continuous + offset, boot: now.boot)
+            }
+            let first = QualityIntent()
+            quality.providerStarted(intent: first, at: sample(-180))
+            quality.connected(at: sample(-178))
+            quality.recover(reason: .network, at: sample(-120))
+            quality.connected(at: sample(-108))
+            quality.recover(reason: .sessionExpired, at: sample(-70))
+            quality.fail(reason: .authentication, at: sample(-65))
+            let current = QualityIntent()
+            qualityIntent = current
+            quality.providerStarted(intent: current, at: sample(-35))
+            quality.connected(at: sample(-33))
+            quality.recover(reason: .network, at: sample(-15))
+            quality.connected(at: sample(-13))
+            status = .connected
+            profile.autoConnect = true
+            onDemandActive = true
+            snapshot.transport = "TLS"
+            snapshot.phase = "已连接"
+            snapshot.events = ["模拟器预览：断网后恢复成功", "模拟器预览：认证失败", "模拟器预览：重新连接成功"]
+        }
         if ProcessInfo.processInfo.arguments.contains("--preview-connecting") { status = .connecting }
         if ProcessInfo.processInfo.arguments.contains("--preview-connected") { status = .connected }
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
@@ -90,6 +122,7 @@ final class VPNModel: ObservableObject {
         await perform {
             try await self.saveConfiguration()
             guard let manager = self.manager else { throw ConfigurationError.invalid("VPN 配置尚未保存。") }
+            self.writeQualityIntent(connecting: true)
             try self.store.write(RecoveryPolicy(), name: "recovery")
             manager.isOnDemandEnabled = self.profile.automaticConnectionEnabled
             try await manager.saveToPreferences()
@@ -162,6 +195,7 @@ final class VPNModel: ObservableObject {
             try await manager.saveToPreferences()
             try await manager.loadFromPreferences()
             guard !manager.isOnDemandEnabled else { throw ConfigurationError.invalid("无法关闭自动连接，请在系统 VPN 设置中关闭后再断开。") }
+            self.writeQualityIntent(connecting: false)
             manager.connection.stopVPNTunnel()
             self.message = nil
         }
@@ -214,8 +248,11 @@ final class VPNModel: ObservableObject {
         message = "配置已保存，点击连接开始验证。"
     }
     func refreshDiagnostics() async {
+        refreshQuality()
+        recoveryBlockedReason = nil
         if let saved = try? store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot()) { snapshot = saved }
         if let policy = try? store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy()), let reason = policy.blockedReason {
+            recoveryBlockedReason = reason
             message = "自动连接已暂停：" + reason
         }
         guard let session = manager?.connection as? NETunnelProviderSession, [.connected, .reasserting].contains(session.status) else { return }
@@ -225,6 +262,47 @@ final class VPNModel: ObservableObject {
                 Task { @MainActor in self?.snapshot = snapshot }
             }
         } catch { /* Persisted diagnostics remain available if IPC is interrupted. */ }
+    }
+
+    private func writeQualityIntent(connecting: Bool) {
+        do {
+            let previous = try store.read(QualityIntent?.self, name: "quality-intent", fallback: nil)
+            var intent = connecting ? QualityIntent() : (previous ?? QualityIntent(id: quality.session?.id ?? UUID()))
+            if connecting, let previous, !previous.enabled, let stoppedAt = previous.changedAt {
+                intent.previousStop = QualityIntent.Stop(id: previous.id, at: stoppedAt)
+            }
+            intent.enabled = connecting
+            intent.changedAt = .now()
+            try store.write(intent, name: "quality-intent")
+            qualityIntent = intent
+            qualityIntentIssue = nil
+        } catch {
+            // Diagnostics must never prevent a user from connecting or disconnecting.
+            qualityIntentIssue = "本次操作的统计标记未保存，相关记录可能不完整。"
+        }
+    }
+    private func refreshQuality() {
+        #if targetEnvironment(simulator)
+        return // Simulator has no signed shared container or real VPN statistics.
+        #else
+        do {
+            let saved = try store.read(ConnectionQuality.self, name: "quality", fallback: ConnectionQuality())
+            guard saved.version == 1 else { throw ConfigurationError.invalid("未知统计版本") }
+            quality = saved
+            qualityIntent = try store.read(QualityIntent?.self, name: "quality-intent", fallback: nil)
+            qualityReadIssue = nil
+        } catch {
+            qualityReadIssue = "连接统计暂时无法读取，当前数据可能不完整。"
+        }
+        #endif
+    }
+    var qualityStorageIssue: String? {
+        qualityReadIssue ?? qualityIntentIssue ?? snapshot.qualityStorageIssue
+    }
+    var automaticRecoveryStatus: String {
+        if recoveryBlockedReason != nil { return "已暂停，需处理异常" }
+        if !profile.automaticConnectionEnabled { return "已关闭" }
+        return onDemandActive ? "已启用" : "下次手动连接后启用"
     }
     #if DEBUG
     private var debugValidationStarted = false
@@ -241,7 +319,8 @@ final class VPNModel: ObservableObject {
                                       "autoConnect": profile.automaticConnectionEnabled, "automaticConnectionActive": onDemandActive,
                                       "phase": snapshot.phase, "transport": snapshot.transport,
                                       "packetsToTunnel": snapshot.packetsToTunnel,
-                                      "packetsFromTunnel": snapshot.packetsFromTunnel]
+                                      "packetsFromTunnel": snapshot.packetsFromTunnel,
+                                      "quality": (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(quality))) ?? [:]]
             if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
                let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
                 try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -252,6 +331,15 @@ final class VPNModel: ObservableObject {
     }
     #endif
     var report: String {
-        "XD VPN iOS 0.1 验证报告\n系统状态：\(title)\n事件时间：\(snapshot.updatedAt)\n传输：\(snapshot.transport)\n上行包：\(snapshot.packetsToTunnel) 下行包：\(snapshot.packetsFromTunnel) 丢弃包：\(snapshot.droppedPackets)\n" + snapshot.events.joined(separator: "\n")
+        let now = QualityInstant.now()
+        let current = quality.display(intent: qualityIntent, at: now)
+        let success = current.count(.recoverySucceeded, at: now.date)
+        let failure = current.count(.recoveryFailed, at: now.date)
+        let cancelled = current.count(.recoveryCancelled, at: now.date)
+        let last = current.lastRecovery(at: now.date)
+        let duration = last?.duration.map { String(format: "%.1f 秒", $0) } ?? (last == nil ? "暂无记录" : "未完整记录")
+        let summary = "最近 24 小时恢复：成功 \(success) 次 / 失败 \(failure) 次 / 取消 \(cancelled) 次\n最近恢复耗时：\(duration)\n自动恢复：\(automaticRecoveryStatus)\n"
+        return "XD VPN iOS 0.1 验证报告\n系统状态：\(title)\n事件时间：\(snapshot.updatedAt)\n传输：\(snapshot.transport)\n上行包：\(snapshot.packetsToTunnel) 下行包：\(snapshot.packetsFromTunnel) 丢弃包：\(snapshot.droppedPackets)\n"
+            + summary + (qualityStorageIssue.map { $0 + "\n" } ?? "") + snapshot.events.joined(separator: "\n")
     }
 }

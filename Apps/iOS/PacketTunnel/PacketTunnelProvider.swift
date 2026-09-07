@@ -42,6 +42,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var timer: DispatchSourceTimer?
     private let store = SharedStore()
     private var lastSettingsError: Error?
+    private var quality = ConnectionQuality()
+    private var savedQuality: ConnectionQuality?
 
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         queue.async {
@@ -54,6 +56,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             self.pathSignature = nil
             self.lastSettingsError = nil
             self.startReply = completionHandler
+            self.beginQuality()
             do {
                 guard let proto = self.protocolConfiguration as? NETunnelProviderProtocol, let reference = proto.passwordReference else {
                     throw ConfigurationError.invalid("缺少 VPN 配置或密码，请在 App 中保存。")
@@ -74,7 +77,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.timer = timer; timer.resume()
                 self.queue.asyncAfter(deadline: .now() + 90) { [weak self] in
                     guard let self, self.sessionSerial == session, self.startReply != nil else { return }
-                    self.finish(ConfigurationError.invalid("首次连接超时，请检查网络、网关和认证方式。"))
+                    self.finish(ConfigurationError.invalid("首次连接超时，请检查网络、网关和认证方式。"), qualityReason: .timeout)
                 }
             } catch { self.finish(error) }
         }
@@ -82,10 +85,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func startAttempt() {
         guard !stopping, engine == nil, let profile, let passwordReference else { return }
         retry = nil
+        var failureReason: QualityReason = .configuration
         do {
             var policy = try store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy())
             do { try policy.begin(now: Date()) }
-            catch { try store.write(policy, name: "recovery"); throw error }
+            catch { failureReason = .retryLimit; try store.write(policy, name: "recovery"); throw error }
             try store.write(policy, name: "recovery")
             let password = try KeychainStore.read(passwordReference)
             let engine = OCEngine(server: profile.server, username: profile.username, password: password, group: profile.group, useDTLS: profile.useDTLS)
@@ -105,7 +109,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 })
                 self.queue.async { self.attemptFinished(engine: engine, result: result, token: token) }
             }
-        } catch { blockAutomatic(error.localizedDescription); finish(error) }
+        } catch { blockAutomatic(error.localizedDescription); finish(error, qualityReason: failureReason) }
     }
     private func apply(_ dictionary: [String: Any], fd: Int32, token: Int, reply: SettingsReply) {
         guard token == generation, !stopping, reply.pending else { reply.finish(false); return }
@@ -168,10 +172,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         switch event {
         case "authenticating": record("正在认证")
         case "establishing": record("正在建立隧道")
-        case "recovering": snapshot.transport = "恢复中"; reasserting = startReply == nil; record(available ? "正在恢复连接" : "等待网络")
+        case "recovering":
+            quality.recover(reason: available ? .transport : .network, at: .now())
+            snapshot.transport = "恢复中"; reasserting = startReply == nil
+            record(available ? "正在恢复连接" : "等待网络")
         case "tls": snapshot.transport = "TLS"; saveSnapshot()
         case "dtls": snapshot.transport = "DTLS"; saveSnapshot()
         case "connected":
+            quality.connected(at: .now())
             reasserting = false
             if snapshot.transport != "DTLS" { snapshot.transport = "TLS" }
             record("已连接")
@@ -186,13 +194,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         settingsReply?.finish(false); settingsReply = nil
         if stopping { completeStop(); return }
         let error: Error
-        if engine.certificateFailed { error = ConfigurationError.invalid(engine.certificateFailureDetail) }
+        let failureReason: QualityReason
+        if engine.certificateFailed { failureReason = .certificate; error = ConfigurationError.invalid(engine.certificateFailureDetail) }
         else if RecoveryPolicy.requiresCredentialCheck(result: result, authenticationFailed: engine.authenticationFailed,
                                                      authenticationCompleted: engine.authenticationCompleted) {
+            failureReason = .authentication
             error = ConfigurationError.invalid("认证被拒绝。请检查密码；验证版暂不支持 MFA/SSO。")
         }
-        else if engine.settingsFailed { error = lastSettingsError ?? ConfigurationError.invalid("隧道网络配置失败或超时。") }
+        else if engine.settingsFailed { failureReason = .configuration; error = lastSettingsError ?? ConfigurationError.invalid("隧道网络配置失败或超时。") }
         else {
+            quality.recover(reason: engine.authenticationCompleted && result == -Int(EPERM) ? .sessionExpired : (available ? .transport : .network), at: .now())
             reasserting = startReply == nil
             record(engine.authenticationCompleted && result == -Int(EPERM)
                    ? "会话已失效，准备重新认证"
@@ -204,7 +215,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             retry = job; queue.asyncAfter(deadline: .now() + 3 + Double.random(in: 0...1), execute: job)
             return
         }
-        blockAutomatic(error.localizedDescription); finish(error)
+        blockAutomatic(error.localizedDescription); finish(error, qualityReason: failureReason)
     }
     private func pathChanged(_ path: Network.NWPath) {
         guard !stopping else { return }
@@ -214,6 +225,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         let hadPath = pathSignature != nil
         pathSignature = signature
         available = path.status != .unsatisfied
+        quality.networkAvailable(available, at: .now())
+        persistQuality()
         pathUpdate?.cancel()
         let job = DispatchWorkItem { [weak self] in
             guard let self, !self.stopping else { return }
@@ -230,12 +243,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func wake() {
         queue.async {
             guard !self.stopping else { return }
+            self.quality.recover(reason: .wake, at: .now())
             self.record("系统唤醒", updatePhase: false)
             self.engine?.updateNetworkAvailable(self.available, reconnect: true)
         }
     }
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         queue.async {
+            self.qualityStopped(reason)
             self.record("系统停止隧道（\(reason.rawValue)）")
             self.stopReplies.append(completionHandler)
             self.stopping = true; self.cancelWork()
@@ -245,8 +260,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             if self.engine == nil { self.completeStop() }
         }
     }
-    private func finish(_ error: Error) {
+    private func finish(_ error: Error, qualityReason: QualityReason = .configuration) {
         guard !stopping else { return }
+        quality.fail(reason: qualityReason, at: .now())
         stopping = true; record(error.localizedDescription); cancelWork(); engine?.cancel()
         let completion = startReply; startReply = nil
         if let completion { completion(error) }
@@ -279,6 +295,52 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
         }
     }
+
+    private func beginQuality() {
+        do {
+            quality = try store.read(ConnectionQuality.self, name: "quality", fallback: ConnectionQuality())
+            guard quality.version == 1 else { throw ConfigurationError.invalid("未知统计版本") }
+        } catch {
+            quality = ConnectionQuality()
+            quality.incomplete = true
+        }
+        savedQuality = nil
+        let intent = try? store.read(QualityIntent?.self, name: "quality-intent", fallback: nil)
+        quality.providerStarted(intent: intent, at: .now())
+        persistQuality()
+    }
+    private func persistQuality() {
+        guard quality != savedQuality else { return }
+        do {
+            try store.write(quality, name: "quality")
+            savedQuality = quality
+            snapshot.qualityStorageIssue = nil
+        } catch {
+            snapshot.qualityStorageIssue = "连接统计保存失败，部分记录可能缺失。"
+        }
+    }
+    private func qualityStopped(_ reason: NEProviderStopReason) {
+        let now = QualityInstant.now()
+        let intent = try? store.read(QualityIntent?.self, name: "quality-intent", fallback: nil)
+        if reason == .userInitiated || (intent?.enabled == false && intent?.id == quality.session?.id) {
+            quality.stop(reason: .user, at: now)
+            return
+        }
+        switch reason {
+        case .noNetworkAvailable, .unrecoverableNetworkChange:
+            quality.recover(reason: .network, at: now)
+        case .sleep:
+            quality.recover(reason: .wake, at: now)
+        case .providerFailed, .connectionFailed:
+            quality.fail(reason: .transport, at: now)
+        case .configurationFailed:
+            quality.fail(reason: .configuration, at: now)
+        case .none:
+            quality.recover(reason: .system, at: now, startKnown: false)
+        default:
+            quality.stop(reason: .system, at: now)
+        }
+    }
     private func record(_ event: String, updatePhase: Bool = true) {
         if updatePhase { snapshot.phase = event }
         let stamp = ISO8601DateFormatter().string(from: Date())
@@ -286,6 +348,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         snapshot.events = Array(snapshot.events.suffix(64)); saveSnapshot()
     }
     private func saveSnapshot() {
+        persistQuality()
         snapshot.updatedAt = Date()
         if let pump {
             snapshot.packetsToTunnel = pump.sent; snapshot.packetsFromTunnel = pump.received; snapshot.droppedPackets = pump.dropped

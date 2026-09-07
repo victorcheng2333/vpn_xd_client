@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .build/tests
 xcrun swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" -module-cache-path "$PWD/.build/tests/module-cache" \
-  Common/VPNProfile.swift Common/VPNProfile+AutoConnect.swift Common/NetworkPlan.swift Common/PacketCodec.swift Common/RecoveryPolicy.swift Tests/main.swift \
+  Common/VPNProfile.swift Common/VPNProfile+AutoConnect.swift Common/NetworkPlan.swift Common/PacketCodec.swift Common/RecoveryPolicy.swift Common/ConnectionQuality.swift Tests/main.swift \
   -o .build/tests/ios-logic-tests
 .build/tests/ios-logic-tests
 python3 - <<'PY'
