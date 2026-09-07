@@ -33,11 +33,12 @@ for folder in ['App','Common','PacketTunnel','OpenConnectAdapter','Configuration
             relative=str(path.relative_to(root))
             types={'.swift':'sourcecode.swift','.m':'sourcecode.c.objc','.h':'sourcecode.c.h','.xcconfig':'text.xcconfig','.plist':'text.plist.xml','.entitlements':'text.plist.entitlements'}
             files[relative]=obj('file:'+relative,'PBXFileReference',lastKnownFileType=types.get(path.suffix,'text'),path=relative,sourceTree='SOURCE_ROOT')
+assets=obj('assets','PBXFileReference',lastKnownFileType='folder.assetcatalog',path='Assets.xcassets',sourceTree='SOURCE_ROOT')
 app_product=obj('app.product','PBXFileReference',explicitFileType='wrapper.application',path='XDVPN.app',sourceTree='BUILT_PRODUCTS_DIR')
 tunnel_product=obj('tunnel.product','PBXFileReference',explicitFileType='wrapper.app-extension',path='PacketTunnel.appex',sourceTree='BUILT_PRODUCTS_DIR')
 products=obj('products','PBXGroup',children=[app_product,tunnel_product],name='Products',sourceTree='<group>')
 groups=[obj('group:'+folder,'PBXGroup',children=[key for name,key in files.items() if name.startswith(folder+'/')],name=folder,sourceTree='<group>') for folder in ['App','Common','PacketTunnel','OpenConnectAdapter','Configuration']]
-main=obj('main','PBXGroup',children=groups+[products],sourceTree='<group>')
+main=obj('main','PBXGroup',children=groups+[assets,products],sourceTree='<group>')
 def config_list(name, settings, base=False):
     configs=[]
     for flavor in ['Debug','Release']:
@@ -68,8 +69,10 @@ proxy=obj('proxy','PBXContainerItemProxy',containerPortal=uid('project'),proxyTy
 dependency=obj('dependency','PBXTargetDependency',target=tunnel,targetProxy=proxy)
 embed_file=obj('embed.file','PBXBuildFile',fileRef=tunnel_product,settings={'ATTRIBUTES':['RemoveHeadersOnCopy']})
 embed=obj('embed','PBXCopyFilesBuildPhase',buildActionMask='2147483647',dstPath='',dstSubfolderSpec='13',files=[embed_file],name='Embed App Extensions',runOnlyForDeploymentPostprocessing='0')
-app_settings=dict(PRODUCT_BUNDLE_IDENTIFIER='$(XDVPN_BUNDLE_ID)',PRODUCT_NAME='$(TARGET_NAME)',INFOPLIST_FILE='Configuration/App-Info.plist',CODE_SIGN_ENTITLEMENTS='Configuration/App.entitlements',LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/Frameworks'])
-app=obj('app.target','PBXNativeTarget',buildConfigurationList=config_list('app',app_settings),buildPhases=[sources('app',['App','Common']),embed],buildRules=[],dependencies=[dependency],name='XDVPN',productName='XDVPN',productReference=app_product,productType='com.apple.product-type.application')
+asset_build=obj('assets.build','PBXBuildFile',fileRef=assets)
+resources=obj('app.resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=[asset_build],runOnlyForDeploymentPostprocessing='0')
+app_settings=dict(ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon',PRODUCT_BUNDLE_IDENTIFIER='$(XDVPN_BUNDLE_ID)',PRODUCT_NAME='$(TARGET_NAME)',INFOPLIST_FILE='Configuration/App-Info.plist',CODE_SIGN_ENTITLEMENTS='Configuration/App.entitlements',LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/Frameworks'])
+app=obj('app.target','PBXNativeTarget',buildConfigurationList=config_list('app',app_settings),buildPhases=[sources('app',['App','Common']),resources,embed],buildRules=[],dependencies=[dependency],name='XDVPN',productName='XDVPN',productReference=app_product,productType='com.apple.product-type.application')
 project=obj('project','PBXProject',attributes={'LastUpgradeCheck':'2660','BuildIndependentTargetsInParallel':'YES'},buildConfigurationList=project_configs,compatibilityVersion='Xcode 14.0',developmentRegion='zh_CN',hasScannedForEncodings='0',knownRegions=['zh_CN','en','Base'],mainGroup=main,productRefGroup=products,projectDirPath='',projectRoot='',targets=[app,tunnel])
 def serialize(value,indent=0):
     if isinstance(value,dict): return '{\n'+''.join('\t'*(indent+1)+str(k)+' = '+serialize(v,indent+1)+';\n' for k,v in value.items())+'\t'*indent+'}'

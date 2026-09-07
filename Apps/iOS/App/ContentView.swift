@@ -3,7 +3,16 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: VPNModel
     @Environment(\.scenePhase) private var scenePhase
-    private let brand = Color(red: 0.133, green: 0.471, blue: 0.345)
+    private let brand = Color(hex: 0x227858)
+    private var connectionAppearance: ConnectionAppearance {
+        if model.startingConnection { return .connecting }
+        switch model.status {
+        case .connecting, .reasserting: return .connecting
+        case .disconnecting: return .disconnecting
+        case .connected: return model.busy ? .disconnecting : .connected
+        default: return .idle
+        }
+    }
     var body: some View {
         TabView {
             NavigationStack {
@@ -15,17 +24,17 @@ struct ContentView: View {
                             Text("iOS 验证版 0.1").font(.caption).foregroundStyle(.secondary)
                         }
                         VStack(spacing: 20) {
-                            Image(systemName: model.status == .connected ? "checkmark.shield.fill" : "shield.lefthalf.filled")
-                                .font(.system(size: 54)).foregroundStyle(brand)
-                            Text(model.title).font(.largeTitle.bold())
+                            ConnectionOrbitView(appearance: connectionAppearance)
+                                .frame(height: 160)
+                            Text(model.title).font(.largeTitle.bold()).foregroundStyle(connectionAppearance.color)
                             Text(model.active ? "系统 VPN 状态；内网访问可在诊断页验证。" : "连接公司网络，验证移动端恢复能力。")
                                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                             Button {
                                 Task { if model.active || model.onDemandActive { await model.disconnect() } else { await model.connect() } }
                             } label: {
-                                HStack { if model.busy { ProgressView().tint(.white) }; Text(model.active || model.onDemandActive ? "断开并暂停恢复" : "连接 VPN") }
+                                HStack { if connectionAppearance.showsProgress { ProgressView().tint(.white) }; Text(model.active || model.onDemandActive ? "断开并暂停恢复" : "连接 VPN") }
                                     .font(.headline).frame(maxWidth: .infinity).frame(minHeight: 48)
-                            }.buttonStyle(.borderedProminent).tint(brand).disabled(model.busy)
+                            }.buttonStyle(.borderedProminent).tint(connectionAppearance == .idle ? brand : connectionAppearance.color).disabled(model.busy)
                         }.padding(24).frame(maxWidth: .infinity).background(.background, in: RoundedRectangle(cornerRadius: 24))
                         VStack(spacing: 16) {
                             row("服务器", model.profile.server)
@@ -46,7 +55,6 @@ struct ContentView: View {
                         TextField("HTTPS 服务器地址", text: $model.profile.server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                         TextField("用户名", text: $model.profile.username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                         SecureField(model.hasPassword ? "已保存，留空保持原密码" : "密码", text: $model.password).textContentType(.password)
-                        TextField("认证组（可选）", text: $model.profile.group).textInputAutocapitalization(.never).autocorrectionDisabled()
                     }.disabled(model.active || model.onDemandActive || model.busy)
                     Section {
                         Toggle("优先使用 DTLS", isOn: $model.profile.useDTLS)

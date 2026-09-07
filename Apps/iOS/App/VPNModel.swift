@@ -9,6 +9,7 @@ final class VPNModel: ObservableObject {
     @Published private(set) var hasPassword = false
     @Published private(set) var status: NEVPNStatus = .invalid
     @Published private(set) var busy = false
+    @Published private(set) var startingConnection = false
     @Published private(set) var onDemandActive = false
     @Published var message: String?
     @Published private(set) var snapshot = DiagnosticSnapshot()
@@ -44,6 +45,8 @@ final class VPNModel: ObservableObject {
     }
     func load() async {
         #if targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--preview-connecting") { status = .connecting }
+        if ProcessInfo.processInfo.arguments.contains("--preview-connected") { status = .connected }
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
         return
         #else
@@ -68,6 +71,9 @@ final class VPNModel: ObservableObject {
     }
     func save() async { await perform { try await self.saveConfiguration() } }
     func connect() async {
+        guard !busy else { return }
+        startingConnection = true
+        defer { startingConnection = false }
         await perform {
             try await self.saveConfiguration()
             guard let manager = self.manager else { throw ConfigurationError.invalid("VPN 配置尚未保存。") }

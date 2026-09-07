@@ -4,7 +4,8 @@
 
 ## 已实现
 
-- 服务器、用户名、密码、认证组配置；App 内申请添加系统 VPN 配置。
+- 服务器、用户名、密码配置；认证组输入已移除，旧配置中的组值保持兼容。App 内申请添加系统 VPN 配置。
+- 与 macOS 同源的应用图标；连接中使用蓝色旋转圆弧，连接成功使用绿色盾牌。
 - App/Extension 共享钥匙串持久引用；凭据只在本设备首次解锁后可读，不存入配置或诊断文件。
 - OpenConnect 9.21 + OpenSSL 3.6.2 独立交叉构建；Extension 内调用库，不运行命令行程序。
 - 公共 `packetFlow` 经非阻塞 datagram socketpair 桥接 IP 包；显式处理 Darwin 地址族前缀、MTU、丢包与背压。
@@ -39,7 +40,11 @@ Apps/iOS/.build/xcode-iphoneos/Build/Products/Debug-iphoneos/XDVPN.app
 
 如添加/移除源文件，执行 `python3 Apps/iOS/scripts/generate-project.py` 重新生成工程；修改项目配置应同步修改生成器。签名私有配置不进入版本控制。
 
+图标生成命令：`xcrun swift Apps/iOS/scripts/icon.swift Apps/iOS/Assets.xcassets/AppIcon.appiconset`，输出 1024 × 1024 不透明 PNG。
+
 ## 安装到 iPhone
+
+**覆盖安装前先断开 VPN 并暂停按需恢复，确认手机可正常上网。** 全隧道开启时替换 App/Extension 可能留下系统流量拦截，阻断新版开发者在线验证。若已发生，在系统 VPN 设置关闭按需连接并断开 XD VPN；仍不恢复时删除该 VPN 配置并重启设备。不要在断网状态反复覆盖安装。
 
 1. 将 `Configuration/Signing.example.xcconfig` 复制为 `Configuration/Signing.local.xcconfig`，填写实际 `DEVELOPMENT_TEAM`、唯一 `XDVPN_BUNDLE_ID` 和 `XDVPN_APP_GROUP`。
 2. 在 Xcode 打开 `XDVPN.xcodeproj`，选择 `XDVPN-iOS` scheme 和连接的 iPhone，确认 App/PacketTunnel 两个 target 使用同一个开发团队。
