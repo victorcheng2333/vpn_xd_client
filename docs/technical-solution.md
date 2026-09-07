@@ -1,5 +1,8 @@
 # XD VPN 完整技术方案
 
+> 权限架构更新：本文的 sudoers／socket 安装流程记录旧版实现。当前分支迁移为 SMAppService／XPC，具体边界和验证见 [ServiceManagement 迁移设计](design/2026-09-07-service-management-xpc.md)。
+
+
 原生 macOS 办公 VPN 客户端 · 架构、交互、连接恢复与网络清理
 
 | 文档项 | 基线 |

@@ -128,3 +128,11 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.19 \
 如果不希望所有使用者提供 GitHub Token，可另建公开的**纯安装包仓库**，设置 Actions 变量 `RELEASE_REPOSITORY=owner/distribution-repo`，并将只对目标仓库有 Contents 写权限的 `RELEASE_TOKEN` 放入源仓库 Secrets。该来源也会写进构建产物，客户端匿名读取公开源。切换来源只影响之后构建的客户端，已安装旧版本需要先从原发布源获得迁移版本。脚本不会自动改变仓库可见性，也不会上传发布凭据到客户端。
 
 参考：[GitHub Releases API](https://docs.github.com/en/rest/releases/releases)、[Apple 公证流程](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)。
+
+## SMAppService / XPC 包结构与验收
+
+新助手位于 `Contents/Library/LaunchServices/com.xd.vpn.helper`，配置位于 `Contents/Library/LaunchDaemons/com.xd.vpn.helper.plist`。两个文件必须进入最终 App 签名；助手和引擎要求 Tools UG Developer ID 签名及 hardened runtime。macOS 要求包含 LaunchDaemon 的 App 完成公证。不要直接从 DMG 或 build 目录注册服务；先放入 `/Applications`。
+
+签名／公证通过不代表系统服务已经批准。实际验收需覆盖启用、系统设置批准、构建握手、另一连接拒绝、失联清理、移除与重新注册。可从已安装 App 执行 `Contents/MacOS/XDVPN --service-command status` 或 `smoke`，诊断路径不创建 VPNModel、不读取 VPN 凭据、不启动 VPN 引擎。`register`、`unregister`、`migrate` 是明确改变本机服务状态的管理命令。
+
+旧版授权在新服务可用之前保留；旧版仍运行或正在清理时必须阻止迁移。测试通过后仍须在真实服务器验证连接、网络切换、退出清理，不能将无网络的 smoke 结果当作真实 VPN 验收。

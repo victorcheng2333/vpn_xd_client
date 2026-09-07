@@ -66,7 +66,7 @@ xdvpn_verify_architectures "$APP/Contents/MacOS/XDVPN" "$TARGET_ARCHS"
 if [ "${ARCHS+x}" = x ]; then
     xdvpn_verify_architectures "$APP/Contents/MacOS/XDVPN" "$(xdvpn_architectures "$ARCHS")"
 fi
-xdvpn_verify_architectures "$APP/Contents/Helpers/XDVPNHelper" "$TARGET_ARCHS"
+xdvpn_verify_architectures "$APP/Contents/Library/LaunchServices/com.xd.vpn.helper" "$TARGET_ARCHS"
 xdvpn_verify_engine "$APP/Contents/Resources/OpenConnect/openconnect" "$TARGET_ARCHS"
 case "$TARGET_ARCHS" in
     arm64) ARCH=arm64; MACHINE='Apple Silicon（M 系列）Mac' ;;
@@ -75,7 +75,7 @@ esac
 codesign --verify --deep --strict "$APP"
 if [ "$BUILD_CHANNEL" = release ]; then
     source scripts/signing.sh
-    for target in "$APP" "$APP/Contents/Helpers/XDVPNHelper" "$APP/Contents/Resources/OpenConnect/openconnect"; do
+    for target in "$APP" "$APP/Contents/Library/LaunchServices/com.xd.vpn.helper" "$APP/Contents/Resources/OpenConnect/openconnect"; do
         xdvpn_verify_release_signature "$target"
     done
 fi
@@ -104,8 +104,8 @@ XD VPN 内置引擎版
 
 1. 将「XD VPN.app」拖到旁边的「Applications」文件夹，再从「应用程序」打开应用。
 2. 在「VPN 配置」填写自己的 VPN 账号与密码并保存。
-3. 打开「系统授权」，点击「安装系统助手」，完成一次 Mac 管理员确认。
-   助手、内置引擎和网络脚本会一起安装。已有旧版则点击「升级系统助手」。
+3. 打开「系统授权」，点击「启用系统服务」，在 macOS 系统设置中批准后台服务。
+   若提示旧授权待迁移，先退出旧版，再点击「迁移旧版授权」。
 4. 返回连接页，点击「连接 VPN」。
 
 升级前请先断开并退出旧版。原有 XD VPN 配置和钥匙串密码可继续使用。

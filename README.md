@@ -114,15 +114,17 @@ Tests/
 scripts/          编译、测试、矢量图标生成
 ```
 
-仅「安装／升级／修复系统助手、移除授权」通过 macOS 管理员确认。安装器将校验过摘要与签名的助手复制到 root 所有的 `/Library/PrivilegedHelperTools/com.xd.vpn.helper`，将当前用户的专用免密规则写入 `/private/etc/sudoers.d/xd-vpn-astra`，并用 visudo 检查规则语法；不修改主 sudoers，不放开任意命令。正常运行使用 `sudo -n`，没有交互式提权入口，授权缺失时展示安装入口。
+系统服务使用 macOS 14+ 的 `SMAppService` 注册，助手位于签名 App 内的 `Contents/Library/LaunchServices/com.xd.vpn.helper`，由 launchd 通过 XPC 按需启动。首次需管理员在系统设置批准后台服务；新安装不写 sudoers，不通过 sudo 或 AppleScript 提权。App 必须位于 `/Applications`，开发用临时签名构建不能启用特权服务。
 
-普通用户仅通过专用 sudoers 规则执行版本查询或 `--session <socket>`，后者只以 sudo 提供的 SUDO_UID 为会话用户身份。新增内部 `--network-script` 入口只接受已具备 root 身份且持有本次私有会话目录的调用，不加入 sudoers 规则；OpenConnect 的脚本参数固定指向已安装助手。助手进程按需运行，无常驻 root daemon；安装文件会持久保留，可以在「系统授权」移除。UI 创建权限为 `0700` 的随机目录及 `0600` 的 Unix socket，双方校验内核提供的 peer UID。权限助手仅接收固定的连接／断开／恢复／退出指令，并仅启动 `/Library/PrivilegedHelperTools/com.xd.vpn.openconnect/openconnect`。引擎和网络脚本均要求为 root 所有的普通可执行文件，父目录不能由普通用户写入；不回退到 Homebrew。
+App 与服务在激活 XPC 连接前双向约束公司 Developer ID、Team ID、精确应用／助手标识，并拒绝可调试或禁用库校验的签名。服务从内核 XPC 凭据获取调用者 UID，握手核对协议版本、构建标识及 App 路径。接口只有固定 VPN 控制、状态查询与旧版迁移，不接受客户端指定的程序、脚本、PID 或用户身份。每次启动引擎前复核完整 App 签名及引擎内容，升级后需重新注册服务。
+
+服务一次仅允许一个控制连接拥有隧道，拒绝其他连接操作或在清理中抢占。通信失效或服务收到停止信号时，保留会话锁直到现有引擎停止及清理流程完成。日常移除服务先等待会话结束，再注销 SMAppService。
 
 OpenConnect 在助手中以前台子进程运行。密码经本地 socket 和 stdin 传递，不放入命令行、环境变量、日志或临时文件。root 会话锁避免上次退出清理与下次启动重叠。应用关闭通信或崩溃时，助手只向自己创建的 OpenConnect PID 发出 SIGINT；8 秒后仍未结束则向同一 PID 发 SIGTERM，40 秒后仍无响应才向同一 PID 发 SIGKILL，普通停止信号不发送到整个进程组。重连前的 attempt-reconnect 阶段只执行原生服务器路由更新和读回核验，不再启动仅重复路由工作的 vpnc-script；物理出口尚未就绪时暂缓，真实路由错误仍报告失败。其他阶段的网络脚本由固定助手入口启动，在执行任何脚本代码前以 posix_spawn 建立独立进程组；脚本超过 15 秒时结束该脚本组。reconnect 超时返回非致命结果，保留现有会话由 OpenConnect 继续恢复；connect 超时仍按配置失败清理。disconnect 在脚本前先删除本次 IPv4/DNS 状态、保留归属标记，脚本结束后再次删除并复核；即使脚本超时，只要原生复核通过就正常结束断开。这些时间是本客户端的停止预算。连接状态只由已知规则改变；其他引擎输出经脱敏后作为独立诊断写入助手与 App 的滚动日志，界面最多显示 300 条状态与错误。普通 stderr 错误不会直接触发 UI 拆隧道。
 
 助手在脚本写入前，将本次 PID、utun、分配地址和 DNS 记录到 root 私有目录，并写入独立的会话归属标记。disconnect 钩子执行前后、以及 OpenConnect 退出后，均通过 SystemConfiguration API 核对并删除本次 `State:/Network/Service/utunN/{IPv4,DNS}` 残留；这一步不执行 route、DNS 查询或 shell。归属不匹配、地址／DNS 被更改、接口已被其他连接复用或删除结果未通过复核时，报告具体 PID、utun、键名及记录目录，并阻止未清理时继续登录。退出后给接口异步销毁最多 2 秒，每次重读归属与地址；清理失败后再次连接先重试。新助手也会检查本客户端的私有遗留记录；助手和脚本的共享锁、存活 PID、同名接口和归属检查共同保护仍在使用的配置。旧版本 3 的无锁记录至少等待 60 秒，避免清理仍在运行的旧脚本。详情见 [清理设计与边界](docs/design/2026-09-06-network-cleanup.md)。
 
-这是本地签名客户端的权限模型：管理员首次安装时确认应用中的助手、内置引擎和网络脚本，安装器逐个校验暂存文件的 SHA-256，并校验二进制签名及脚本语法后再替换受保护文件；发布步骤失败会恢复之前的安装。引擎及脚本位于 `/Library/PrivilegedHelperTools/com.xd.vpn.openconnect/`，移除系统授权时一并删除。正式多用户分发应改为有稳定代码签名约束的 ServiceManagement/XPC 特权服务，并独立审计。
+旧版迁移必须在新服务可用后由「系统授权」明确发起。它核验固定旧路径、规则内容、进程和全部旧会话锁，先撤销旧 sudoers，再将旧助手／运行时移入 `/Library/PrivilegedHelperTools/.xdvpn-legacy-backups/` 的 root 私有备份。冲突或中途失败恢复原文件，不修改其他授权规则。详见 [迁移设计与验收边界](docs/design/2026-09-07-service-management-xpc.md)。
 
 ## 验收与限制
 

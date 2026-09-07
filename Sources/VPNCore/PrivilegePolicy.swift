@@ -2,17 +2,9 @@ import Foundation
 import Darwin
 
 public enum PrivilegePolicy {
-    public static let version = "8"
+    public static let version = "9"
     public static let helperPath = "/Library/PrivilegedHelperTools/com.xd.vpn.helper"
     public static let rulePath = "/private/etc/sudoers.d/xd-vpn-astra"
-
-    public static func sessionOwner(arguments: [String], environment: [String: String], effectiveUID: uid_t) throws -> uid_t {
-        guard effectiveUID == 0, arguments.count == 3, arguments[1] == "--session",
-              let rawUID = environment["SUDO_UID"], let uid = uid_t(rawUID), uid > 0 else {
-            throw VPNError.system("权限助手只能由已授权用户通过 sudo 启动。")
-        }
-        return uid
-    }
 
     public static func trustedInstalledHelper(at path: String = helperPath) -> Bool {
         var info = stat()

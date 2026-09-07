@@ -237,7 +237,7 @@ struct ActivityEntry: Identifiable {
                 self.fail(error.localizedDescription)
                 await self.refreshPrivileges()
                 guard self.generation == attempt else { return }
-                if [.notInstalled, .needsUpdate, .needsRepair].contains(self.privilegeStatus) { self.page = .authorization }
+                if self.privilegeStatus != .ready { self.page = .authorization }
             }
         }
     }
@@ -634,12 +634,17 @@ struct ActivityEntry: Identifiable {
         privilegeBusy = true; privilegeIssue = nil
         defer { privilegeBusy = false }
         do {
-            try await PrivilegeManager.install()
+            if privilegeStatus == .needsMigration { try await PrivilegeManager.migrate() }
+            else { try await PrivilegeManager.install() }
             await refreshPrivileges()
-            issue = nil; state = .idle
-            toast = "系统助手已就绪，连接无需输入 Mac 密码"
-            log("系统助手已安装或升级，专用免密授权已通过检测。")
-            page = .connection
+            if privilegeStatus == .ready {
+                issue = nil; state = .idle
+                toast = "系统服务已就绪"
+                log("系统服务注册和 XPC 身份检查已通过。")
+                page = .connection
+            } else {
+                toast = privilegeStatus.title
+            }
         } catch { privilegeIssue = error.localizedDescription }
     }
 

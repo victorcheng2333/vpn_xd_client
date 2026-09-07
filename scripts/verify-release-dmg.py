@@ -38,7 +38,15 @@ def verify(dmg, data, revision):
                 raise ValueError('DMG contains a different version, channel, source revision or repository.')
             output('xcrun', 'stapler', 'validate', str(app))
             output('codesign', '--verify', '--deep', '--strict', str(app))
-            for executable in ('MacOS/XDVPN', 'Helpers/XDVPNHelper', 'Resources/OpenConnect/openconnect'):
+            with (app / 'Contents/Library/LaunchDaemons/com.xd.vpn.helper.plist').open('rb') as stream:
+                daemon = plistlib.load(stream)
+            if (daemon.get('Label') != 'com.xd.vpn.helper.service'
+                    or daemon.get('BundleProgram') != 'Contents/Library/LaunchServices/com.xd.vpn.helper'
+                    or daemon.get('MachServices') != {'KQY8A3BNVG.com.xd.vpn.helper': True}
+                    or daemon.get('UserName') != 'root' or daemon.get('ExitTimeOut', 0) < 60
+                    or 'Program' in daemon or 'ProgramArguments' in daemon):
+                raise ValueError('Unexpected privileged service registration configuration.')
+            for executable in ('MacOS/XDVPN', 'Library/LaunchServices/com.xd.vpn.helper', 'Resources/OpenConnect/openconnect'):
                 file = app / 'Contents' / executable
                 if output('lipo', '-archs', str(file)).decode().strip() != arch:
                     raise ValueError('Release architecture mismatch.')

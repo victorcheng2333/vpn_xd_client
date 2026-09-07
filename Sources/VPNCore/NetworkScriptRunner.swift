@@ -61,10 +61,7 @@ public enum ManagedNetworkScript {
                   let pid = environment["VPNPID"].flatMap(Int32.init), pid > 1 else {
                 throw VPNError.system("网络脚本参数无效。")
             }
-            let script = OpenConnect.installedDirectory + "/vpnc-script"
-            guard PrivilegePolicy.trustedInstalledHelper(at: script) else {
-                throw VPNError.unavailable("内置网络脚本未安装或权限不正确，请修复系统助手。")
-            }
+            let script = try ServiceBundle.runningHelper().script
             return execute(reason: reason, session: session, environment: environment, processID: pid,
                 parentExited: { kill(pid, 0) != 0 && errno == ESRCH },
                 runScript: { try NetworkScriptRunner.run(executable: session.managedScript(source: script), environment: environment) },

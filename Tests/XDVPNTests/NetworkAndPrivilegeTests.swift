@@ -50,13 +50,6 @@ final class NetworkAndPrivilegeTests: XCTestCase {
         XCTAssertEqual(PhysicalNetworkMonitor.physicalSnapshot(from: original), PhysicalNetworkMonitor.physicalSnapshot(from: updated))
     }
 
-    func testAuthorizedOldHelperIsAnUpgradeRatherThanMissingAuthorization() {
-        XCTAssertEqual(PrivilegeManager.status(exitCode: 0, version: "3\n"), .needsUpdate)
-        XCTAssertEqual(PrivilegeManager.status(exitCode: 0, version: PrivilegePolicy.version + "\n"), .ready)
-        XCTAssertEqual(PrivilegeManager.status(exitCode: 1, version: PrivilegePolicy.version), .needsRepair)
-        XCTAssertEqual(PrivilegeManager.status(exitCode: 0, version: "invalid"), .needsRepair)
-    }
-
     func testPhysicalReadinessIgnoresVPNAndGlobalReachability() {
         var values: [String: [String: Any]] = [
             "State:/Network/Interface/utun4/Link": ["Active": true],
@@ -112,22 +105,4 @@ final class NetworkAndPrivilegeTests: XCTestCase {
         XCTAssertNotEqual(PhysicalNetworkMonitor.physicalSnapshot(from: original), PhysicalNetworkMonitor.physicalSnapshot(from: changed))
     }
 
-    func testInstallerScriptAndDedicatedSudoersRuleParseWithoutInstalling() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let rule = try PrivilegePolicy.sudoersRule(username: "test_user")
-        let script = PrivilegeManager.installScript(source: "/tmp/quoted app's $(untrusted)/helper", digest: String(repeating: "a", count: 64), rule: rule,
-            runtimeSource: "/tmp/quoted app's $(untrusted)/OpenConnect", executableDigest: String(repeating: "b", count: 64), scriptDigest: String(repeating: "c", count: 64))
-        let scriptURL = folder.appendingPathComponent("install.sh"), ruleURL = folder.appendingPathComponent("sudoers")
-        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
-        try rule.write(to: ruleURL, atomically: true, encoding: .utf8)
-        for (executable, arguments) in [("/bin/sh", ["-n", scriptURL.path]), ("/usr/sbin/visudo", ["-cf", ruleURL.path])] {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: executable); process.arguments = arguments
-            process.standardInput = FileHandle.nullDevice; process.standardOutput = FileHandle.nullDevice
-            try process.run(); process.waitUntilExit()
-            XCTAssertEqual(process.terminationStatus, 0)
-        }
-    }
 }

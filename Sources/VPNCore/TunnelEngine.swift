@@ -8,6 +8,7 @@ public final class TunnelEngine {
     private let executable: String
     private let emit: (HelperEvent) -> Void
     private let networkSessionFactory: (() throws -> TunnelNetworkSession)?
+    private let networkScriptHelper: String
     private var networkSession: TunnelNetworkSession?
     private var cleanupBlocked = false
     private var cleanupProcessID: Int32?
@@ -26,10 +27,12 @@ public final class TunnelEngine {
     private var stopCallbacks: [() -> Void] = []
 
     public init(executable: String, networkSessionFactory: (() throws -> TunnelNetworkSession)? = nil,
+                networkScriptHelper: String = PrivilegePolicy.helperPath,
                 stopGrace: TimeInterval = 8, killGrace: TimeInterval = 40,
                 emit: @escaping (HelperEvent) -> Void) {
         self.executable = executable; self.emit = emit
         self.networkSessionFactory = networkSessionFactory
+        self.networkScriptHelper = networkScriptHelper
         self.stopGrace = stopGrace; self.killGrace = killGrace
     }
 
@@ -63,8 +66,9 @@ public final class TunnelEngine {
             var args = try OpenConnect.arguments(profile: profile)
             networkSession = try networkSessionFactory?()
             if networkSession != nil {
-                // Fixed root-owned wrapper; never accept a script from the UI.
-                args.insert("--script=\(PrivilegePolicy.helperPath) --network-script", at: 0)
+                // The daemon supplies its verified bundled path, never the UI.
+                // OpenConnect interprets this option as a shell command.
+                args.insert("--script=\(Self.networkScriptCommand(networkScriptHelper))", at: 0)
             }
             let child = Process()
             child.executableURL = URL(fileURLWithPath: executable)
@@ -131,6 +135,10 @@ public final class TunnelEngine {
             emit(.init(.stopped, "连接未启动。"))
             sanitizer = DiagnosticSanitizer(); phase = "idle"
         }
+    }
+
+    static func networkScriptCommand(_ helper: String) -> String {
+        "'" + helper.replacingOccurrences(of: "'", with: "'\\''") + "' --network-script"
     }
 
     private func consume(_ line: String, child: Process) {

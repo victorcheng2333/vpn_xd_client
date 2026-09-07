@@ -45,7 +45,7 @@ expect_rejection 'Packaging requires' env BUILD_CHANNEL=development bash scripts
 # Packaging must reject a helper or engine from the other chip before signing
 # or creating an archive. A fixture bundle is enough to reach these guards.
 APP="$FIXTURE/Mixed.app"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources/OpenConnect"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Library/LaunchServices" "$APP/Contents/Library/LaunchDaemons" "$APP/Contents/Resources/OpenConnect"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c 'Add :XDVPNBuildChannel string development' "$APP/Contents/Info.plist"
 expect_rejection 'Build channel mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
@@ -55,9 +55,9 @@ expect_rejection 'Release requires' env BUILD_CHANNEL=release SKIP_BUILD=1 ARCHS
 expect_rejection 'Build channel mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
 /usr/libexec/PlistBuddy -c 'Add :XDVPNBuildChannel string test' "$APP/Contents/Info.plist"
 cp "$FIXTURE/arm64" "$APP/Contents/MacOS/XDVPN"
-cp "$FIXTURE/x86_64" "$APP/Contents/Helpers/XDVPNHelper"
+cp "$FIXTURE/x86_64" "$APP/Contents/Library/LaunchServices/com.xd.vpn.helper"
 expect_rejection 'Architecture mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
-cp "$FIXTURE/arm64" "$APP/Contents/Helpers/XDVPNHelper"
+cp "$FIXTURE/arm64" "$APP/Contents/Library/LaunchServices/com.xd.vpn.helper"
 cp "$FIXTURE/x86_64" "$APP/Contents/Resources/OpenConnect/openconnect"
 expect_rejection 'Architecture mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
 printf 'Passed: architecture, deployment, channel and release guard checks.\n'

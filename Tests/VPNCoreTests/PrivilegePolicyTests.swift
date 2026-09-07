@@ -3,21 +3,6 @@ import Darwin
 @testable import VPNCore
 
 final class PrivilegePolicyTests: XCTestCase {
-    func testHelperIdentityComesFromSudoAndRejectsArbitraryCommands() throws {
-        let args = ["helper", "--session", "/private/tmp/xdvpn-test/control.sock"]
-        XCTAssertEqual(try PrivilegePolicy.sessionOwner(arguments: args, environment: ["SUDO_UID": "501"], effectiveUID: 0), 501)
-        XCTAssertEqual(PrivilegePolicy.version, "8", "The UI must install the native reconnect preparation fix before connecting")
-        XCTAssertFalse(try PrivilegePolicy.sudoersRule(username: "test_user").contains("--network-script"))
-        for (arguments, environment, uid) in [
-            (args, ["SUDO_UID": "501"], uid_t(501)),
-            (args, [:], uid_t(0)), (args, ["SUDO_UID": "0"], uid_t(0)),
-            (args + ["502"], ["SUDO_UID": "501"], uid_t(0)),
-            (["helper", "--execute", "/bin/sh"], ["SUDO_UID": "501"], uid_t(0))
-        ] {
-            XCTAssertThrowsError(try PrivilegePolicy.sessionOwner(arguments: arguments, environment: environment, effectiveUID: uid))
-        }
-    }
-
     func testSudoersRejectsUsernameInjection() {
         for username in ["ALL", "a\nALL=(ALL) ALL", "a b", "a,b", "a#", "$(id)", "a:"] {
             // ALL is reserved by sudoers and must not accidentally authorize everyone.

@@ -8,6 +8,11 @@ import AppKit
     @StateObject private var loginItem = LoginItemManager()
 
     init() {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--service-command" {
+            let action = CommandLine.arguments[2]
+            Task { @MainActor in exit(await ServiceCommand.run(action)) }
+            dispatchMain()
+        }
         let primary = AppInstanceCoordinator.shared.isPrimary
         _model = StateObject(wrappedValue: VPNModel(startMonitoring: primary, resumeAutomatically: primary,
                                                    activityLog: primary ? RollingActivityLog() : nil))

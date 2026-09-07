@@ -29,7 +29,7 @@ args = parser.parse_args()
 app = args.app.resolve()
 source = app / "Contents/Resources/OpenConnect/openconnect"
 subprocess.run(["/usr/bin/codesign", "--verify", "--deep", "--strict", str(app)], check=True)
-payloads = [app / "Contents/MacOS/XDVPN", app / "Contents/Helpers/XDVPNHelper", source]
+payloads = [app / "Contents/MacOS/XDVPN", app / "Contents/Library/LaunchServices/com.xd.vpn.helper", source]
 architectures = subprocess.check_output(["/usr/bin/lipo", "-archs", str(payloads[0])], text=True).split()
 assert len(architectures) == 1 and architectures[0] in {"arm64", "x86_64"}, f"Expected a single-architecture package: {architectures}"
 assert args.arch in architectures, f"No {args.arch} slice in {app}"

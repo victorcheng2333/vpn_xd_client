@@ -1,53 +1,32 @@
 import XCTest
+import ServiceManagement
 import VPNCore
 @testable import XDVPN
 
-final class RuntimeUpgradeTests: XCTestCase {
-    func testMatchingRuntimeIsReadyWithoutChangingHelperVersion() throws {
-        try withRuntime { bundle, installed in
-            XCTAssertEqual(PrivilegeManager.runtimeStatus(bundle: bundle, installedDirectory: installed), .ready)
+@MainActor final class RuntimeUpgradeTests: XCTestCase {
+    private let identity = HelperIdentity(build: "22-release-a", bundlePath: "/Applications/XD VPN.app")
+    func testDifferentBuildProtocolOrBundleCannotBeUsedAsReadyService() {
+        for different in [HelperIdentity(build: "22-release-b", bundlePath: identity.bundlePath),
+                          HelperIdentity(protocolVersion: 8, build: identity.build, bundlePath: identity.bundlePath),
+                          HelperIdentity(build: identity.build, bundlePath: "/Applications/Other.app")] {
+            XCTAssertEqual(PrivilegeManager.status(local: identity, remote: .init(identity: different, legacyAuthorization: false, busy: false)), .needsUpdate)
         }
     }
-
-    func testEngineOrScriptContentChangeRequiresUpgradeEvenWithMatchingSizeAndTimestamp() throws {
-        for name in ["openconnect", "vpnc-script"] {
-            try withRuntime { bundle, installed in
-                let destination = installed.appendingPathComponent(name)
-                let timestamp = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: destination.path)[.modificationDate])
-                // The fixture bytes have the same length as the bundled files.
-                try "#!/bin/sh\nexit 1\n".write(to: destination, atomically: true, encoding: .utf8)
-                try FileManager.default.setAttributes([.modificationDate: timestamp, .posixPermissions: 0o755], ofItemAtPath: destination.path)
-                XCTAssertEqual(PrivilegeManager.status(exitCode: 0, version: PrivilegePolicy.version), .ready)
-                XCTAssertEqual(PrivilegeManager.runtimeStatus(bundle: bundle, installedDirectory: installed), .needsUpdate, name)
-            }
+    func testLegacyAuthorizationMustBeMigratedEvenAfterNewServiceApproval() {
+        for legacy in [false, true] {
+            XCTAssertEqual(PrivilegeManager.status(local: identity, remote: .init(identity: identity, legacyAuthorization: legacy, busy: false)), legacy ? .needsMigration : .ready)
         }
     }
-
-    func testMissingPayloadRequiresRepair() throws {
-        for name in ["openconnect", "vpnc-script"] {
-            for removeBundled in [false, true] {
-                try withRuntime { bundle, installed in
-                    let directory = removeBundled ? bundle.appendingPathComponent(OpenConnect.bundledDirectory) : installed
-                    try FileManager.default.removeItem(at: directory.appendingPathComponent(name))
-                    XCTAssertEqual(PrivilegeManager.runtimeStatus(bundle: bundle, installedDirectory: installed), .needsRepair)
-                }
-            }
-        }
+    func testUserApprovalIsDistinctFromRegistrationAndMissingPlist() {
+        XCTAssertEqual(PrivilegeManager.registrationStatus(.enabled), .ready)
+        XCTAssertEqual(PrivilegeManager.registrationStatus(.notRegistered), .notInstalled)
+        XCTAssertEqual(PrivilegeManager.registrationStatus(.requiresApproval), .requiresApproval)
+        XCTAssertEqual(PrivilegeManager.registrationStatus(.notFound), .needsRepair)
     }
-
-    private func withRuntime(_ check: (URL, URL) throws -> Void) throws {
-        let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("xdvpn-upgrade-" + UUID().uuidString)
-        defer { try? fm.removeItem(at: root) }
-        let bundle = root.appendingPathComponent("XD VPN.app"), installed = root.appendingPathComponent("installed")
-        for directory in [bundle.appendingPathComponent(OpenConnect.bundledDirectory), installed] {
-            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
-            for name in ["openconnect", "vpnc-script"] {
-                let file = directory.appendingPathComponent(name)
-                try "#!/bin/sh\nexit 0\n".write(to: file, atomically: true, encoding: .utf8)
-                try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: file.path)
-            }
+    func testAppMustRunFromApplicationsBeforeRegistration() {
+        XCTAssertTrue(PrivilegeManager.supportedLocation(URL(fileURLWithPath: "/Applications/XD VPN.app")))
+        for path in ["/Volumes/XD VPN/XD VPN.app", "/tmp/Applications/XD VPN.app", "/ApplicationsFake/XD VPN.app", "/Applications/helper"] {
+            XCTAssertFalse(PrivilegeManager.supportedLocation(URL(fileURLWithPath: path)))
         }
-        try check(bundle, installed)
     }
 }

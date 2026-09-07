@@ -65,16 +65,6 @@ public enum OpenConnect {
         return directory.appendingPathComponent("openconnect").path
     }
 
-    public static var installedExecutable: String? {
-        installedRuntimeIsTrusted ? installedDirectory + "/openconnect" : nil
-    }
-
-    public static var installedRuntimeIsTrusted: Bool {
-        ["openconnect", "vpnc-script"].allSatisfy {
-            PrivilegePolicy.trustedInstalledHelper(at: installedDirectory + "/" + $0)
-        }
-    }
-
     public static func arguments(profile: VPNProfile) throws -> [String] {
         let p = try profile.validated()
         var args = ["--protocol=anyconnect", "--passwd-on-stdin", "--non-inter", "--no-external-auth",
