@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
                       eventHandler:(void (^)(NSString *))event;
 - (void)cancel;
 - (void)updateNetworkAvailable:(BOOL)available reconnect:(BOOL)reconnect;
+/// True only after the gateway issued a session cookie. A later CONNECT 401 is not a password rejection.
+@property(nonatomic, readonly) BOOL authenticationCompleted;
 @property(nonatomic, readonly) BOOL authenticationFailed;
 @property(nonatomic, readonly) BOOL certificateFailed;
 @property(nonatomic, readonly, copy) NSString *certificateFailureDetail;

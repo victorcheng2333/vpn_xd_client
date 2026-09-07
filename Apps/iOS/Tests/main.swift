@@ -92,6 +92,13 @@ expect(PacketCodec.decode(PacketCodec.encode(ipv6, family: AF_INET6, mtu: 1400)!
 ipv6[5] = 1
 expect(PacketCodec.encode(ipv6, family: AF_INET6, mtu: 1400) == nil, "IPv6 truncated payload")
 
+expect(RecoveryPolicy.requiresCredentialCheck(result: -Int(EPERM), authenticationFailed: false, authenticationCompleted: false), "authorization failure before login requires credential check")
+expect(RecoveryPolicy.requiresCredentialCheck(result: -Int(EINTR), authenticationFailed: true, authenticationCompleted: false), "rejected password form never retries")
+expect(!RecoveryPolicy.requiresCredentialCheck(result: -Int(EPERM), authenticationFailed: false, authenticationCompleted: true), "CONNECT 401 after login renews expired session")
+expect(RecoveryPolicy.requiresCredentialCheck(result: -Int(EPERM), authenticationFailed: true, authenticationCompleted: true), "explicit credential rejection still blocks recovery")
+expect(!RecoveryPolicy.requiresCredentialCheck(result: -Int(ENETDOWN), authenticationFailed: false, authenticationCompleted: false), "network loss before login remains retryable")
+expect(!RecoveryPolicy.requiresCredentialCheck(result: -Int(EPIPE), authenticationFailed: false, authenticationCompleted: true), "disconnected session remains retryable")
+
 let now = Date(timeIntervalSince1970: 10000)
 var policy = RecoveryPolicy()
 for offset in [0, 10, 20] { try policy.begin(now: now.addingTimeInterval(Double(offset))) }

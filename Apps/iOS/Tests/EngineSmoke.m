@@ -23,6 +23,13 @@
 }
 @end
 
+// This fixture is loopback-only and compiled exclusively into the test executable.
+@interface LoopbackSessionProbe : OCEngine
+@end
+@implementation LoopbackSessionProbe
+- (int)validateCertificate { return 0; }
+@end
+
 static void check(BOOL value, const char *name) {
     if (!value) { fprintf(stderr, "FAIL: %s\n", name); exit(1); }
 }
@@ -35,6 +42,7 @@ int main(int argc, const char *argv[]) {
             check(NO, "cancelled engine must not configure tunnel"); return NO;
         } eventHandler:^(NSString *event) {}];
         check(result == -EINTR, "cancel before worker begins");
+        check(!cancelled.authenticationCompleted, "cancelled engine never marks authentication complete");
         OCEngine *offline = [[OCEngine alloc] initWithServer:@"https://127.0.0.1:1" username:@"test-only" password:@"not-a-real-password" group:@"" useDTLS:NO];
         [offline updateNetworkAvailable:NO reconnect:NO];
         dispatch_semaphore_t done = dispatch_semaphore_create(0);
@@ -70,6 +78,23 @@ int main(int argc, const char *argv[]) {
             check(result != 0 && probe.checked, "probe must reach certificate callback and abort before HTTP");
             check(probe.trusted == expectTrusted, expectTrusted ? "system trust accepts valid DNS certificate after IP resolution" : "system trust rejects invalid certificate");
             printf("Certificate probe passed: expected %s.\n", expectTrusted ? "trusted" : "rejected");
+        }
+        if (argc > 3 && argv[3][0]) {
+            char *end = NULL;
+            long port = strtol(argv[3], &end, 10);
+            check(*end == '\0' && port > 0 && port <= 65535, "loopback fixture port");
+            NSString *url = [NSString stringWithFormat:@"https://127.0.0.1:%ld", port];
+            LoopbackSessionProbe *engine = [[LoopbackSessionProbe alloc] initWithServer:url
+                username:@"test-only" password:@"test-only" group:@"" useDTLS:NO];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC),
+                dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [engine cancel]; });
+            NSInteger result = [engine runWithSettingsHandler:^BOOL(NSDictionary *settings, int fd) {
+                check(NO, "expired fixture session cannot configure tunnel"); return NO;
+            } eventHandler:^(NSString *event) {}];
+            check(result == -EPERM && engine.authenticationCompleted && !engine.authenticationFailed,
+                  "real CONNECT 401 after successful login is session expiry, not rejected credentials");
+            check(!engine.certificateFailed, "fixture must reach HTTP session exchange");
+            puts("Native session-expiry classification passed against loopback gateway.");
         }
         printf("Native engine cancellation and authentication-form checks passed.\n");
     }

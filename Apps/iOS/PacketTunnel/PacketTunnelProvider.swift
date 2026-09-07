@@ -60,7 +60,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 }
                 self.profile = try VPNProfile.decode(proto.providerConfiguration)
                 self.passwordReference = reference
+                let previous = try? self.store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot())
                 self.snapshot = DiagnosticSnapshot()
+                self.snapshot.events = previous?.events ?? []
                 self.record("正在准备连接")
                 let monitor = NWPathMonitor()
                 monitor.pathUpdateHandler = { [weak self] path in self?.pathChanged(path) }
@@ -185,11 +187,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         if stopping { completeStop(); return }
         let error: Error
         if engine.certificateFailed { error = ConfigurationError.invalid(engine.certificateFailureDetail) }
-        else if engine.authenticationFailed || result == -Int(EPERM) { error = ConfigurationError.invalid("认证被拒绝或会话已过期。请检查密码；验证版暂不支持 MFA/SSO。") }
+        else if RecoveryPolicy.requiresCredentialCheck(result: result, authenticationFailed: engine.authenticationFailed,
+                                                     authenticationCompleted: engine.authenticationCompleted) {
+            error = ConfigurationError.invalid("认证被拒绝。请检查密码；验证版暂不支持 MFA/SSO。")
+        }
         else if engine.settingsFailed { error = lastSettingsError ?? ConfigurationError.invalid("隧道网络配置失败或超时。") }
         else {
             reasserting = startReply == nil
-            record("连接中断（\(result)），等待恢复")
+            record(engine.authenticationCompleted && result == -Int(EPERM)
+                   ? "会话已失效，准备重新认证"
+                   : "连接中断（\(result)），等待恢复")
             let job = DispatchWorkItem { [weak self] in
                 guard let self, !self.stopping else { return }
                 if self.available { self.startAttempt() } else { self.retry = nil }

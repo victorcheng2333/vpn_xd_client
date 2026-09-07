@@ -237,7 +237,7 @@ final class VPNModel: ObservableObject {
         if arguments.contains("--debug-connect-saved-vpn") { await connect() }
         for _ in 0..<30 {
             await refreshDiagnostics()
-            let result: [String: Any] = ["status": title, "message": message ?? "", "report": report,
+            let result: [String: Any] = ["exportedAt": ISO8601DateFormatter().string(from: Date()), "status": title, "message": message ?? "", "report": report,
                                       "autoConnect": profile.automaticConnectionEnabled, "automaticConnectionActive": onDemandActive,
                                       "phase": snapshot.phase, "transport": snapshot.transport,
                                       "packetsToTunnel": snapshot.packetsToTunnel,

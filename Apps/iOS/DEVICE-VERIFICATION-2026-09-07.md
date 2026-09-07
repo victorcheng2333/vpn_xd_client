@@ -139,3 +139,14 @@ iPhone 17（iOS 26.5）模拟器补验：默认未连接画面、蓝色连接中
 - 63 项配置/路由/恢复/系统规则检查通过，最终 iPhoneOS 签名构建与模拟器构建通过，严格签名校验通过。
 - 调试连接过程中 USB 已识别但 CoreDevice 通道不可用，重启用户级 CoreDeviceService 后恢复。每次覆盖安装前均读取设备状态并确认隧道与系统自动连接都已停止。13:05:54 最终覆盖安装成功；首次启动短暂遭 iOS 安全校验拒绝，13:06:18 重试启动成功，无需再次修改签名或重装。收尾导出时设备调试通道已不可用，最终交互回归以用户反馈为证，不将之前导出的快照冒充最终实时状态。
 - 证据目录内保存 `controls-final-install.json`、`controls-final-launch.json`、`controls-preference-only.json`、`controls-before-flash-fix.json`；构建日志为 `controls-device-build.log`、`controls-simulator-build.log`。较早版本开启即连接的记录为已纠正的历史行为，不是最终产品语义。
+
+## 13:08 起飞行模式后恢复失败修复
+
+- 用户报告开关飞行模式后不能自动恢复。13:12:26–13:12:30 的真机记录显示：重新启动隧道、认证、进入建立隧道阶段，随后提示「认证被拒绝或会话已过期」并持久化暂停恢复。13:14:38 的新导出确认已断开、系统自动恢复关闭。
+- 代码核对发现：OpenConnect 9.21 在 HTTP CONNECT 收到 401 时返回 `-EPERM`，旧 provider 将该返回值与密码表单拒绝统一判为永久暂停。进入建立隧道事件意味着 `openconnect_obtain_cookie` 已成功；因此这次错误发生在会话建立阶段，不能直接推断为密码错误。旧记录在每次 extension 启动时清空，未保留飞行模式前完整过程；无法据此确定网关令会话失效的原因。
+- OCEngine 现在明确记录认证完成标志。认证成功之后的 CONNECT 401 走受限的冷重连，重新从手机钥匙串读取凭据、获取新会话；实际认证表单拒绝、认证阶段权限错误、证书错误仍暂停。沿用五分钟最多三次冷启动的持久化预算，未取消重复认证限制。
+- 最近 64 条事件跨 extension 重启保留，但每次会话的地址、传输、计数重新初始化。Debug 导出增加独立 `exportedAt`，区分导出时间和最近事件时间。
+- 69 项逻辑检查通过。原生取消/认证表单测试通过；新增 loopback 假网关让真实 iOS 模拟器 OpenConnect 完成认证，再返回 CONNECT 401，验证 `authenticationCompleted=true` 且 `authenticationFailed=false`。该测试只使用虚构会话和凭据，仅测试可执行文件信任本地临时证书；生产证书验证逻辑未修改。复现命令见 README。
+- iPhoneOS 签名构建及严格签名校验通过。确认断开后于 13:14:51 覆盖安装；13:15:37 使用已保存凭据启动调试连接，13:15:39 建立 TLS。13:15:46 导出为已连接、自动恢复启用，上行 85 / 下行 80 包。
+- 修复版之后的事件显示 13:16:26 和 13:16:44 两次新建隧道，均于约一秒内建立 TLS；13:17:08 导出仍已连接，上行 3036 / 下行 3778 包。此次读取使用只导出诊断的启动参数，没有触发手动连接；仍需用户确认具体飞行模式操作和恢复后的内网业务，不能仅由系统已连接推断业务验收通过。
+- 证据：`airplane-failed.json`、`airplane-before-install.json`、`airplane-install.json`、`airplane-fixed-baseline.json`、`airplane-postflight.json`、`airplane-device-build.log`、`airplane-native-session.log`，位于本机忽略的验证目录。

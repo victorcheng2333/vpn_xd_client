@@ -13,7 +13,7 @@
     int _commandFD;
     int _pair[2];
     BOOL _cancelled, _available, _inMainloop, _useDTLS;
-    BOOL _authenticationFailed, _certificateFailed, _settingsFailed;
+    BOOL _authenticationCompleted, _authenticationFailed, _certificateFailed, _settingsFailed;
     NSUInteger _submissions, _formCallbacks;
     BOOL _groupSelected;
     NSString *_server, *_username, *_password, *_group, *_certificateFailureDetail;
@@ -68,6 +68,7 @@ static NSArray *routes(struct oc_split_include *head) {
     return self;
 }
 + (NSString *)version { return text(openconnect_get_version()); }
+- (BOOL)authenticationCompleted { return _authenticationCompleted; }
 - (BOOL)authenticationFailed { return _authenticationFailed; }
 - (BOOL)certificateFailed { return _certificateFailed; }
 - (NSString *)certificateFailureDetail { return _certificateFailureDetail ?: @"服务器证书校验失败。"; }
@@ -211,6 +212,7 @@ static NSArray *routes(struct oc_split_include *head) {
         result = openconnect_obtain_cookie(_vpn);
         _password = @"";
         if (result) goto finished;
+        _authenticationCompleted = YES;
         [self emit:@"establishing"];
         result = openconnect_make_cstp_connection(_vpn);
         if (result) goto finished;
