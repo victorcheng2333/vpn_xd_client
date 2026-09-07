@@ -18,7 +18,7 @@ data class Profile(val server: String = "https://vpn.xindong.com:8443", val user
 }
 
 enum class Phase(val title: String) {
-    IDLE("尚未连接"), CONNECTING("正在连接"), CONNECTED("已连接"), RECOVERING("正在恢复"), STOPPING("正在断开"), FAILED("连接已暂停");
+    IDLE("尚未连接"), CONNECTING("正在连接"), CONNECTED("已连接"), RECOVERING("正在恢复"), STOPPING("正在断开"), FAILED("尚未连接");
     val active get() = this in setOf(CONNECTING, CONNECTED, RECOVERING, STOPPING)
 }
 

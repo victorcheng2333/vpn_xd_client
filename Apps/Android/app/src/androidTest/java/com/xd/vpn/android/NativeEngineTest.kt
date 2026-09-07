@@ -87,8 +87,17 @@ class NativeEngineTest {
             assertEquals(1, result[2]); assertEquals(0, result[1]); assertEquals(1, gateway.passwordSubmissions.get())
         }
     }
-    inner class Gateway(wrongHost: Boolean = false, private val forms: Boolean = false, private val stall: Boolean = false) : AutoCloseable {
+    @Test fun stagedUsernameThenPasswordReachesAuthenticatedState() {
+        Gateway(staged = true).use { gateway ->
+            val engine = engine(gateway.port); engine.network(network())
+            val result = run(engine, object : Callbacks() { override fun verifyCertificate(chain: Array<ByteArray>, hostname: String) = true })
+            assertEquals(1, result[1]); assertEquals(0, result[2]); assertEquals(1, gateway.passwordSubmissions.get())
+            assertEquals(1, gateway.usernameSubmissions.get())
+        }
+    }
+    inner class Gateway(wrongHost: Boolean = false, private val forms: Boolean = false, private val stall: Boolean = false, private val staged: Boolean = false) : AutoCloseable {
         val connections = AtomicInteger(0); val requests = AtomicInteger(0); val passwordSubmissions = AtomicInteger(0)
+        val usernameSubmissions = AtomicInteger(0)
         private val executor = Executors.newCachedThreadPool()
         @Volatile private var closed = false
         private val server: SSLServerSocket
@@ -126,12 +135,15 @@ class NativeEngineTest {
                 val chars = CharArray(length); var n = 0
                 while (n < length) { val got = input.read(chars, n, length - n); if (got < 0) return; n += got }
                 if (String(chars).contains("synthetic-not-a-real-password")) passwordSubmissions.incrementAndGet()
+                if (String(chars).contains("<username>test-only</username>")) usernameSubmissions.incrementAndGet()
                 chars.fill(' ')
                 requests.incrementAndGet()
                 if (first.startsWith("CONNECT ")) {
                     output.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray()); output.flush(); return
                 }
-                val body = if (forms) "<config-auth><auth id=\"main\"><form method=\"post\" action=\"/auth\"><input type=\"text\" name=\"username\"/><input type=\"password\" name=\"password\"/></form></auth></config-auth>"
+                val stagedInput = if (usernameSubmissions.get() == 0) "text\" name=\"username" else "password\" name=\"password"
+                val body = if (staged && passwordSubmissions.get() == 0) "<config-auth><auth id=\"main\"><form method=\"post\" action=\"/auth\"><input type=\"$stagedInput\"/></form></auth></config-auth>"
+                    else if (forms) "<config-auth><auth id=\"main\"><form method=\"post\" action=\"/auth\"><input type=\"text\" name=\"username\"/><input type=\"password\" name=\"password\"/></form></auth></config-auth>"
                     else "<config-auth><auth id=\"success\"/><session-token>test-session-only</session-token></config-auth>"
                 val data = body.toByteArray()
                 output.write("HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\nContent-Length: ${data.size}\r\n\r\n".toByteArray()); output.write(data); output.flush()

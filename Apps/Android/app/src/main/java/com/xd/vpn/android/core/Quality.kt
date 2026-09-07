@@ -4,6 +4,11 @@ enum class EventKind(val label: String) {
     START("手动连接"), AUTHENTICATING("正在认证"), ESTABLISHING("建立隧道"), CONNECTED("隧道已连接"),
     RECOVERY_START("开始恢复"), RECOVERY_OK("恢复成功"), RECOVERY_FAILED("恢复失败"), CANCEL("手动断开或系统撤销"),
     OFFLINE("等待物理网络"), TLS("使用 TLS"), DTLS("使用 DTLS"), PAUSED("自动恢复已暂停"),
+    AUTH_SERVER_ERROR("网关返回认证错误"), AUTH_REPEAT_PASSWORD("密码提交后网关再次返回表单，已暂停"),
+    AUTH_FORM_LIMIT("认证表单次数超限"), AUTH_GROUP_REQUIRED("认证组无有效默认选项"),
+    AUTH_UNSUPPORTED_TEXT("网关要求暂不支持的文本字段"), AUTH_UNSUPPORTED_PASSWORD("网关要求暂不支持的密码或多因素字段"),
+    AUTH_UNSUPPORTED_SELECT("网关要求暂不支持的选择字段"), AUTH_UNSUPPORTED_FIELD("网关要求暂不支持的认证字段"),
+    AUTH_GATEWAY_REJECTED("网关拒绝认证请求"),
     PROCESS_RESTART("服务进程重新启动"), STORAGE_ERROR("历史记录不完整")
 }
 data class QualityEvent(val kind: EventKind, val wall: Long, val elapsed: Long, val boot: Int, val recovery: String? = null)

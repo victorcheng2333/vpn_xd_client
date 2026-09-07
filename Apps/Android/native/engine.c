@@ -112,11 +112,14 @@ static int process_form(void *data, struct oc_auth_form *form) {
     struct engine *e = data;
     pthread_mutex_lock(&e->lock); int cancelled = e->cancelled; pthread_mutex_unlock(&e->lock);
     if (cancelled) return OC_FORM_RESULT_CANCELLED;
-    if ((form->error && *form->error) || e->submissions >= 1 || ++e->form_callbacks > 6) goto rejected;
+    // Only fixed reason codes are exposed, never field values or server error text.
+    if (form->error && *form->error) { event(e, 6); goto rejected; }
+    if (e->submissions >= 1) { event(e, 7); goto rejected; }
+    if (++e->form_callbacks > 6) { event(e, 8); goto rejected; }
     if (form->authgroup_opt) {
         int selected = form->authgroup_selection;
         if (selected < 0 || selected >= form->authgroup_opt->nr_choices ||
-            openconnect_set_option_value(&form->authgroup_opt->form, form->authgroup_opt->choices[selected]->name)) goto rejected;
+            openconnect_set_option_value(&form->authgroup_opt->form, form->authgroup_opt->choices[selected]->name)) { event(e, 9); goto rejected; }
         if (!e->selected_group) { e->selected_group = 1; return OC_FORM_RESULT_NEWGROUP; }
     }
     int supplied = 0;
@@ -126,7 +129,10 @@ static int process_form(void *data, struct oc_auth_form *form) {
         const char *name = opt->name ? opt->name : "", *value = NULL;
         if (opt->type == OC_FORM_OPT_TEXT && (!strcasecmp(name, "username") || !strcasecmp(name, "user"))) value = e->username;
         if (opt->type == OC_FORM_OPT_PASSWORD && (!strcasecmp(name, "password") || !strcasecmp(name, "passwd"))) { value = e->password; supplied = 1; }
-        if (!value || openconnect_set_option_value(opt, value)) goto rejected;
+        if (!value || openconnect_set_option_value(opt, value)) {
+            event(e, opt->type == OC_FORM_OPT_TEXT ? 10 : opt->type == OC_FORM_OPT_PASSWORD ? 11 : opt->type == OC_FORM_OPT_SELECT ? 12 : 13);
+            goto rejected;
+        }
     }
     if (supplied) e->submissions++;
     return OC_FORM_RESULT_OK;
@@ -237,7 +243,7 @@ JNIEXPORT jintArray JNICALL Java_com_xd_vpn_android_engine_NativeEngine_run(JNIE
     if (await_network(e)) { result = -EINTR; goto finished; }
     event(e, 0);
     result = openconnect_obtain_cookie(e->vpn); erase(&e->password);
-    if (result) goto finished;
+    if (result) { if (result == -EPERM && !e->auth_failed && !e->cert_failed) event(e, 14); goto finished; }
     e->completed = 1; event(e, 1);
     result = openconnect_make_cstp_connection(e->vpn);
     if (result) goto finished;

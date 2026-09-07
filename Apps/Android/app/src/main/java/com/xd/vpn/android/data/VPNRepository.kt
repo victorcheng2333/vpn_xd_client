@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.provider.Settings
 import com.xd.vpn.android.core.*
+import com.xd.vpn.android.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
@@ -97,7 +98,7 @@ class VPNRepository(context: Context) {
         val s = mutable.value; val summary = Quality.summarize(s.events, System.currentTimeMillis(), s.incomplete)
         val date = SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT)
         return buildString {
-            appendLine("XD VPN Android 0.1.0 连接诊断")
+            appendLine("XD VPN Android ${BuildConfig.VERSION_NAME} 连接诊断")
             appendLine("状态：${s.snapshot.phase.title}；传输：${s.snapshot.transport}")
             appendLine("最近24小时恢复：成功 ${summary.successes} / 失败 ${summary.failures}")
             appendLine("最近恢复耗时：${summary.lastDurationMs?.let { "${it / 1000.0}秒" } ?: "未知"}")

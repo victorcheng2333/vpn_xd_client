@@ -205,6 +205,15 @@ class XDVpnService : VpnService(), NativeCallbacks {
             3 -> repo.connected()
             4 -> { repo.update { it.copy(transport = "TLS") }; repo.record(EventKind.TLS) }
             5 -> { repo.update { it.copy(transport = "DTLS") }; repo.record(EventKind.DTLS) }
+            6 -> repo.record(EventKind.AUTH_SERVER_ERROR)
+            7 -> repo.record(EventKind.AUTH_REPEAT_PASSWORD)
+            8 -> repo.record(EventKind.AUTH_FORM_LIMIT)
+            9 -> repo.record(EventKind.AUTH_GROUP_REQUIRED)
+            10 -> repo.record(EventKind.AUTH_UNSUPPORTED_TEXT)
+            11 -> repo.record(EventKind.AUTH_UNSUPPORTED_PASSWORD)
+            12 -> repo.record(EventKind.AUTH_UNSUPPORTED_SELECT)
+            13 -> repo.record(EventKind.AUTH_UNSUPPORTED_FIELD)
+            14 -> repo.record(EventKind.AUTH_GATEWAY_REJECTED)
         }
         main.post { if (running && !cancelled.get()) getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification()) }
     }

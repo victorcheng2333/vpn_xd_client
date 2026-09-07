@@ -1,6 +1,8 @@
 # Android 开发验证记录 — 2026-09-07
 
-基线：`main@d162185`；开发：`codex/android-support`；版本0.1.0，min API28 / target API36。
+基线：`main@d162185`；开发：`codex/android-support`；以下为首轮版本0.1.0验证，min API28 / target API36。
+
+后续 0.1.1 最终 APK 与真机结果见 [Android 真机验收记录](DEVICE-VERIFICATION-2026-09-07.md)。
 
 ## 结果
 
@@ -32,9 +34,9 @@
 - 关闭自动连接偏好后，下一次冷认证不消耗预算；损坏恢复文件不会授权重连。
 - 最近24小时恢复统计、重复完成去重、取消不算失败、跨设备启动和未知起点不虚构耗时。
 
-本机没有连接Android实体手机。本测试只使用合成凭据和127.0.0.1临时服务，不读取或提交公司真实账号。
+首轮测试仅使用合成凭据和127.0.0.1临时服务。后续已连接 Android 真机并验收，详见上述真机记录。
 
-## 尚待验收
+## 首轮结束时尚待验收（后续进展见真机记录）
 
 | 项目 | 状态 |
 | --- | --- |
@@ -61,7 +63,7 @@ ANDROID_SERIAL=emulator-5554 Apps/Android/gradlew -p Apps/Android :app:connected
 
 本轮构建/测试日志在`.build/verification/`；实际截图在`.build/screenshots/`。JVM、lint、设备报告由Gradle写入`app/build/reports/`。这些生成物不进入Git。
 
-## APK 校验和
+## 首轮 0.1.0 APK 校验和（非最终交付包）
 
 - `debug/app-debug.apk`：80,084,137 bytes；SHA-256 `478411302e69a49c9b12e1441a50f431a7ea039b40858eb44b52b7e569a32d1c`。
 - `release/app-release-unsigned.apk`：17,096,110 bytes；SHA-256 `edca2b33412cd7e76bc4d207893d174839759f9dd991968dd5ca6f6fd6f87746`。

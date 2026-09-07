@@ -18,7 +18,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -30,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -43,6 +46,7 @@ import java.util.Date
 import java.util.Locale
 
 private val Brand = Color(0xFF227858)
+private val Idle = Color(0xFF626D7A)
 private val Connecting = Color(0xFF397ADE)
 private val Connected = Color(0xFF26976B)
 
@@ -94,7 +98,8 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
 @Composable private fun Note(text: String) { Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
 @Composable private fun Home(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () -> Unit, autoConnect: (Boolean) -> Unit) {
     val snapshot = state.snapshot
-    val color = when (snapshot.phase) { Phase.CONNECTED -> Connected; Phase.CONNECTING, Phase.RECOVERING -> Connecting; else -> MaterialTheme.colorScheme.primary }
+    val color = when (snapshot.phase) { Phase.CONNECTED -> Connected; Phase.CONNECTING, Phase.RECOVERING -> Connecting; else -> Idle }
+    val buttonColor = if (snapshot.phase.active) color else MaterialTheme.colorScheme.primary
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Outlined.Language, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(6.dp)); Note("工作网络"); Spacer(Modifier.weight(1f)); Note("Android 验证版 ${BuildConfig.VERSION_NAME}")
@@ -106,7 +111,7 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
             Text(if (snapshot.phase.active) "连接状态和恢复记录可在连接质量页查看。" else "连接公司网络，安全访问工作资源。", style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Button(onClick = if (snapshot.phase.active) disconnect else connect, enabled = !busy && snapshot.phase != Phase.STOPPING,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = color)) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(14.dp), colors = ButtonDefaults.buttonColors(containerColor = buttonColor)) {
                 if (snapshot.phase in setOf(Phase.CONNECTING, Phase.RECOVERING)) { CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp); Spacer(Modifier.width(10.dp)) }
                 Text(if (snapshot.phase.active) "断开" else "连接 VPN", style = MaterialTheme.typography.titleMedium)
             }
@@ -149,6 +154,9 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
     var username by remember(state.profile.username) { mutableStateOf(state.profile.username) }
     // Deliberately not rememberSaveable: passwords never enter saved state or Android backup.
     var password by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    var passwordFocused by remember { mutableStateOf(false) }
+    val showSavedPassword = state.hasPassword && password.isEmpty() && !passwordFocused
     val enabled = !state.snapshot.phase.active && !busy
     Text("VPN 配置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     Panel {
@@ -156,10 +164,12 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
             singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false))
         OutlinedTextField(username, { username = it }, label = { Text("用户名") }, enabled = enabled, modifier = Modifier.fillMaxWidth(),
             singleLine = true, keyboardOptions = KeyboardOptions(autoCorrectEnabled = false))
-        OutlinedTextField(password, { password = it }, label = { Text("密码") }, placeholder = { Text(if (state.hasPassword) "已保存；留空保持原密码" else "请输入密码") },
-            enabled = enabled, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation(),
+        OutlinedTextField(if (showSavedPassword) "****" else password, { password = it }, label = { Text("密码") },
+            placeholder = { Text(if (state.hasPassword) "留空保持原密码" else "请输入密码") },
+            enabled = enabled, modifier = Modifier.fillMaxWidth().onFocusChanged { passwordFocused = it.isFocused }, singleLine = true,
+            visualTransformation = if (showSavedPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))
-        Button(onClick = { save(state.profile.copy(server = server, username = username), password); password = "" }, enabled = enabled,
+        Button(onClick = { save(state.profile.copy(server = server, username = username), password); password = ""; focusManager.clearFocus() }, enabled = enabled,
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp), shape = RoundedCornerShape(12.dp)) { Text("保存配置") }
     }
     Note("密码通过 Android Keystore 加密保存在本机，设备首次解锁后可供隧道后台读取。")

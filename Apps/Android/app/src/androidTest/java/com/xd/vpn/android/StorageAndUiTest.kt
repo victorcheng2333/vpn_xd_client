@@ -70,4 +70,23 @@ class StorageAndUiTest {
         } finally { context.noBackupFilesDir.deleteRecursively() }
     }
 
+    @Test fun savedPasswordDisplaysMaskAndSavingBlankPreservesCredential() {
+        var saved: String? = null
+        compose.setContent { VPNApp(ViewState(Profile(username = "test-only"), true), false, {}, {}, { _, password -> saved = password }, {}, {}) }
+        compose.onNodeWithText("设置").performClick()
+        compose.onNodeWithText("****").assertIsDisplayed()
+        compose.onNodeWithText("保存配置").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("", saved) }
+        compose.onNodeWithText("密码").performClick()
+        compose.onNodeWithText("****").assertDoesNotExist()
+        compose.onNodeWithText("密码").performTextInput("replacement-test-only")
+        compose.onNodeWithText("保存配置").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("replacement-test-only", saved) }
+        compose.onNodeWithText("****").assertIsDisplayed()
+        compose.onNodeWithText("密码").performClick()
+        compose.onNodeWithText("保存配置").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("", saved) }
+        compose.onNodeWithText("****").assertIsDisplayed()
+    }
+
 }
