@@ -1,5 +1,15 @@
 # 验证记录
 
+## 2026-09-07：test.28 本机服务升级、迁移及公证验收通过
+
+- 最终代码提交 `1257f98a950c735ffd1ed82aae45875e3e77ceb8`，构建 `28-test-20260907T064551Z-1257f98`。ARM 完整回归 **222 项通过，0 失败**；Intel（Rosetta）完整回归 **222 项通过，0 失败**。新增 10 项注册与恢复边界检查通过；日志 `.build/test28-final-{arm,intel}.log`、`.build/test28-registration-tests.log`。
+- 实际从后台仍运行 test.26、已覆盖 App 的故障现场升级到 test.28。一次 `register` 调用完成旧服务停止、状态同步重试及新服务注册：旧 PID 14008 退出，新 PID 20383 运行，launchd 的 parent bundle version 为 28。系统日志确认旧服务 `wait4() status=0`，随后确实出现一次暂时 bootstrap 拒绝，恢复重试后该次操作成功；无需再次点击或增加系统批准。记录 `.build/test28-managed-upgrade-system.log` 与 `.build/test28-installed-verification.json`。
+- 已安装 App 的真实 `probe` 返回构建匹配、`busy=false`、`legacyAuthorization=false`；`smoke` 验证独占空会话、断连清理、错误构建拒绝及重新创建会话均成功。界面实际显示 `1.1.19-test.28`、「连接 VPN」，故障提示隐藏，自动连接与开机启动保持关闭。未连接真实 VPN。
+- `/Applications/XD VPN.app` 已替换为最终版本；test.25／test.26／test.27 的 App 备份保留在 `build/installed-backups/`。旧权限文件已按用户明确授权迁入受保护备份，配置及钥匙串未修改。
+- 最终安装包 `build/XD-VPN-1.1.19-test.28-macOS-arm64.dmg`，4,576,226 字节，SHA-256 `d9ea4aff679fad1e7a21839b60d7b452286639b0332c8cb7d5b1c713d847f424`。App 公证 `feab821a-71b6-4e4f-994a-9eaf670a9ca7`、DMG 公证 `78598fac-786e-45d8-8be5-e631f46de13e` 均 Accepted、票据附加验证成功。
+- 最终 DMG 只读挂载后通过 App／DMG 公司签名、Gatekeeper `accepted / Notarized Developer ID`、票据、ARM 架构、正式／测试版本隔离、来源提交、服务 plist 和实际运行副本签名验证。记录 `.build/test28-verification.json`。本轮 OpenConnect 实现未修改，内置引擎隔离验收沿用 test.26 通过的结果。
+- 真实 VPN 登录、切换 Wi-Fi、睡眠恢复及 DNS／路由还原尚未本轮实测；上述空会话和替身回归不作为实网通过的证据。正式 GitHub Release 未发布或替换。
+
 ## 2026-09-07：实机覆盖升级发现旧进程动态签名失效
 
 - test.27 的 ARM／Intel 回归各 218 项通过，App／DMG 已公司签名、公证、只读挂载验证；记录 `.build/test27-verification.json`。该中间包不作为最终交付。
