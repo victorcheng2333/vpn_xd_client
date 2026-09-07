@@ -2,6 +2,7 @@ import SwiftUI
 import VPNCore
 
 struct ContentView: View {
+    @EnvironmentObject var updates: UpdateManager
     @EnvironmentObject var model: VPNModel
     var body: some View {
         HStack(spacing: 0) {
@@ -9,7 +10,10 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 switch model.page {
-                case .connection: DashboardView()
+                case .connection:
+                    ScrollView {
+                        DashboardView().padding(.bottom, 2)
+                    }.scrollIndicators(.hidden)
                 case .quality: QualityView()
                 case .profile: ProfileView()
                 case .authorization: AuthorizationView()
@@ -71,7 +75,7 @@ struct ContentView: View {
                 Circle().fill(model.engineAvailable ? Color(hex: 0xA6D6BA) : .orange).frame(width: 5, height: 5)
                 Text(model.engineAvailable ? "内置引擎就绪" : "内置引擎缺失").font(.system(size: 10)).foregroundStyle(.white.opacity(0.45))
                 Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.1").font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.25))
+                Button(updates.displayVersion) { updates.showPanel = true }.buttonStyle(.plain).font(.system(size: 9, design: .monospaced)).foregroundStyle(.white.opacity(0.25))
             }.padding(.horizontal, 24).padding(.vertical, 24)
         }.frame(width: 204).background(Palette.sidebar).foregroundStyle(.white)
     }
@@ -110,6 +114,9 @@ struct DashboardView: View {
                 VStack(spacing: 18) { profileCard; privacyCard }.frame(width: 226)
             }
             autoConnectCard
+            LoginItemView()
+                .padding(19).background(Color(hex: 0xEDF1E9), in: RoundedRectangle(cornerRadius: 17))
+                .overlay(RoundedRectangle(cornerRadius: 17).stroke(Color(hex: 0xE1E8DD)))
             HStack(spacing: 6) {
                 Image(systemName: "lock.shield").font(.system(size: 10))
                 Text("凭据留在你的 Mac，连接交给 XD VPN。") .font(.system(size: 10))
@@ -120,7 +127,7 @@ struct DashboardView: View {
     }
 
     private var connectionCard: some View {
-        Card(padding: 22, background: isConnected ? model.state.statusSurface : .white) {
+        Card(padding: 22, background: model.state.statusSurface) {
             VStack(spacing: 0) {
                 HStack {
                     SmallLabel(text: "CONNECTION")

@@ -1,5 +1,30 @@
 # 验证记录
 
+## 2026-09-07：安装包实际 Apple 公证通过
+
+本轮对现有公司签名的 `1.1.19-test.23 / arm64` 测试包完成了实际公证，不是仅验证账号凭据，也未发布 GitHub Release。
+
+- App 提交：`ae0c0e3c-1347-47af-bda1-c1edd48bdc7d`，Apple 返回 `Accepted`。
+- DMG 提交：`80967071-59c3-47da-9819-8210350fa032`，Apple 返回 `Accepted`。
+- App 公证后附加票据，再打包、签名并公证 DMG；DMG 票据验证通过。
+- 只读挂载最终 DMG，其中 App 的 stapler 验证及 codesign 深度校验通过，Gatekeeper 返回 `accepted`、`source=Notarized Developer ID`。
+- 最终 DMG 的 `.sha256` 校验通过。产物：`build/XD-VPN-1.1.19-test.23-macOS-arm64.dmg`。
+- Apple 返回记录保存在 `build/notarization/test23-app.json` 和 `build/notarization/test23-dmg.json`，执行日志为 `.build/notarization-test23.log`。这些本地产物不提交 Git。
+- 正式版本仍须在干净的版本提交及匹配标签上重新构建，不能把这个测试包重命名当正式版发布；可使用 `scripts/release.sh prepare <tag>` 完成构建、测试、公司签名与强制公证。
+
+
+## 2026-09-07：GitHub Release、公司签名与版本更新
+
+- 目标正式版本：1.1.19 / build 22；本机验收包使用 test.23，不发布正式版。
+- Swift 完整测试 181 项通过（含 7 项版本更新测试）；Python 发布规则测试 7 项通过；架构、最低系统、渠道与版本保护脚本通过。
+- 已经用户授权，在 Xcode Tools UG 团队创建 Developer ID Application（Team ID KQY8A3BNVG），并实际签名 ARM App、系统助手与 OpenConnect；正常系统权限下 codesign 深度校验通过，确认 hardened runtime 和安全时间戳。
+- ARM 测试 DMG 创建、hdiutil verify、SHA-256 复核通过；应用内引擎的移位运行、系统依赖、可信 TLS、拒绝不可信证书和错误主机名的隔离验收通过。
+- 更新测试覆盖稳定版本数字排序、草稿／预发布／降级过滤、架构选择、仓库 URL、缺失摘要、大小与 SHA-256 不匹配、私有仓库错误、Token 请求头和 CDN 重定向移除 Token。
+- 发布测试覆盖标签匹配、显式构建号、渠道版本隔离、正式版本单调递增、已发布版本不可覆盖、草稿重试、资产摘要失败时禁止发布。
+- GitHub workflow YAML 和 Shell 语法检查通过。线上签名、公证及 GitHub 实际发布尚未执行：仓库尚未配置所需 GitHub Secrets；本机签名测试包尚未 Apple 公证。Intel 原生构建／完整验收由 Release matrix 执行，本轮本机仅验证 ARM 成品及双架构拒绝路径。
+- 操作与所需 Secrets 见 [发布文档](docs/releasing.md)。
+
+
 ## 当前交付：1.1.16 Intel / Apple Silicon 独立包
 
 2026-09-06，build 19，助手协议继续为 8。按芯片分别交付，不生成通用二进制包。构建机为 Apple Silicon / macOS 26.6.2 / Swift 6.3.3。

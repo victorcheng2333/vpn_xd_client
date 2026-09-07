@@ -55,9 +55,21 @@ import VPNCore
         model = nil; helper = nil; defaults = nil; passwords.removeAll()
     }
 
-    private func letConnectRun() async {
-        // Advance the MainActor's suspended prepare/connect tasks.
+    private func waitUntil(file: StaticString = #filePath, line: UInt = #line,
+                           _ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        XCTAssertTrue(condition(), "Timed out waiting for asynchronous state", file: file, line: line)
+    }
+
+    private func letConnectRun(file: StaticString = #filePath, line: UInt = #line) async {
+        // yield() does not guarantee that a lower-priority task runs on CI.
         for _ in 0..<10 { await Task.yield() }
+        await waitUntil(file: file, line: line) {
+            model.isQuitting || model.state != .authorizing || (helper.delayAuthorization && helper.authorization != nil)
+        }
     }
 
     private func letRecoveryRun() async {
@@ -833,7 +845,9 @@ import VPNCore
         helper.onEvent?(.init(.connected, "connected"))
         helper.onEvent?(.init(.reconnecting, "dead peer detected"))
         XCTAssertEqual(model.state, .reconnecting)
-        try? await Task.sleep(for: .milliseconds(260))
+        let start = ContinuousClock.now
+        await waitUntil { model.state == .disconnecting }
+        XCTAssertGreaterThanOrEqual(start.duration(to: .now), .milliseconds(200))
         XCTAssertEqual(model.state, .disconnecting)
         XCTAssertEqual(helper.commands.last?.kind, .disconnect)
         XCTAssertEqual(helper.commands.filter { $0.kind == .connect }.count, 1)
@@ -858,9 +872,11 @@ import VPNCore
         helper.onEvent?(.init(.connected, "connected"))
         model.physicalNetworkChanged(); await letRecoveryRun()
         helper.onEvent?(.init(.connected, "quick recovery"))
-        model.physicalNetworkChanged(); await letRecoveryRun()
+        // Queue both notifications before yielding, so scheduler load cannot
+        // move the second notification outside the cooldown being tested.
         model.physicalNetworkChanged()
-        try? await Task.sleep(for: .milliseconds(150))
+        model.physicalNetworkChanged()
+        await waitUntil { helper.commandTimes.filter { $0.0 == .reconnect }.count >= 2 }
         let kicks = helper.commandTimes.filter { $0.0 == .reconnect }.map { $0.1 }
         XCTAssertEqual(kicks.count, 2)
         if kicks.count == 2 { XCTAssertGreaterThanOrEqual(kicks[0].duration(to: kicks[1]), .milliseconds(150)) }

@@ -1,9 +1,23 @@
 #!/bin/bash
-# Distribute the application together with notices and corresponding sources.
+# Distribute the self-contained application and installation instructions.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/architectures.sh
-# Default delivery: an ARM app plus ARM and Intel ZIPs.
+export BUILD_CHANNEL="${BUILD_CHANNEL:-test}"
+case "$BUILD_CHANNEL" in
+    release|test) ;;
+    *) echo 'Packaging requires BUILD_CHANNEL=release or test.' >&2; exit 1 ;;
+esac
+python3 scripts/version.py > /dev/null
+if [ "$BUILD_CHANNEL" = release ]; then
+    [ "${NOTARIZE:-1}" = 1 ] || { echo 'Release requires Apple notarization; NOTARIZE must be 1.' >&2; exit 1; }
+    export NOTARIZE=1
+    export NOTARY_KEYCHAIN_PROFILE="${NOTARY_KEYCHAIN_PROFILE:-xdvpn-notary}"
+    python3 scripts/version.py --check-git > /dev/null
+fi
+source scripts/signing.sh
+xdvpn_configure_signing
+# Default delivery: an ARM app plus ARM and Intel DMGs.
 if [ "${ARCHS+x}" != x ] && [ "${APP_OUTPUT+x}" != x ]; then
     ARCHS=arm64 bash scripts/package.sh
     ARCHS=x86_64 bash scripts/package.sh
@@ -11,9 +25,12 @@ if [ "${ARCHS+x}" != x ] && [ "${APP_OUTPUT+x}" != x ]; then
 fi
 TARGET_ARCHS="$(xdvpn_architectures "${ARCHS-$(uname -m)}")"
 SOURCE_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-APP_DIRECTORY="$PWD/dist"
+APP_DIRECTORY="$PWD/build"
 if [ "$TARGET_ARCHS" = x86_64 ]; then
     APP_DIRECTORY="$PWD/.build/package-apps"
+fi
+if [ "$BUILD_CHANNEL" = test ]; then
+    APP_DIRECTORY="$PWD/build/test/$TARGET_ARCHS"
 fi
 APP="${APP_OUTPUT:-$APP_DIRECTORY/XD VPN $SOURCE_VERSION-$TARGET_ARCHS.app}"
 # A release command builds the complete payload before packaging it. Use
@@ -23,6 +40,27 @@ if [ "${SKIP_BUILD:-0}" != 1 ]; then
 fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+APP_CHANNEL="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNBuildChannel' "$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
+if [ "$APP_CHANNEL" != "$BUILD_CHANNEL" ]; then
+    echo "Build channel mismatch: expected $BUILD_CHANNEL, got $APP_CHANNEL" >&2; exit 1
+fi
+if [ "$BUILD_CHANNEL" = release ]; then
+    APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
+    EXPECTED_BUILD="$(python3 scripts/version.py --field build)"
+    [ "$VERSION" = "$SOURCE_VERSION" ] && [ "$APP_BUILD" = "$EXPECTED_BUILD" ] || { echo 'Release app version/build mismatch.' >&2; exit 1; }
+    APP_REVISION="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNSourceRevision' "$APP/Contents/Info.plist")"
+    APP_REPOSITORY="$(/usr/libexec/PlistBuddy -c 'Print :XDVPNReleaseRepository' "$APP/Contents/Info.plist")"
+    [ "$APP_REVISION" = "$(git rev-parse HEAD)" ] && [ "$APP_REPOSITORY" = "$(python3 scripts/version.py --field repository)" ] || {
+        echo 'Release app source revision/repository mismatch.' >&2; exit 1;
+    }
+fi
+PACKAGE_VERSION="$VERSION"
+OUTPUT_DIRECTORY="$PWD/build"
+if [ "$BUILD_CHANNEL" = test ]; then
+    APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")"
+    [[ "$APP_BUILD" =~ ^[1-9][0-9]*$ ]] || exit 1
+    PACKAGE_VERSION="$VERSION-test.$APP_BUILD"
+fi
 TARGET_ARCHS="$(xdvpn_architectures "$(/usr/bin/lipo -archs "$APP/Contents/MacOS/XDVPN")")"
 xdvpn_verify_architectures "$APP/Contents/MacOS/XDVPN" "$TARGET_ARCHS"
 if [ "${ARCHS+x}" = x ]; then
@@ -35,92 +73,58 @@ case "$TARGET_ARCHS" in
     x86_64) ARCH=x86_64; MACHINE='Intel Mac' ;;
 esac
 codesign --verify --deep --strict "$APP"
+if [ "$BUILD_CHANNEL" = release ]; then
+    source scripts/signing.sh
+    for target in "$APP" "$APP/Contents/Helpers/XDVPNHelper" "$APP/Contents/Resources/OpenConnect/openconnect"; do
+        xdvpn_verify_release_signature "$target"
+    done
+fi
 test -x "$APP/Contents/Resources/OpenConnect/openconnect"
 test -x "$APP/Contents/Resources/OpenConnect/vpnc-script"
-STAGE="$PWD/.build/distribution/$ARCH/XD VPN $VERSION"
-SOURCES="$STAGE/ThirdPartySources"
+SIGNING_NOTE='此包使用本地签名，未做 Apple 公证；若 macOS 阻止打开，请联系发布者或公司 IT。'
+APP_SIGNING_DETAILS="$(codesign -d --verbose=4 "$APP" 2>&1)"
+if [[ "$APP_SIGNING_DETAILS" = *'Authority=Developer ID Application:'* ]]; then
+    SIGNING_NOTE='此包使用公司 Developer ID 签名，未做 Apple 公证；若 macOS 阻止打开，请联系发布者或公司 IT。'
+fi
+if [ "${NOTARIZE:-0}" = 1 ]; then
+    bash scripts/notarize.sh "$APP"
+    SIGNING_NOTE='此包已使用 Developer ID 签名并通过 Apple 公证。'
+fi
+STAGE="$PWD/.build/distribution/$BUILD_CHANNEL/$ARCH/XD VPN $PACKAGE_VERSION"
 rm -rf "$STAGE"
-mkdir -p "$SOURCES/archives" "$SOURCES/scripts" dist
+mkdir -p "$STAGE" "$OUTPUT_DIRECTORY"
 ditto "$APP" "$STAGE/XD VPN.app"
-cp .build/openconnect/downloads/openconnect-9.21.tar.gz \
-   .build/openconnect/downloads/openssl-3.6.2.tar.gz \
-   .build/openconnect/downloads/pkgconf-3.0.6.tar.xz \
-   .build/openconnect/downloads/vpnc-script \
-   .build/openconnect/downloads/GPL-2.0.txt "$SOURCES/archives/"
-cp scripts/build-openconnect.sh scripts/architectures.sh "$SOURCES/scripts/"
-cp -R "$APP/Contents/Resources/ThirdParty" "$STAGE/ThirdPartyLicenses"
-# Include the actual GPL script source emitted by the network wrapper as well.
-python3 - "$SOURCES/vpnc-script-xdvpn" <<'PY'
-from pathlib import Path
-import re, sys, textwrap
-swift = Path('Sources/VPNCore/TunnelNetworkSession.swift').read_text()
-override = re.search(r'let overrides = """\n(.*?)\n        """', swift, re.S)
-assert override
-source = Path('.build/openconnect/downloads/vpnc-script').read_text()
-assert source.count('#### Main') == 1
-modified = source.replace('#### Main', textwrap.dedent(override.group(1)) + '\n#### Main')
-Path(sys.argv[1]).write_text(modified.replace('#!/bin/sh\n', '#!/bin/sh\n# XD VPN runtime variant, 2026-09-06; modifications are below before Main.\n', 1))
-PY
-cat > "$SOURCES/README.txt" <<'EOF'
-Corresponding source for the bundled OpenConnect engine
-
-OpenConnect 9.21 (LGPL 2.1), OpenSSL 3.6.2 (Apache 2.0),
-vpnc-script (GPL 2 or later), and pkgconf 3.0.6 (build tool only).
-Source archives are unmodified upstream releases, verified by SHA-256 in
-scripts/build-openconnect.sh. That script statically links OpenSSL and
-OpenConnect; macOS supplies libSystem, libxml2, libz and libiconv.
-External OpenSSL modules and automatic configuration loading are disabled.
-
-To rebuild on a Mac with Xcode / Command Line Tools (Homebrew is not needed):
-  cd ThirdPartySources
-  # Upstream build tools require a source path without spaces.
-  build_dir="$(mktemp -d /private/tmp/xdvpn-source.XXXXXXXX)"
-  cp -R . "$build_dir/"
-  cd "$build_dir"
-  mkdir -p .build/openconnect/downloads
-  cp archives/* .build/openconnect/downloads/
-  bash scripts/build-openconnect.sh
-
-The default rebuild targets the build machine's architecture.
-To select a target, use ARCHS=arm64 or ARCHS=x86_64 before bash.
-Both targets can be cross-compiled on either Mac architecture; Rosetta is
-only needed to run x86_64 validation on an Apple Silicon build machine.
-The executable and original vpnc-script are produced in
-.build/openconnect/<architecture>/runtime.
-The supplied archives permit this rebuild without downloading third-party code.
-Build output and installed application files are not assumed to be trusted merely
-because they were built here; the app's administrator installation verifies them.
-
-vpnc-script-xdvpn is the corresponding source of the script generated at runtime
-by XD VPN when it manages the server route. It overrides the original gateway,
-default-route restoration and persistent networksetup DNS operations. The original
-script, copyright notices and full GPL text are also included.
-
-Sources: https://www.infradead.org/openconnect/download.html
-https://github.com/openssl/openssl/releases/tag/openssl-3.6.2
-https://gitlab.com/openconnect/vpnc-scripts
-https://github.com/pkgconf/pkgconf
-EOF
+ln -s /Applications "$STAGE/Applications"
 cat > "$STAGE/开始使用.txt" <<EOF
 XD VPN 内置引擎版
+版本：${PACKAGE_VERSION}
 
 适用：${MACHINE}，最低系统目标为 macOS 14。
 无需安装 Homebrew 或 OpenConnect。
 
-1. 将「XD VPN.app」复制到「应用程序」目录，打开应用。
+1. 将「XD VPN.app」拖到旁边的「Applications」文件夹，再从「应用程序」打开应用。
 2. 在「VPN 配置」填写自己的 VPN 账号与密码并保存。
 3. 打开「系统授权」，点击「安装系统助手」，完成一次 Mac 管理员确认。
    助手、内置引擎和网络脚本会一起安装。已有旧版则点击「升级系统助手」。
 4. 返回连接页，点击「连接 VPN」。
 
 升级前请先断开并退出旧版。原有 XD VPN 配置和钥匙串密码可继续使用。
-当前版本为本地签名，未做 Apple 公证；若 macOS 阻止打开，请联系发送者或公司 IT。
+${SIGNING_NOTE}
 不支持验证码、浏览器 SSO 或交互式 MFA 登录。
 
-ThirdPartySources 和 ThirdPartyLicenses 是随包提供的开源组件源码与许可证，
-无需安装。转发本软件时请一并保留。
+运行所需的引擎、网络脚本和第三方许可证均保留在 XD VPN.app 内，
+无需另外安装依赖。
 EOF
-OUTPUT="$PWD/dist/XD-VPN-$VERSION-macOS-$ARCH-bundled.zip"
-ditto -c -k --sequesterRsrc --keepParent "$STAGE" "$OUTPUT"
-unzip -t "$OUTPUT" > "$PWD/.build/bundled-zip-test.log"
+OUTPUT="$OUTPUT_DIRECTORY/XD-VPN-$PACKAGE_VERSION-macOS-$ARCH.dmg"
+hdiutil create -ov -volname "XD VPN $PACKAGE_VERSION" -srcfolder "$STAGE" -format UDZO "$OUTPUT"
+hdiutil verify "$OUTPUT"
+if [ "$BUILD_CHANNEL" = release ] || [ "${NOTARIZE:-0}" = 1 ]; then
+    source scripts/signing.sh
+    xdvpn_sign com.xd.vpn.disk-image "$OUTPUT"
+    codesign --verify --strict "$OUTPUT"
+fi
+if [ "${NOTARIZE:-0}" = 1 ]; then
+    bash scripts/notarize.sh "$OUTPUT"
+fi
+(cd "$OUTPUT_DIRECTORY" && shasum -a 256 "$(basename "$OUTPUT")" > "$(basename "$OUTPUT").sha256")
 printf 'Packaged: %s\n' "$OUTPUT"

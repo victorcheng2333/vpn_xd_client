@@ -1,5 +1,9 @@
 .build/
+build/
 .swiftpm/
 dist/
 .DS_Store
 *.xcuserstate
+
+__pycache__/
+*.pyc

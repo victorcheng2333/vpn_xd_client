@@ -3,6 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/architectures.sh
+source scripts/signing.sh
+# Test fixtures must not inherit release settings from CI.
+unset BUILD_CHANNEL BUILD_NUMBER RELEASE_TAG NOTARIZE NOTARY_KEYCHAIN_PROFILE SIGNING_IDENTITY APPLE_TEAM_ID
+export BUILD_CHANNEL=test BUILD_NUMBER=999
 FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/xdvpn-architecture-test.XXXXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 printf 'int main(void) { return 0; }\n' > "$FIXTURE/main.c"
@@ -23,21 +27,37 @@ expect_rejection() {
         cat "$FIXTURE/result" >&2; exit 1
     fi
 }
+codesign --force --sign - "$FIXTURE/arm64"
+expect_rejection 'Release requires' xdvpn_verify_release_signature "$FIXTURE/arm64"
 expect_rejection 'Architecture mismatch' xdvpn_verify_architectures "$FIXTURE/arm64" x86_64
 expect_rejection 'Invalid architecture' xdvpn_verify_architectures "$FIXTURE/universal" arm64
 expect_rejection 'Expected macOS 14.0' xdvpn_verify_architectures "$FIXTURE/newer-os" arm64
 expect_rejection 'Invalid architecture' env ARCHS='arm64 x86_64' bash scripts/build.sh
 expect_rejection 'Invalid architecture' env ARCHS=i386 bash scripts/package.sh
+expect_rejection 'Invalid build channel' env BUILD_CHANNEL=invalid bash scripts/build.sh
+expect_rejection 'Test builds require' env -u BUILD_NUMBER BUILD_CHANNEL=test bash scripts/build.sh
+expect_rejection 'positive integer' env BUILD_NUMBER=invalid bash scripts/build.sh
+SOURCE_TAG="$(BUILD_CHANNEL=development python3 scripts/version.py --field tag)"
+SOURCE_BUILD="$(env -u BUILD_NUMBER BUILD_CHANNEL=development python3 scripts/version.py --field build)"
+expect_rejection 'Release requires Apple notarization' env BUILD_CHANNEL=release NOTARIZE=0 RELEASE_TAG="$SOURCE_TAG" BUILD_NUMBER="$SOURCE_BUILD" bash scripts/package.sh
+expect_rejection 'Packaging requires' env BUILD_CHANNEL=development bash scripts/package.sh
 
 # Packaging must reject a helper or engine from the other chip before signing
 # or creating an archive. A fixture bundle is enough to reach these guards.
 APP="$FIXTURE/Mixed.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources/OpenConnect"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c 'Add :XDVPNBuildChannel string development' "$APP/Contents/Info.plist"
+expect_rejection 'Build channel mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
+/usr/libexec/PlistBuddy -c 'Set :XDVPNBuildChannel test' "$APP/Contents/Info.plist"
+expect_rejection 'Release requires' env BUILD_CHANNEL=release SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
+/usr/libexec/PlistBuddy -c 'Delete :XDVPNBuildChannel' "$APP/Contents/Info.plist"
+expect_rejection 'Build channel mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
+/usr/libexec/PlistBuddy -c 'Add :XDVPNBuildChannel string test' "$APP/Contents/Info.plist"
 cp "$FIXTURE/arm64" "$APP/Contents/MacOS/XDVPN"
 cp "$FIXTURE/x86_64" "$APP/Contents/Helpers/XDVPNHelper"
 expect_rejection 'Architecture mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
 cp "$FIXTURE/arm64" "$APP/Contents/Helpers/XDVPNHelper"
 cp "$FIXTURE/x86_64" "$APP/Contents/Resources/OpenConnect/openconnect"
 expect_rejection 'Architecture mismatch' env SKIP_BUILD=1 ARCHS=arm64 APP_OUTPUT="$APP" bash scripts/package.sh
-printf 'Passed: 2 target fixtures and 7 architecture/deployment rejection checks.\n'
+printf 'Passed: architecture, deployment, channel and release guard checks.\n'

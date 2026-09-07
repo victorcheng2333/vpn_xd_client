@@ -3,19 +3,19 @@ import SwiftUI
 extension ConnectionState {
     var statusColor: Color {
         switch self {
-        case .idle: Color(hex: 0x626D7A)
+        case .idle, .waiting, .disconnecting: Color(hex: 0x626D7A)
+        case .authorizing, .connecting, .reconnecting: Color(hex: 0x326CB0)
         case .connected: Palette.green
         case .failed: Color(hex: 0xB44538)
-        default: Color(hex: 0x996515)
         }
     }
 
     var statusSurface: Color {
         switch self {
-        case .idle: Color(hex: 0xF5F6F8)
+        case .idle, .waiting, .disconnecting: Color(hex: 0xF5F6F8)
+        case .authorizing, .connecting, .reconnecting: Color(hex: 0xF1F6FC)
         case .connected: Color(hex: 0xF0F8F3)
         case .failed: Color(hex: 0xFFF5F3)
-        default: Color(hex: 0xFFFAF0)
         }
     }
 
@@ -69,9 +69,8 @@ struct OrbitView: View {
     let state: ConnectionState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var animates: Bool {
-        [.authorizing, .connecting, .reconnecting, .disconnecting].contains(state) && !reduceMotion
-    }
+    private var showsProgress: Bool { state.isBusy && state != .waiting }
+    private var animates: Bool { showsProgress && !reduceMotion }
 
     var body: some View {
         // Only in-progress states animate. Idle and waiting remain visibly at rest.
@@ -87,11 +86,14 @@ struct OrbitView: View {
                             Circle().stroke(Palette.green.opacity(index == 0 ? 0.14 : 0.07), lineWidth: 1)
                                 .frame(width: size * (0.72 + Double(index) * 0.19), height: size * (0.72 + Double(index) * 0.19))
                         }
+                    } else if showsProgress {
+                        Circle().stroke(state.statusColor.opacity(0.12), lineWidth: 2.5)
+                            .frame(width: size * 0.78, height: size * 0.78)
                     } else {
                         Circle().stroke(state.statusColor.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 6]))
                             .frame(width: size * 0.78, height: size * 0.78)
                     }
-                    if state.isBusy && state != .waiting {
+                    if showsProgress {
                         Circle().trim(from: 0, to: 0.23)
                             .stroke(state.statusColor, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                             .frame(width: size * 0.78, height: size * 0.78)
