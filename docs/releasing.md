@@ -2,13 +2,13 @@
 
 ## 版本约定
 
-唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.22 / build 31**。
+唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.23 / build 33**。
 
 | 渠道 | 界面版本示例 | DMG | GitHub Release / 自动更新 |
 | --- | --- | --- | --- |
-| development | `1.1.22-dev.31` | 默认不打包 | 不发布、不参与正式更新 |
-| test | `1.1.22-test.32` | 文件名含 `-test.32` | 不发布、不参与正式更新 |
-| release | `1.1.22` | 文件名只含正式版本与芯片 | 仅 `v1.1.22` 正式标签 |
+| development | `1.1.23-dev.33` | 默认不打包 | 不发布、不参与正式更新 |
+| test | `1.1.23-test.34` | 文件名含 `-test.34` | 不发布、不参与正式更新 |
+| release | `1.1.23` | 文件名只含正式版本与芯片 | 仅 `v1.1.23` 正式标签 |
 
 开发／测试的构建号不占用正式版本，也不与正式版本比较大小。测试分发应显式使用新的构建号。正式版必须同时满足：标签匹配 plist、标签指向 HEAD、工作区干净、构建号匹配版本文件，且版本大于所有已发布的正式版本。不会回写或自动递增源文件。已发布版本禁止覆盖或降级；修复必须使用新版本。失败时仅能恢复尚未发布的同名草稿。
 
@@ -68,21 +68,21 @@ BUILD_CHANNEL=test BUILD_NUMBER=32 ARCHS=arm64 \
 
 ## 本地打包、公证后上传 GitHub Release（默认流程）
 
-先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.22`；正式发布必须递增版本，不能把旧测试包重命名发布。
+先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.23`；正式发布必须递增版本，不能把旧测试包重命名发布。
 
 ```bash
 # 在已提交的版本提交上创建标签
-git tag -a v1.1.22 -m 'XD VPN 1.1.22'
+git tag -a v1.1.23 -m 'XD VPN 1.1.23'
 
 # 本地构建、测试、签名、公证、打包和复核，不上传 GitHub Release
-bash scripts/release.sh prepare v1.1.22
+bash scripts/release.sh prepare v1.1.23
 
 # 确保版本提交和标签均已推送到源仓库
 git push origin main
-git push origin v1.1.22
+git push origin v1.1.23
 
 # 仅上传已验证的产物，再将草稿发布为正式 Latest
-bash scripts/release.sh publish v1.1.22
+bash scripts/release.sh publish v1.1.23
 ```
 
 `prepare` 使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
@@ -109,7 +109,7 @@ Actions → Release → Run workflow，输入已有并已推送的正式标签�
 ## 单独本机正式打包
 
 ```bash
-BUILD_CHANNEL=release RELEASE_TAG=v1.1.22 \
+BUILD_CHANNEL=release RELEASE_TAG=v1.1.23 \
   NOTARY_KEYCHAIN_PROFILE=xdvpn-notary bash scripts/package.sh
 ```
 

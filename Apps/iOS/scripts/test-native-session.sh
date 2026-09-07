@@ -14,7 +14,7 @@ cleanup() {
 trap cleanup EXIT
 openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=localhost' \
   -keyout "$fixture_dir/key.pem" -out "$fixture_dir/cert.pem" > "$fixture_dir/cert.log" 2>&1
-python3 Tests/SessionExpiryServer.py "$fixture_dir/cert.pem" "$fixture_dir/key.pem" > "$fixture_dir/port" &
+python3 Tests/SessionExpiryServer.py "$fixture_dir/cert.pem" "$fixture_dir/key.pem" "${2:-expiry}" > "$fixture_dir/port" &
 fixture_pid=$!
 for _ in {1..30}; do
   [ -s "$fixture_dir/port" ] && break
@@ -22,4 +22,4 @@ for _ in {1..30}; do
   sleep 0.1
 done
 [ -s "$fixture_dir/port" ] || { echo 'Fixture startup timed out' >&2; exit 1; }
-bash scripts/test-native.sh "$1" "" "" "$(cat "$fixture_dir/port")"
+bash scripts/test-native.sh "$1" "" "" "$(cat "$fixture_dir/port")" "${2:-expiry}"

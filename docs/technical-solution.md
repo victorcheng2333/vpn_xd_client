@@ -366,6 +366,8 @@ TunnelEngine 对自己创建的 OpenConnect PID 使用 Darwin.kill，不使用�
 
 网络脚本是另一种资源：NetworkScriptRunner 用 posix_spawn 在脚本执行前原子创建独立进程组，关闭非标准描述符继承，stdin 指向 /dev/null。仅在脚本超时时向该已知组发送 SIGKILL，并 waitpid 回收，以阻止清理后仍有旧脚本继续写系统配置。两类信号作用范围不能混用。
 
+脚本以 `/bin/sh <脚本路径>` 启动，而不是直接 exec 会话内生成的 `vpnc-managed-script`。macOS 会对首次执行的新文件做 Gatekeeper／来源评估并联网查询公证票据：本机实测每次约 0.25 秒，隧道被阻塞、系统解析器又指向隧道 DNS 时会等到约 3 秒超时。把文件作为解释器参数传入可以完全避开这一评估；OpenConnect 自身也是以 `/bin/sh -c` 方式调用脚本的。
+
 ## 11 网络清理、归属与异常恢复
 
 ![图 9：会话记录与网络清理核验流程](assets/technical-solution/09-cleanup.svg)
@@ -396,10 +398,10 @@ connect 钩子从环境读取 VPNPID、TUNDEV、INTERNAL_IP4_ADDRESS、INTERNAL_
 | --- | --- | --- |
 | pre-init | 返回错误 | 交给连接失败与退出路径处理 |
 | connect | 配置失败 | 尝试清理部分配置，失败保持终止错误 |
-| attempt-reconnect / reconnect | 固定提示并返回 0 | 保留现有会话，由引擎继续恢复；App 预算仍独立生效 |
+| attempt-reconnect / reconnect | 不启动脚本：原生核对服务器路由后返回 0，没有 watchdog | 保留现有会话，隧道重建后立即恢复转发；App 预算仍独立生效 |
 | disconnect | 先结束脚本组，再执行原生核验 | 核验通过返回 0；核验失败返回错误 |
 
-只有恢复阶段的 watchdog 超时被降为非致命结果，真实非零脚本错误仍会分类为失败。用户主动停止期间的通用 script error 作为提示，最终结果交给原生清理决定。
+恢复阶段不再启动脚本：捆绑脚本在 attempt-reconnect 只设置服务器路由（托管脚本已覆盖为空操作），在 reconnect 只执行不存在的 /etc/vpnc/reconnect.d 钩子，而 OpenConnect 在脚本返回前会阻塞主循环、不转发任何数据包，日志曾记录到这一阶段每次占用 0.2–3.3 秒。真实非零脚本错误仍会分类为失败。用户主动停止期间的通用 script error 作为提示，最终结果交给原生清理决定。
 
 ### 11.4 清理阻塞与遗留记录
 
@@ -477,7 +479,7 @@ UI 列表用于当前使用过程，展示重要事件和错误；重复网络�
 | 认证失败、证书错误、额外认证 | 终止本次意图，等待清理 | 提示检查配置、联系 IT 或使用公司客户端 |
 | 已建立会话恢复时配置失败 | Auto Connect 开启则等 stopped 后立即登录 | 尝试重建；新登录仍失败则停止 |
 | 初次登录配置失败 | 终止错误并清理部分配置 | 检查 OpenConnect / vpnc-script |
-| 恢复钩子 watchdog 超时 | 非致命提示 | 保留引擎恢复，仍受 App 恢复预算约束 |
+| 恢复钩子（attempt-reconnect／reconnect） | 原生核对服务器路由后返回 0，不启动脚本 | 隧道重建后立即恢复转发，仍受 App 恢复预算约束 |
 | 原生清理失败 | 保留记录并阻止新登录 | 显示 PID、utun、键与记录路径 |
 | 助手不可用或失联 | 停止本次重试 | 重新检测或更新授权 |
 | 日志失败 | 不改变连接状态 | 保留本次内存记录 |

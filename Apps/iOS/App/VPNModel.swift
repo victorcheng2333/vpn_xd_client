@@ -227,8 +227,15 @@ final class VPNModel: ObservableObject {
         proto.passwordReference = newReference ?? oldReference
         proto.providerConfiguration = try validated.configuration
         proto.disconnectOnSleep = false
-        proto.includeAllNetworks = validated.fullTunnel == true
-        proto.excludeLocalNetworks = false
+        // Full tunnel is expressed by the gateway's 0.0.0.0/0 route in the
+        // provider's network settings, not by includeAllNetworks. The system
+        // enforcement broke Personal Hotspot on the device: with it enabled the
+        // iPhone never answered tethered clients' DHCP (Wi-Fi and USB), even
+        // with excludeLocalNetworks restored. Mac configd logged
+        // "DHCP en0: INIT-REBOOT timed out / server not responding" until the
+        // phone's VPN was stopped. Route-based capture keeps hotspot serving.
+        proto.includeAllNetworks = false
+        proto.excludeLocalNetworks = true
         // Preserve OS cellular services, APNs and USB device communication exceptions.
         manager.protocolConfiguration = proto
         manager.localizedDescription = "XD VPN 验证版"
