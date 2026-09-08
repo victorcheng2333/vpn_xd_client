@@ -13,6 +13,7 @@ final class VPNModel: ObservableObject {
     @Published private(set) var startingConnection = false
     @Published private(set) var onDemandActive = false
     @Published var message: String?
+    @Published var configurationAlert: String?
     @Published private(set) var snapshot = DiagnosticSnapshot()
     @Published private(set) var quality = ConnectionQuality()
     @Published private(set) var qualityIntent: QualityIntent?
@@ -114,9 +115,20 @@ final class VPNModel: ObservableObject {
         onDemandActive = manager?.isOnDemandEnabled ?? false
     }
     func save() async { await perform { try await self.saveConfiguration() } }
+    /// True when neither a saved VPN configuration nor a complete unsaved one exists.
+    var needsConfiguration: Bool {
+        guard !hasPassword else { return false }
+        return profile.server.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || password.isEmpty
+    }
     func connect() async {
         await autoConnectUpdate?.value
         guard !busy else { return }
+        if needsConfiguration {
+            configurationAlert = "请先在「设置」中填写服务器地址、用户名和密码并保存，再连接 VPN。"
+            return
+        }
         startingConnection = true
         defer { startingConnection = false }
         await perform {
