@@ -86,11 +86,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func startAttempt() {
         guard !stopping, engine == nil, let profile, let passwordReference else { return }
         retry = nil
-        var failureReason: QualityReason = .configuration
         do {
             var policy = try store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy())
-            do { try policy.begin(now: Date()) }
-            catch { failureReason = .retryLimit; try store.write(policy, name: "recovery"); throw error }
+            try policy.begin(now: Date())
             try store.write(policy, name: "recovery")
             let password = try KeychainStore.read(passwordReference)
             let engine = OCEngine(server: profile.server, username: profile.username, password: password, group: profile.group, useDTLS: profile.useDTLS)
@@ -111,7 +109,21 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 })
                 self.queue.async { self.attemptFinished(engine: engine, result: result, token: token) }
             }
-        } catch { blockAutomatic(error.localizedDescription); finish(error, qualityReason: failureReason) }
+        } catch let cooldown as RecoveryPolicy.Cooldown {
+            // The budget is spent by a healthy account. Keep the provider and system On Demand alive
+            // and retry when the oldest attempt leaves the window; a manual stop cancels the wait.
+            let delay = max(1, cooldown.retryAt.timeIntervalSinceNow)
+            quality.recover(reason: .retryLimit, at: .now())
+            reasserting = startReply == nil
+            record("连接重试过于频繁，等待约 \(Int(ceil(delay))) 秒后自动重试")
+            let job = DispatchWorkItem { [weak self] in
+                guard let self, !self.stopping else { return }
+                self.retry = nil
+                if self.available { self.startAttempt() }
+            }
+            retry = job
+            queue.asyncAfter(deadline: .now() + delay, execute: job)
+        } catch { blockAutomatic(error.localizedDescription); finish(error, qualityReason: .configuration) }
     }
     private func apply(_ dictionary: [String: Any], fd: Int32, token: Int, reply: SettingsReply) {
         guard token == generation, !stopping, reply.pending else { reply.finish(false); return }

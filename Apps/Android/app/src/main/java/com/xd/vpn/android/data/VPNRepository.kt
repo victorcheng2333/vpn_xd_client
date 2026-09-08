@@ -79,6 +79,12 @@ class VPNRepository(context: Context) {
         persistGate(next)
         return next.blocked
     }
+    /** Milliseconds the service must wait before the next cold attempt; 0 when it may proceed. */
+    @Synchronized fun cooldown(): Long = gate.cooldown(System.currentTimeMillis())
+    @Synchronized fun cooling(milliseconds: Long) {
+        record(EventKind.COOLDOWN)
+        update { it.copy(phase = Phase.RECOVERING, message = "连接重试过于频繁，等待约 ${(milliseconds + 999) / 1000} 秒后自动重试。") }
+    }
     @Synchronized fun stopIntent() {
         // Change memory even when storage fails; never submit credentials after a local stop.
         val next = gate.stop(); gate = next
@@ -113,7 +119,7 @@ class VPNRepository(context: Context) {
     }
     @Synchronized fun record(kind: EventKind, recovery: String? = null, elapsed: Long = SystemClock.elapsedRealtime()) {
         val current = mutable.value
-        if (current.events.lastOrNull()?.kind == kind && kind in setOf(EventKind.OFFLINE, EventKind.TLS, EventKind.DTLS)) return
+        if (current.events.lastOrNull()?.kind == kind && kind in setOf(EventKind.OFFLINE, EventKind.TLS, EventKind.DTLS, EventKind.COOLDOWN)) return
         val full = current.events + QualityEvent(kind, System.currentTimeMillis(), elapsed, boot, recovery)
         val incomplete = current.incomplete || full.size > 2048
         val bounded = full.takeLast(2048)

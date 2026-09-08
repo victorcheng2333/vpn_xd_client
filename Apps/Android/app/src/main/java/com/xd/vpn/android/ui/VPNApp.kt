@@ -309,6 +309,8 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
             snapshot.phase == Phase.FAILED && message != null -> Notice("连接已中断", message)
             snapshot.phase == Phase.RECOVERING && state.events.lastOrNull()?.kind == EventKind.OFFLINE ->
                 Notice("等待网络恢复", "请确认 Wi-Fi 或蜂窝网络可用；恢复后会继续尝试连接。")
+            snapshot.phase == Phase.RECOVERING && state.events.lastOrNull()?.kind == EventKind.COOLDOWN ->
+                Notice("等待下一次自动重试", "短时间内连接尝试过多，正在等待重试额度恢复；无需反复点击连接。")
             snapshot.phase == Phase.RECOVERING -> Notice("正在恢复连接", "正在尝试恢复，可在详细事件中查看进度。")
             state.armed && !snapshot.phase.active -> Notice("等待系统恢复连接", "网络恢复后会自动尝试连接，可查看详细事件了解进度。")
             else -> Note(if (state.events.isEmpty()) "有连接记录后显示异常及处理建议。" else "暂无需要处理的异常。")

@@ -95,6 +95,8 @@ class XDVpnService : VpnService(), NativeCallbacks {
             var requireAutomatic = !manual
             while (!cancelled.get()) {
                 if (!awaitNetwork()) break
+                if (requireAutomatic && !repo.mayResume()) { failure = Failure.NETWORK; break }
+                if (!awaitCooldown()) break
                 failure = repo.beginAttempt(requireAutomatic)
                 requireAutomatic = true
                 if (failure != null) break
@@ -137,6 +139,18 @@ class XDVpnService : VpnService(), NativeCallbacks {
             if (selected == null && !cancelled.get()) repo.record(EventKind.OFFLINE)
             while (selected == null && !cancelled.get()) networkLock.wait()
             return !cancelled.get()
+        }
+    }
+    /** The cold-attempt budget is rate limiting, not a failure: wait visibly and let a manual stop interrupt. */
+    private fun awaitCooldown(): Boolean {
+        synchronized(networkLock) {
+            while (!cancelled.get()) {
+                val wait = repo.cooldown()
+                if (wait == 0L) return true
+                repo.cooling(wait)
+                networkLock.wait(wait)
+            }
+            return false
         }
     }
     private fun selectNetwork(force: Boolean) {

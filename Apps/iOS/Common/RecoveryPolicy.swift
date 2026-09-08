@@ -3,6 +3,11 @@ import Darwin
 
 /// Persisted before each cold authentication attempt. Network resume inside an existing session doesn't consume it.
 struct RecoveryPolicy: Codable {
+    /// Thrown when the five-minute budget is spent. Rate limiting is temporary: the provider waits and
+    /// retries by itself; it never becomes a persisted block and never disables system On Demand.
+    struct Cooldown: Error {
+        let retryAt: Date
+    }
     var blockedReason: String?
     var attempts: [Date] = []
 
@@ -16,8 +21,8 @@ struct RecoveryPolicy: Codable {
         if let reason = blockedReason { throw ConfigurationError.invalid(reason) }
         attempts = attempts.filter { now.timeIntervalSince($0) < 300 }
         guard attempts.count < 3 else {
-            blockedReason = "五分钟内已启动三次连接，自动连接已暂停。请打开 App 检查后手动连接。"
-            throw ConfigurationError.invalid(blockedReason!)
+            // A transient network or session failure must not turn into a credential block.
+            throw Cooldown(retryAt: attempts.min()!.addingTimeInterval(300))
         }
         attempts.append(now)
     }

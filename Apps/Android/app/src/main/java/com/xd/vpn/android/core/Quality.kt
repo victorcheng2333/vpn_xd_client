@@ -9,7 +9,7 @@ enum class EventKind(val label: String) {
     AUTH_UNSUPPORTED_TEXT("网关要求暂不支持的文本字段"), AUTH_UNSUPPORTED_PASSWORD("网关要求暂不支持的密码或多因素字段"),
     AUTH_UNSUPPORTED_SELECT("网关要求暂不支持的选择字段"), AUTH_UNSUPPORTED_FIELD("网关要求暂不支持的认证字段"),
     AUTH_GATEWAY_REJECTED("网关拒绝认证请求"),
-    PROCESS_RESTART("服务进程重新启动"), STORAGE_ERROR("历史记录不完整")
+    PROCESS_RESTART("服务进程重新启动"), STORAGE_ERROR("历史记录不完整"), COOLDOWN("等待重试额度恢复")
 }
 data class QualityEvent(val kind: EventKind, val wall: Long, val elapsed: Long, val boot: Int, val recovery: String? = null)
 /** `last` is the newest completed recovery in the window; `lastDurationMs` is null when its start was not observed on this boot. */

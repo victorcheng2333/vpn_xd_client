@@ -26,14 +26,18 @@ class PolicyTest {
         val armed = gate.manualStart(); assertFalse(armed.canResume(false)); assertTrue(armed.canResume(true))
         assertFalse(armed.stop().canResume(true))
     }
-    @Test fun recoveryBudgetSurvivesFastSuccessfulConnectionsAndClockRollback() {
+    @Test fun recoveryBudgetCoolsDownInsteadOfBlockingAndSurvivesClockRollback() {
         var gate = RecoveryPolicy().manualStart()
         repeat(3) { gate = gate.begin(10_000L + it) }
         assertEquals(3, gate.attempts.size)
-        assertEquals(Failure.BUDGET, gate.begin(10_100).blocked)
-        assertEquals(Failure.BUDGET, gate.begin(1).blocked)
+        // Spent budget waits for the oldest attempt to leave the window; it is never a persisted block.
+        assertEquals(299_900L, gate.cooldown(10_100)); assertNull(gate.blocked); assertTrue(gate.canResume(true))
+        assertThrows(IllegalStateException::class.java) { gate.begin(10_100) }
+        assertEquals(300_000L, gate.cooldown(1)) // clock rollback: future attempts still count, wait capped to one window
+        val later = gate.begin(310_000) // oldest attempt expired, the remaining two still count
+        assertEquals(3, later.attempts.size); assertEquals(1L, later.cooldown(310_000))
         assertEquals(1, gate.begin(310_003).attempts.size)
-        assertTrue(gate.begin(10_100).manualStart().canResume(true))
+        assertEquals(0L, gate.manualStart().cooldown(10_100))
     }
     @Test fun expiredCookieIsDistinctFromPasswordRejection() {
         assertEquals(Failure.SESSION, RecoveryPolicy.classify(-1, true, false, false, false))

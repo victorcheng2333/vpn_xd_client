@@ -226,3 +226,10 @@ iPhone 17（iOS 26.5）模拟器补验：默认未连接画面、蓝色连接中
 - 13:58:59 以 `--no-activate --debug-export-vpn` 重新启动主 App；13:59:30 新鲜导出确认「尚未连接」、`autoConnect=true`、`automaticConnectionActive=false`。质量历史跨主 App 重启保留，未因打开 App 重新启用系统自动连接。
 - 本轮真实连接、质量页显示、后台断网后内网访问、无主 App 自动前台激活、恢复事件持久化、正常断开及再次打开保持断开均通过。长时间锁屏、设备重启、低电量和失败网络下的持久恢复不属于本轮真机通过范围；已有模拟器/逻辑回归不能替代这些真机场景。
 - 新增本机忽略证据：quality-preinstall-state.json、quality-install.json、quality-installed-state.json、quality-baseline.json、quality-final.json、各次 launch.json，以及 quality-device-connected.png / quality-device-postflight.png。产品代码未因本轮验证发生修改。
+
+## 2026-09-08 补充：五分钟三次冷认证限流改为冷却等待（逻辑测试通过，未真机复验）
+
+- 依据 09-07 用户日志：10:41:23Z 与 10:41:28Z 两次认证成功后 CONNECT 会话失效，10:41:32Z 命中五分钟三次预算并永久暂停自动连接，10:40:52Z 的成功手动连接也占用该窗口；Android 09-08 真机同样观测到该网关在 IP 变化后要求冷认证。
+- 修正：额度用尽时 `RecoveryPolicy.begin` 抛出带最早重试时间的 `Cooldown`，provider 记录「连接重试过于频繁，等待约 N 秒后自动重试」并保持存活，到期自动重试；不写永久 `blockedReason`、不关闭系统 On Demand，手动停止取消等待。密码、证书、配置错误仍永久暂停；旧版本已保存的永久暂停不会擅自清除，需手动连接一次。
+- 路径检测沿用 main 现有的按「正在使用的接口」签名方案（09-07 真机双向切网已验证），未引入 `codex/ios-testflight` 分支的 `NetworkPathState`。
+- 极端情况：网关持续接受密码却立即使会话失效时，会变为每五分钟最多三次的慢速重试而不再自动停止，质量页显示「等待下一次自动重试」。

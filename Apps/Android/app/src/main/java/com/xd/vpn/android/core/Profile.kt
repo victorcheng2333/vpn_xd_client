@@ -30,6 +30,7 @@ enum class Failure(val message: String, val blocks: Boolean) {
     CERTIFICATE("服务器证书校验失败，请检查网关证书或联系 IT。", true),
     SETTINGS("网关网络配置暂不支持，请联系 IT 检查地址、路由、DNS 或 PAC。", true),
     STORAGE("本机安全存储不可用，请解锁设备并重新保存配置。", true),
+    /** No longer produced: the budget now cools down instead of blocking. Kept so older persisted gates still load. */
     BUDGET("五分钟内已启动三次连接，自动连接已暂停，请检查后手动连接。", true),
     NETWORK("连接中断，请检查当前网络后重试。", false),
     SESSION("网关会话已失效，请重新连接。", false)
