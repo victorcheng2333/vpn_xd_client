@@ -41,6 +41,7 @@ jobs:
         run: |
           try {
             ./dist/windows-x64/install.ps1
+            if ($LASTEXITCODE) { throw 'Installation failed; service test cannot proceed' }
             dotnet run --project Apps/Windows/XDVPN.Platform.Tests -c Release -- --service
             if ($LASTEXITCODE) { throw "Service smoke test failed" }
           } finally {
