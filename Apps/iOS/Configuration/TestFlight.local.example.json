@@ -1,0 +1,7 @@
+{
+  "ASC_KEY_PATH": "~/private/AuthKey_YOURKEYID.p8",
+  "ASC_KEY_ID": "YOURKEYID0",
+  "ASC_ISSUER_ID": "00000000-0000-0000-0000-000000000000",
+  "external_group_id": "YOUR-EXISTING-EXTERNAL-GROUP-ID",
+  "uses_non_exempt_encryption": null
+}

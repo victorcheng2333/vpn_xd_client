@@ -7,3 +7,6 @@ dist/
 
 __pycache__/
 *.pyc
+
+# Local Claude permission settings
+.claude/settings.local.json

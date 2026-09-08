@@ -1,6 +1,6 @@
 # XD VPN iOS 验证版 0.1.0
 
-这是独立的 iOS/iPadOS 17+ 原生验证工程，包含 SwiftUI App 和 Packet Tunnel Extension。**已完成实体 iPhone 签名安装、真实内网访问、后台飞行模式恢复、连接质量统计和正常断开验证；Wi-Fi/蜂窝切换、长时间锁屏及长期恢复行为仍待验收。** macOS 工程、助手和运行时代码未改，Android 尚未建立工程。
+这是独立的 iOS/iPadOS 17+ 原生验证工程，包含 SwiftUI App 和 Packet Tunnel Extension。**已完成实体 iPhone 签名安装、真实内网访问、后台飞行模式恢复、连接质量统计和正常断开验证；最新重连修复版另通过 Wi-Fi/蜂窝双向切换与两次短锁屏业务验证，长时间锁屏及长期恢复行为仍待验收。** macOS 工程、助手和运行时代码未改，Android 尚未建立工程。
 
 ## 已实现
 
@@ -11,6 +11,7 @@
 - 公共 `packetFlow` 经非阻塞 datagram socketpair 桥接 IP 包；显式处理 Darwin 地址族前缀、MTU、丢包与背压。
 - 服务端 IPv4/IPv6 地址、分流路由、DNS/搜索域和 MTU 转成 NE 设置。证书由系统 SecTrust 验证完整链和主机名，禁止忽略证书错误。
 - TLS、可选 DTLS；库内会话重连，换网合并通知后使用命令管道暂停/恢复并刷新缓存的网关地址。每个 C 会话只由一个 worker 操作。
+- 系统唤醒只唤起引擎检查链路，不再无条件拆除 TLS；启用 30 秒 DPD，失活判定由引擎处理。切网请求在认证/网络设置期间保留，待主循环处理；相同网络设置不重复下发，路径日志记录使用中的物理接口。此修复的真机切网验收见验证记录。
 - 首页「自动连接」只保存偏好，不会因开启而连接 VPN。用户点击「连接 VPN」后，按该偏好启用系统恢复；关闭开关不主动断开当前连接。手动「断开」先暂停系统恢复，重新打开 App 或重新开启开关都不连接，须再次点击连接。旧版本域名规则保持原范围，直到用户主动修改新开关。主 App 不使用后台保活计时器。
 - 自动冷启动五分钟最多三次。成功认证后隧道 CONNECT 返回 401 时，在此预算内重新认证、更新失效会话；账号认证拒绝及证书错误仍持久化暂停，防止 Extension 重启后继续提交密码。系统规则禁用失败时，持久化门禁仍会拒绝继续认证；是否存在系统重复拉起须真机验收。
 - 最近 64 条连接事件文本、真实桥接包计数和系统分享。手动 HTTPS 内网探测入口已移除，业务可用性由实际内网访问验证。诊断不保留引擎原始日志、密码、Cookie 或 Token。
@@ -18,7 +19,7 @@
 - 「连接质量」页显示当前连接时长、传输方式、自动恢复状态，最近 24 小时已完成的恢复成功/失败次数、最近恢复耗时和异常操作建议；详细日志与分享报告保留在页内。没有测速、延迟/丢包图、P95 或主动业务探测。
 - 质量事件由 Packet Tunnel 扩展记录并写入 App Group，主 App 仅在页面可见且前台时刷新读取。使用独立的手动连接/断开标记续接系统恢复，重复通知不重复计数，取消不算失败。耗时采用同次设备启动内的单调时钟；未观测到断网起点或跨设备重启时不估算。最多保留 2048 条结构化事件，统计窗口为最近 24 小时，历史损坏或裁剪时提示不完整。
 
-首版没有 SSO/MFA、客户端证书、HostScan/CSD、PAC 代理支持。新配置默认使用当前公司网关要求的 IPv4 全隧道和 DTLS 优先策略，DTLS 不可用时可回退 TLS；这两项技术选项不再展示在设置页。系统约束全隧道路由并阻断网关未提供的 IPv6。旧配置中明确保存的路由/传输策略仍保留。IPv6 单栈全隧道、混合全/分流及全隧道显式排除路由仍拒绝。需要这些功能的网关不属于当前验证范围。企业根证书须已被系统信任，服务器应发送完整中间证书链；SecTrust 网络获取在回调中关闭。
+首版没有 SSO/MFA、客户端证书、HostScan/CSD、PAC 代理支持。新配置默认使用当前公司网关要求的 IPv4 全隧道和 DTLS 优先策略，DTLS 不可用时可回退 TLS；这两项技术选项不再展示在设置页。全隧道由网关下发的 0.0.0.0/0 路由实现并阻断网关未提供的 IPv6；**不再使用 `includeAllNetworks` 系统强制**。真机验证表明开启该强制后个人热点对 Wi-Fi/USB 客户端的 DHCP 不再应答（Mac configd 记录 `DHCP en0: INIT-REBOOT timed out / server not responding`），恢复 `excludeLocalNetworks=true` 也无效，只有停止手机 VPN 才恢复。代价是隧道重建期间系统不再拦截非隧道流量。升级后须先在 App 中断开、重新保存配置再连接，才会更新已有系统 VPN 配置。2026-09-08 真机验收：手机 VPN 保持连接时，Mac 经 Wi-Fi/USB 热点 0.6 秒取得地址并在 1.8 秒内恢复自身 VPN，手机端恢复 9 次全部成功（见验证记录）。旧配置中明确保存的路由/传输策略仍保留。IPv6 单栈全隧道、混合全/分流及全隧道显式排除路由仍拒绝。需要这些功能的网关不属于当前验证范围。企业根证书须已被系统信任，服务器应发送完整中间证书链；SecTrust 网络获取在回调中关闭。
 
 ## 本地构建
 
@@ -33,6 +34,8 @@ Apps/iOS/scripts/test.sh
 ```
 
 原生会话失效回归（先启动 arm64 模拟器）：`bash Apps/iOS/scripts/test-native-session.sh <SIMULATOR_UDID>`。脚本只监听本机，使用临时证书和虚构 Cookie 验证登录成功后的 CONNECT 401，退出时自动清理。
+
+切网竞态回归：`bash Apps/iOS/scripts/test-native-session.sh <SIMULATOR_UDID> recovery`。真实引擎在初次网络设置回调期间收到断网/恢复，须合并为一次重连、完成双向 CSTP 数据回送，并在连续健康唤醒后保持连接。仅测试程序信任回环网关的临时证书。
 
 两条 build 命令均为**无签名构建**，不能直接安装到实体 iPhone。默认输出：
 
@@ -106,4 +109,9 @@ Apps/iOS/scripts/test-native.sh SIMULATOR_UDID https://127.0.0.1:TEST_PORT https
 
 `build-engine.sh` 固定源码及摘要，`patch-openconnect.py` 仅作用于 iOS 缓存源码：拒绝脚本/外部认证程序、只接受外部包 fd、移除身份切换。原始压缩包、修改后源码及许可证位于 `.build/engine/`，各端可独立更新版本。
 
-当前产物用于本地开发验证。后续分发需独立处理 Apple 签名/渠道，以及 OpenConnect LGPL 静态链接的对应源码、修改和重新链接材料；尚未完成商店或企业分发交付。
+公司 TestFlight 使用现有 App Store Connect 应用 XD VPN（Apple ID `6809404398`，Bundle ID `com.xd.vpn.ios.poc`），版本 `0.1.0`。上传前递增 `Configuration/Base.xcconfig` 中的构建号，以 Release 配置 Archive，使用公司团队自动签名导出到 App Store Connect。TestFlight 处理完成并可测试后才算完成发布；不提交 App Store 正式审核。保留每次构建对应的源码、OpenConnect 修改及静态链接材料。
+
+
+## TestFlight 自动化
+
+API Key 配置、一条命令发布、状态查询和中断恢复见 [TestFlight 发布说明](TESTFLIGHT.md)。

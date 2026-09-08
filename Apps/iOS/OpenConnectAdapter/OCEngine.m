@@ -13,6 +13,7 @@
     int _commandFD;
     int _pair[2];
     BOOL _cancelled, _available, _inMainloop, _useDTLS;
+    BOOL _reconnectPending, _pauseQueued;
     BOOL _authenticationCompleted, _authenticationFailed, _certificateFailed, _settingsFailed;
     NSUInteger _submissions, _formCallbacks;
     BOOL _groupSelected;
@@ -35,7 +36,8 @@ static int process_form(void *context, struct oc_auth_form *form) {
 static void progress(void *context, int level, const char *format, ...) {
     // No upstream formatted text is persisted: it can contain cookies, URLs or form data.
     if (strstr(format, "SSL read error") || strstr(format, "Server has disconnected") ||
-        strstr(format, "sleep %ds, remaining timeout"))
+        strstr(format, "sleep %ds, remaining timeout") ||
+        strstr(format, "CSTP Dead Peer Detection detected dead peer"))
         [(__bridge OCEngine *)context emit:@"recovering"];
     if (strstr(format, "DTLS Dead Peer Detection detected dead peer") || strstr(format, "DTLS handshake failed"))
         [(__bridge OCEngine *)context emit:@"tls"];
@@ -83,10 +85,21 @@ static NSArray *routes(struct oc_split_include *head) {
     [_control lock];
     BOOL changed = _available != available;
     _available = available;
-    if (_inMainloop && _commandFD >= 0 && (changed || reconnect)) {
-        char command = OC_CMD_PAUSE; (void)write(_commandFD, &command, 1);
+    if (changed || reconnect) _reconnectPending = YES;
+    if (_inMainloop && _commandFD >= 0 && _reconnectPending && !_pauseQueued) {
+        char command = OC_CMD_PAUSE;
+        _pauseQueued = write(_commandFD, &command, 1) == 1;
     }
     [_control broadcast]; [_control unlock];
+}
+- (void)checkConnection {
+    [_control lock];
+    // A stats command wakes select(), so libopenconnect evaluates its DPD timers.
+    // Only the worker touches the C session; a wake is not evidence of failure.
+    if (_inMainloop && _commandFD >= 0 && !_cancelled) {
+        char command = OC_CMD_STATS; (void)write(_commandFD, &command, 1);
+    }
+    [_control unlock];
 }
 - (int)validateCertificate {
     struct oc_cert *chain = NULL;
@@ -204,9 +217,10 @@ static NSArray *routes(struct oc_split_include *head) {
             openconnect_parse_url(_vpn, _server.UTF8String)) { result = -EINVAL; goto finished; }
         openconnect_set_reconnected_handler(_vpn, reconnected);
         openconnect_set_reqmtu(_vpn, 1400);
+        openconnect_set_dpd(_vpn, 30);
         [_control lock];
         while (!_available && !_cancelled) [_control wait];
-        cancelled = _cancelled; [_control unlock];
+        cancelled = _cancelled; _reconnectPending = NO; [_control unlock];
         if (cancelled) { result = -EINTR; goto finished; }
         [self emit:@"authenticating"];
         result = openconnect_obtain_cookie(_vpn);
@@ -232,11 +246,20 @@ static NSArray *routes(struct oc_split_include *head) {
             [_control lock];
             while (!_available && !_cancelled) [_control wait];
             cancelled = _cancelled; _inMainloop = !cancelled;
+            // A path change may have arrived during authentication or the Swift
+            // settings callback, before mainloop existed. Do not lose that request.
+            if (!cancelled && _reconnectPending && !_pauseQueued) {
+                char command = OC_CMD_PAUSE;
+                _pauseQueued = write(_commandFD, &command, 1) == 1;
+            }
             [_control unlock];
             if (cancelled) { result = -EINTR; break; }
             // The library retains the cookie, handles TLS reconnect/DTLS fallback and polls cancellation.
             result = openconnect_mainloop(_vpn, 90, 2);
-            [_control lock]; _inMainloop = NO; [_control unlock];
+            [_control lock];
+            _inMainloop = NO;
+            if (result == 0) { _pauseQueued = NO; _reconnectPending = NO; }
+            [_control unlock];
             if (result == 0) {
                 // Public API clears cached gateway addresses after an interface change; the VPN session cookie remains.
                 openconnect_reset_ssl(_vpn);

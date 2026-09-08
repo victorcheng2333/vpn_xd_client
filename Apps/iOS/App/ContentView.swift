@@ -59,6 +59,10 @@ struct ContentView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }.padding(20).frame(maxWidth: 640).frame(maxWidth: .infinity)
                 }.background(Color(uiColor: .systemGroupedBackground)).navigationTitle("XD VPN")
+                .alert("尚未配置 VPN", isPresented: Binding(get: { model.configurationAlert != nil }, set: { if !$0 { model.configurationAlert = nil } })) {
+                    Button("去设置") { selectedTab = 1 }
+                    Button("取消", role: .cancel) {}
+                } message: { Text(model.configurationAlert ?? "") }
             }.tabItem { Label("连接", systemImage: "shield") }.tag(0)
             NavigationStack {
                 Form {

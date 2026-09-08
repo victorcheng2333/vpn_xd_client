@@ -106,22 +106,44 @@ final class NetworkCleanupTests: XCTestCase {
         XCTAssertThrowsError(try session.cleanup(processID: 12345))
     }
 
-    func testRecoveryHookWatchdogDoesNotReportFatalErrorOrRemoveLiveSession() throws {
+    func testReconnectHookIsNativeAndNeverLaunchesTheScript() throws {
         let store = TestNetworkStore(), session = try session(store)
         defer { removeFixture(session) }
         try session.claim(environment: environment()); store.installTunnel()
-        let executable = session.directory + "/blocked-hook"
-        try "#!/bin/sh\n/bin/sleep 10\n".write(toFile: executable, atomically: true, encoding: .utf8)
-        chmod(executable, 0o700)
         var diagnostics: [String] = []
         let result = ManagedNetworkScript.execute(reason: .reconnect, session: session, environment: environment(), processID: 12345,
             parentExited: { false }, runScript: {
-                try NetworkScriptRunner.run(executable: executable, environment: ["PATH": "/usr/bin:/bin"], timeout: 0.05)
+                XCTFail("OpenConnect blocks all tunnel traffic until this hook returns; a shell here cost 0.2-3.3 s per reconnect")
+                throw NetworkScriptRunner.Failure.timedOut
             }, diagnostic: { diagnostics.append($0) })
         XCTAssertEqual(result, 0, "A nonzero exit would make OpenConnect print Script returned error")
-        XCTAssertTrue(diagnostics.contains { $0.contains("hook timeout") })
-        XCTAssertEqual(diagnostics.compactMap { EngineOutput.event(for: $0, tunnelConfigured: true)?.kind }, [.info])
+        XCTAssertEqual(diagnostics.last, "XDVPN hook exited phase=reconnect status=0 native=true")
+        XCTAssertFalse(diagnostics.contains { EngineOutput.event(for: $0, tunnelConfigured: true)?.kind == .failure })
         XCTAssertNotNil(store.get(prefix + "IPv4")); XCTAssertNotNil(store.get(prefix + "DNS"))
+    }
+
+    func testScriptRunnerWatchdogEndsBlockedScriptTree() throws {
+        let store = TestNetworkStore(), session = try session(store)
+        defer { removeFixture(session) }
+        let executable = session.directory + "/blocked-hook"
+        try "#!/bin/sh\n/bin/sleep 10\n".write(toFile: executable, atomically: true, encoding: .utf8)
+        chmod(executable, 0o700)
+        let started = Date()
+        XCTAssertThrowsError(try NetworkScriptRunner.run(executable: executable, environment: ["PATH": "/usr/bin:/bin"], timeout: 0.05)) { error in
+            guard case NetworkScriptRunner.Failure.timedOut = error else { return XCTFail("unexpected \(error)") }
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5, "The shell and its sleep child must be killed as one group")
+    }
+
+    func testScriptRunnerLaunchesTheShellInsteadOfExecutingTheFile() throws {
+        let store = TestNetworkStore(), session = try session(store)
+        defer { removeFixture(session) }
+        // No execute bit: a direct exec would fail with EACCES, and a direct
+        // exec of a freshly written file is what Gatekeeper evaluates online.
+        let script = session.directory + "/plain-hook"
+        try "exit 3\n".write(toFile: script, atomically: true, encoding: .utf8)
+        chmod(script, 0o600)
+        XCTAssertEqual(try NetworkScriptRunner.run(executable: script, environment: ["PATH": "/usr/bin:/bin"], timeout: 2), 3)
     }
 
     func testDisconnectReleasesResolverBeforeScriptAndVerifiesAgainAfterTimeout() throws {
@@ -166,11 +188,10 @@ final class NetworkCleanupTests: XCTestCase {
         XCTAssertTrue(session.cleanupFailureMessage().contains(prefix + "DNS"))
     }
 
-    func testGenuineRecoveryScriptErrorIsNotHidden() throws {
+    func testGenuineScriptErrorIsNotHidden() throws {
         let store = TestNetworkStore(), session = try session(store)
         defer { removeFixture(session) }
-        try session.claim(environment: environment()); store.installTunnel()
-        XCTAssertEqual(ManagedNetworkScript.execute(reason: .reconnect, session: session, environment: environment(), processID: 12345,
+        XCTAssertEqual(ManagedNetworkScript.execute(reason: .preInit, session: session, environment: environment(), processID: 12345,
             parentExited: { false }, runScript: { 2 }, diagnostic: { _ in }), 2)
     }
 

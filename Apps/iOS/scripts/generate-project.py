@@ -26,12 +26,18 @@ entitlements={'com.apple.developer.networking.networkextension':['packet-tunnel-
     'keychain-access-groups':['$(AppIdentifierPrefix)$(XDVPN_BUNDLE_ID).shared']}
 plist('Configuration/App.entitlements', entitlements)
 plist('Configuration/Tunnel.entitlements', entitlements)
+# Required-reason API declarations cover elapsed-time metrics and local file metadata.
+# Export compliance is applied after upload by the TestFlight pipeline using the team-confirmed declaration.
+plist('Configuration/PrivacyInfo.xcprivacy', dict(NSPrivacyTracking=False, NSPrivacyTrackingDomains=[],
+    NSPrivacyCollectedDataTypes=[], NSPrivacyAccessedAPITypes=[
+        dict(NSPrivacyAccessedAPIType='NSPrivacyAccessedAPICategorySystemBootTime', NSPrivacyAccessedAPITypeReasons=['35F9.1']),
+        dict(NSPrivacyAccessedAPIType='NSPrivacyAccessedAPICategoryFileTimestamp', NSPrivacyAccessedAPITypeReasons=['C617.1'])]))
 files={}
 for folder in ['App','Common','PacketTunnel','OpenConnectAdapter','Configuration']:
     for path in sorted((root/folder).glob('*')):
         if path.is_file() and '.local.' not in path.name:
             relative=str(path.relative_to(root))
-            types={'.swift':'sourcecode.swift','.m':'sourcecode.c.objc','.h':'sourcecode.c.h','.xcconfig':'text.xcconfig','.plist':'text.plist.xml','.entitlements':'text.plist.entitlements'}
+            types={'.swift':'sourcecode.swift','.m':'sourcecode.c.objc','.h':'sourcecode.c.h','.xcconfig':'text.xcconfig','.plist':'text.plist.xml','.entitlements':'text.plist.entitlements','.xcprivacy':'text.xml'}
             files[relative]=obj('file:'+relative,'PBXFileReference',lastKnownFileType=types.get(path.suffix,'text'),path=relative,sourceTree='SOURCE_ROOT')
 assets=obj('assets','PBXFileReference',lastKnownFileType='folder.assetcatalog',path='Assets.xcassets',sourceTree='SOURCE_ROOT')
 app_product=obj('app.product','PBXFileReference',explicitFileType='wrapper.application',path='XDVPN.app',sourceTree='BUILT_PRODUCTS_DIR')
@@ -56,6 +62,9 @@ def sources(name,prefixes):
         if path.endswith(('.swift','.m')) and any(path.startswith(prefix+'/') for prefix in prefixes):
             builds.append(obj(name+path,'PBXBuildFile',fileRef=ref))
     return obj(name+'.sources','PBXSourcesBuildPhase',buildActionMask='2147483647',files=builds,runOnlyForDeploymentPostprocessing='0')
+def privacy_resources(name):
+    file=obj(name+'.privacy.build','PBXBuildFile',fileRef=files['Configuration/PrivacyInfo.xcprivacy'])
+    return obj(name+'.privacy.resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=[file],runOnlyForDeploymentPostprocessing='0')
 engine_phase=obj('engine.phase','PBXShellScriptBuildPhase',buildActionMask='2147483647',files=[],inputPaths=[],outputPaths=[],
     alwaysOutOfDate='1',name='Build pinned iOS engine',runOnlyForDeploymentPostprocessing='0',shellPath='/bin/bash',shellScript='"${SRCROOT}/scripts/build-engine.sh" "${PLATFORM_NAME}"\n')
 tunnel_settings=dict(PRODUCT_BUNDLE_IDENTIFIER='$(XDVPN_BUNDLE_ID).PacketTunnel',PRODUCT_NAME='$(TARGET_NAME)',
@@ -64,13 +73,14 @@ tunnel_settings=dict(PRODUCT_BUNDLE_IDENTIFIER='$(XDVPN_BUNDLE_ID).PacketTunnel'
     LIBRARY_SEARCH_PATHS=['$(inherited)','$(SRCROOT)/.build/engine/$(PLATFORM_NAME)/lib'],
     OTHER_LDFLAGS=['$(inherited)','-lopenconnect','-lssl','-lcrypto','-lxml2','-lz','-liconv','-framework','NetworkExtension','-framework','Security'],
     LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/Frameworks','@executable_path/../../Frameworks'],SKIP_INSTALL='YES')
-tunnel=obj('tunnel.target','PBXNativeTarget',buildConfigurationList=config_list('tunnel',tunnel_settings),buildPhases=[engine_phase,sources('tunnel',['Common','PacketTunnel','OpenConnectAdapter'])],buildRules=[],dependencies=[],name='PacketTunnel',productName='PacketTunnel',productReference=tunnel_product,productType='com.apple.product-type.app-extension')
+tunnel=obj('tunnel.target','PBXNativeTarget',buildConfigurationList=config_list('tunnel',tunnel_settings),buildPhases=[engine_phase,sources('tunnel',['Common','PacketTunnel','OpenConnectAdapter']),privacy_resources('tunnel')],buildRules=[],dependencies=[],name='PacketTunnel',productName='PacketTunnel',productReference=tunnel_product,productType='com.apple.product-type.app-extension')
 proxy=obj('proxy','PBXContainerItemProxy',containerPortal=uid('project'),proxyType='1',remoteGlobalIDString=tunnel,remoteInfo='PacketTunnel')
 dependency=obj('dependency','PBXTargetDependency',target=tunnel,targetProxy=proxy)
 embed_file=obj('embed.file','PBXBuildFile',fileRef=tunnel_product,settings={'ATTRIBUTES':['RemoveHeadersOnCopy']})
 embed=obj('embed','PBXCopyFilesBuildPhase',buildActionMask='2147483647',dstPath='',dstSubfolderSpec='13',files=[embed_file],name='Embed App Extensions',runOnlyForDeploymentPostprocessing='0')
 asset_build=obj('assets.build','PBXBuildFile',fileRef=assets)
-resources=obj('app.resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=[asset_build],runOnlyForDeploymentPostprocessing='0')
+app_privacy=obj('app.privacy.build','PBXBuildFile',fileRef=files['Configuration/PrivacyInfo.xcprivacy'])
+resources=obj('app.resources','PBXResourcesBuildPhase',buildActionMask='2147483647',files=[asset_build,app_privacy],runOnlyForDeploymentPostprocessing='0')
 app_settings=dict(ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon',PRODUCT_BUNDLE_IDENTIFIER='$(XDVPN_BUNDLE_ID)',PRODUCT_NAME='$(TARGET_NAME)',INFOPLIST_FILE='Configuration/App-Info.plist',CODE_SIGN_ENTITLEMENTS='Configuration/App.entitlements',LD_RUNPATH_SEARCH_PATHS=['$(inherited)','@executable_path/Frameworks'])
 app=obj('app.target','PBXNativeTarget',buildConfigurationList=config_list('app',app_settings),buildPhases=[sources('app',['App','Common']),resources,embed],buildRules=[],dependencies=[dependency],name='XDVPN',productName='XDVPN',productReference=app_product,productType='com.apple.product-type.application')
 project=obj('project','PBXProject',attributes={'LastUpgradeCheck':'2660','BuildIndependentTargetsInParallel':'YES'},buildConfigurationList=project_configs,compatibilityVersion='Xcode 14.0',developmentRegion='zh_CN',hasScannedForEncodings='0',knownRegions=['zh_CN','en','Base'],mainGroup=main,productRefGroup=products,projectDirPath='',projectRoot='',targets=[app,tunnel])
@@ -83,9 +93,10 @@ project_dir=root/'XDVPN.xcodeproj'; project_dir.mkdir(exist_ok=True)
 scheme_dir=project_dir/'xcshareddata/xcschemes'; scheme_dir.mkdir(parents=True,exist_ok=True)
 ref=f'<BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="{app}" BuildableName="XDVPN.app" BlueprintName="XDVPN" ReferencedContainer="container:XDVPN.xcodeproj"/>'
 (scheme_dir/'XDVPN-iOS.xcscheme').write_text(f'''<?xml version="1.0" encoding="UTF-8"?>
-<Scheme LastUpgradeVersion="2660" version="1.3">
+<Scheme LastUpgradeVersion="2660" version="1.7">
 <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES"><BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">{ref}</BuildActionEntry></BuildActionEntries></BuildAction>
-<LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{ref}</BuildableProductRunnable></LaunchAction>
+<TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES" shouldAutocreateTestPlan="YES"/>
+<LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.DebuggerFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" debugServiceExtension="internal" allowLocationSimulation="YES"><BuildableProductRunnable runnableDebuggingMode="0">{ref}</BuildableProductRunnable></LaunchAction>
 <ProfileAction buildConfiguration="Release" shouldUseLaunchSchemeArgsEnv="YES" savedToolIdentifier="" useCustomWorkingDirectory="NO" debugDocumentVersioning="YES"><BuildableProductRunnable runnableDebuggingMode="0">{ref}</BuildableProductRunnable></ProfileAction>
 <AnalyzeAction buildConfiguration="Debug"/><ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES"/>
 </Scheme>
