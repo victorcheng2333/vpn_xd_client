@@ -37,7 +37,7 @@ jobs:
         shell: pwsh
         run: ./Apps/Windows/scripts/build.ps1
       - name: Verify installed SYSTEM service without connecting to a VPN
-        shell: pwsh
+        shell: powershell
         run: |
           try {
             ./dist/windows-x64/install.ps1

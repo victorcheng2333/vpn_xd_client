@@ -47,7 +47,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: ./scripts/release-windows.ps1 prepare -Tag $env:RELEASE_TAG
       - name: Verify installed SYSTEM service without a VPN connection
-        shell: pwsh
+        shell: powershell
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
