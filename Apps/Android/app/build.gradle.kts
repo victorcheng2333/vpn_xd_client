@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,20 +12,20 @@ android {
         applicationId = "com.xd.vpn.android"
         minSdk = 28
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.1.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
-    kotlinOptions { jvmTarget = "17" }
     sourceSets["main"].jniLibs.srcDir("../.build/jniLibs")
     sourceSets["main"].assets.srcDir("../.build/assets")
     packaging { jniLibs.useLegacyPackaging = false }
     buildTypes { release { isMinifyEnabled = true; proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro") } }
     lint { abortOnError = true }
 }
+kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
 val buildEngine by tasks.registering(Exec::class) {
     workingDir(rootDir)
     commandLine("bash", "scripts/build-engine.sh")

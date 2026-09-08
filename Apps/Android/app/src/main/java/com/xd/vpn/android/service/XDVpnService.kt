@@ -9,6 +9,7 @@ import androidx.core.app.NotificationCompat
 import com.xd.vpn.android.*
 import com.xd.vpn.android.core.*
 import com.xd.vpn.android.engine.*
+import java.net.InetAddress
 import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
@@ -22,13 +23,16 @@ class XDVpnService : VpnService(), NativeCallbacks {
     private val networkLock = Object()
     private val tunLock = Any()
     private val networks = mutableMapOf<Network, NetworkCapabilities>() // main looper only
+    private val addresses = mutableMapOf<Network, Set<InetAddress>>() // main looper only
     @Volatile private var selected: Network? = null
     @Volatile private var engine: NativeEngine? = null
     private var tunnel: ParcelFileDescriptor? = null
+    private var appliedPlan: NetworkPlan? = null // guarded by tunLock
     private var running = false
     private var registered = false
     private var destroyed = false
     private val connectivity by lazy { getSystemService(ConnectivityManager::class.java) }
+    private val notifications by lazy { getSystemService(NotificationManager::class.java) }
     private var refreshRequired = false
     private val chooseNetwork = Runnable { val force = refreshRequired; refreshRequired = false; selectNetwork(force) }
     private val statsTick = object : Runnable {
@@ -40,13 +44,17 @@ class XDVpnService : VpnService(), NativeCallbacks {
             main.removeCallbacks(chooseNetwork); main.postDelayed(chooseNetwork, 300)
         }
         override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) {
-            if (network == selected) {
+            val current = properties.linkAddresses.map { it.address }.toSet()
+            val previous = addresses.put(network, current)
+            // Only a local address change strands the gateway sockets. DNS, route or MTU churn on the
+            // same link must not force a CSTP reconnect; the first delivery describes the link as selected.
+            if (network == selected && previous != null && previous != current) {
                 refreshRequired = true
                 main.removeCallbacks(chooseNetwork); main.postDelayed(chooseNetwork, 300)
             }
         }
         override fun onLost(network: Network) {
-            networks.remove(network)
+            networks.remove(network); addresses.remove(network)
             if (network == selected) selectNetwork(false)
         }
     }
@@ -101,7 +109,7 @@ class XDVpnService : VpnService(), NativeCallbacks {
                 val result = try { current.start(this) } finally { synchronized(networkLock) { if (engine === current) engine = null } }
                 if (cancelled.get()) break
                 failure = RecoveryPolicy.classify(result[0], result[1] != 0, result[2] != 0, result[3] != 0, result[4] != 0)
-                if (failure!!.blocks || !repo.mayResume()) break
+                if (failure.blocks || !repo.mayResume()) break
                 repo.recovering()
                 // Bound cold authentication frequency even on fast CONNECT-401 responses.
                 synchronized(networkLock) { if (!cancelled.get()) networkLock.wait(2_000) }
@@ -110,8 +118,9 @@ class XDVpnService : VpnService(), NativeCallbacks {
         } catch (_: Exception) { if (!cancelled.get()) failure = Failure.STORAGE }
         catch (_: LinkageError) { if (!cancelled.get()) failure = Failure.SETTINGS }
         finally {
-            if (failure != null && !cancelled.get()) {
-                try { repo.fail(failure!!) } catch (_: Exception) { repo.stopIntent(); repo.update { it.copy(phase = Phase.FAILED, message = Failure.STORAGE.message) } }
+            val terminal = failure
+            if (terminal != null && !cancelled.get()) {
+                try { repo.fail(terminal) } catch (_: Exception) { repo.stopIntent(); repo.update { it.copy(phase = Phase.FAILED, message = Failure.STORAGE.message) } }
             }
             val owns = acquired
             main.post {
@@ -123,6 +132,8 @@ class XDVpnService : VpnService(), NativeCallbacks {
     }
     private fun awaitNetwork(): Boolean {
         synchronized(networkLock) {
+            // The callback delivers existing networks shortly after registration; do not log a spurious offline wait.
+            if (selected == null && !cancelled.get()) networkLock.wait(1_500)
             if (selected == null && !cancelled.get()) repo.record(EventKind.OFFLINE)
             while (selected == null && !cancelled.get()) networkLock.wait()
             return !cancelled.get()
@@ -144,13 +155,13 @@ class XDVpnService : VpnService(), NativeCallbacks {
             if (force && !changed) engine?.refreshNetwork(next?.networkHandle ?: 0) else engine?.network(next?.networkHandle ?: 0)
             networkLock.notifyAll()
         }
-        if (repo.state.value.snapshot.phase == Phase.CONNECTED) repo.recovering()
+        if (repo.state.value.snapshot.phase == Phase.CONNECTED) { repo.recovering(); refreshNotification() }
         if (next == null) repo.record(EventKind.OFFLINE)
     }
     private fun stopByUser() {
         cancelled.set(true)
         repo.stopIntent() // durable intent first, command pipe second
-        if (running) repo.update { it.copy(phase = Phase.STOPPING) }
+        if (running) { repo.update { it.copy(phase = Phase.STOPPING) }; refreshNotification() }
         synchronized(networkLock) { engine?.cancel(); networkLock.notifyAll() }
         if (!running) { repo.stopped(); cleanup() }
     }
@@ -168,8 +179,8 @@ class XDVpnService : VpnService(), NativeCallbacks {
         running = false
         main.removeCallbacks(chooseNetwork); main.removeCallbacks(statsTick)
         if (registered) { connectivity.unregisterNetworkCallback(callback); registered = false }
-        synchronized(tunLock) { tunnel?.close(); tunnel = null }
-        networks.clear(); selected = null
+        synchronized(tunLock) { tunnel?.close(); tunnel = null; appliedPlan = null }
+        networks.clear(); addresses.clear(); selected = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (!destroyed) stopSelf()
     }
@@ -180,6 +191,10 @@ class XDVpnService : VpnService(), NativeCallbacks {
             val plan = NetworkPlan.create(fields.toList(), dns.toList(), includes.toList(), excludes.toList(), domains.toList(), mtu)
             synchronized(tunLock) {
                 if (cancelled.get()) return -1
+                val existing = tunnel
+                // Re-establishing identical settings replaces the system VPN interface and resets every app's
+                // sockets on each transport reconnect. Hand the worker another descriptor of the live interface instead.
+                if (existing != null && plan == appliedPlan) return ParcelFileDescriptor.dup(existing.fileDescriptor).detachFd()
                 val builder = Builder().setSession("XD VPN").setMtu(plan.mtu).setBlocking(false)
                     .setConfigureIntent(openAppIntent()).setUnderlyingNetworks(selected?.let { arrayOf(it) } ?: emptyArray())
                 if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
@@ -190,7 +205,7 @@ class XDVpnService : VpnService(), NativeCallbacks {
                 val newTun = builder.establish() ?: return -1
                 if (cancelled.get()) { newTun.close(); return -1 }
                 val duplicate = try { ParcelFileDescriptor.dup(newTun.fileDescriptor).detachFd() } catch (error: Exception) { newTun.close(); throw error }
-                tunnel?.close(); tunnel = newTun
+                existing?.close(); tunnel = newTun; appliedPlan = plan
                 repo.update { it.copy(address = plan.addresses.joinToString(" / ") { address -> address.address }) }
                 duplicate // JNI worker closes duplicate; service keeps interface alive across cold recovery.
             }
@@ -198,24 +213,13 @@ class XDVpnService : VpnService(), NativeCallbacks {
     }
     override fun onEvent(code: Int) {
         if (cancelled.get()) return
-        when (code) {
-            0 -> repo.record(EventKind.AUTHENTICATING)
-            1 -> repo.record(EventKind.ESTABLISHING)
-            2 -> repo.recovering()
-            3 -> repo.connected()
-            4 -> { repo.update { it.copy(transport = "TLS") }; repo.record(EventKind.TLS) }
-            5 -> { repo.update { it.copy(transport = "DTLS") }; repo.record(EventKind.DTLS) }
-            6 -> repo.record(EventKind.AUTH_SERVER_ERROR)
-            7 -> repo.record(EventKind.AUTH_REPEAT_PASSWORD)
-            8 -> repo.record(EventKind.AUTH_FORM_LIMIT)
-            9 -> repo.record(EventKind.AUTH_GROUP_REQUIRED)
-            10 -> repo.record(EventKind.AUTH_UNSUPPORTED_TEXT)
-            11 -> repo.record(EventKind.AUTH_UNSUPPORTED_PASSWORD)
-            12 -> repo.record(EventKind.AUTH_UNSUPPORTED_SELECT)
-            13 -> repo.record(EventKind.AUTH_UNSUPPORTED_FIELD)
-            14 -> repo.record(EventKind.AUTH_GATEWAY_REJECTED)
+        when (val event = NativeEvent.from(code) ?: return) {
+            NativeEvent.RECOVERING -> repo.recovering()
+            NativeEvent.CONNECTED -> repo.connected()
+            NativeEvent.TLS, NativeEvent.DTLS -> { repo.update { it.copy(transport = event.name) }; event.kind?.let(repo::record) }
+            else -> event.kind?.let(repo::record)
         }
-        main.post { if (running && !cancelled.get()) getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification()) }
+        main.post { refreshNotification() }
     }
     override fun onStats(txPackets: Long, rxPackets: Long, txBytes: Long, rxBytes: Long) {
         if (!cancelled.get()) repo.update { it.copy(txPackets = txPackets, rxPackets = rxPackets, txBytes = txBytes, rxBytes = rxBytes) }
@@ -226,8 +230,9 @@ class XDVpnService : VpnService(), NativeCallbacks {
         .setContentText(repo.state.value.snapshot.phase.title).setContentIntent(openAppIntent()).setOngoing(true).setOnlyAlertOnce(true)
         .addAction(0, "断开", PendingIntent.getService(this, 1, Intent(this, XDVpnService::class.java).setAction(STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         .setCategory(NotificationCompat.CATEGORY_SERVICE).build()
+    private fun refreshNotification() { if (running && !cancelled.get()) notifications.notify(NOTIFICATION, notification()) }
     private fun showForeground() {
-        getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel(CHANNEL, "VPN 连接状态", NotificationManager.IMPORTANCE_LOW))
+        notifications.createNotificationChannel(NotificationChannel(CHANNEL, "VPN 连接状态", NotificationManager.IMPORTANCE_LOW))
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SYSTEM_EXEMPTED)
         else startForeground(NOTIFICATION, notification())
     }

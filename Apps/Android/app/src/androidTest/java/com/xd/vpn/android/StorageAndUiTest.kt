@@ -21,8 +21,18 @@ class StorageAndUiTest {
         compose.onNodeWithText("HTTPS 服务器地址").assertIsDisplayed()
         compose.onNodeWithText("保存配置").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("连接质量").performClick()
-        compose.onNodeWithText("最近 24 小时").assertExists()
+        compose.onNodeWithText("最近 24 小时", substring = true).assertExists()
+        compose.onNodeWithText("暂无连接记录").assertExists()
         compose.onNodeWithText("分享诊断报告").performScrollTo().assertIsDisplayed()
+    }
+    @Test fun connectingWithoutSavedConfigurationOffersSettingsInsteadOfStarting() {
+        var connects = 0
+        compose.setContent { VPNApp(ViewState(Profile(username = "test-only"), false), false, { connects++ }, {}, { _, _ -> }, {}, {}) }
+        compose.onNodeWithText("连接 VPN").performClick()
+        compose.onNodeWithText("尚未配置 VPN").assertIsDisplayed()
+        compose.onNodeWithText("去设置").performClick()
+        compose.onNodeWithText("HTTPS 服务器地址").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, connects) }
     }
     @Test fun connectedSettingsCannotEditCredentials() {
         compose.setContent { VPNApp(ViewState(Profile(username = "test-only"), true, Snapshot(phase = Phase.CONNECTED)), false, {}, {}, { _, _ -> }, {}, {}) }
@@ -67,6 +77,22 @@ class StorageAndUiTest {
             assertFalse(VPNRepository(context).mayResume())
             java.io.File(context.noBackupFilesDir, "vpn/recovery.json").writeText("corrupt")
             assertFalse(SecureStore(context).loadGate().canResume(true))
+            // A damaged gate is read as disarmed and surfaces only as an incomplete-history hint, never as a resumable state.
+            assertTrue(VPNRepository(context).state.value.incomplete)
+        } finally { context.noBackupFilesDir.deleteRecursively() }
+    }
+    @Test fun historyIsPersistedOffTheCallingThreadInOrder() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val context = object : android.content.ContextWrapper(base) {
+            override fun getNoBackupFilesDir() = java.io.File(base.cacheDir, "history-test").apply { mkdirs() }
+        }
+        try {
+            val repo = VPNRepository(context)
+            repo.record(EventKind.START); repo.record(EventKind.AUTHENTICATING); repo.record(EventKind.CONNECTED)
+            val until = System.nanoTime() + 5_000_000_000L
+            while (System.nanoTime() < until && VPNRepository(context).state.value.events.size < 3) Thread.sleep(20)
+            assertEquals(listOf(EventKind.START, EventKind.AUTHENTICATING, EventKind.CONNECTED), VPNRepository(context).state.value.events.map { it.kind })
+            assertFalse(VPNRepository(context).state.value.incomplete)
         } finally { context.noBackupFilesDir.deleteRecursively() }
     }
 

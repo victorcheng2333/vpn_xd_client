@@ -17,12 +17,21 @@
 #include <strings.h>
 #include <stdint.h>
 
+/* Mirrors com.xd.vpn.android.engine.NativeEvent; values are part of the JNI contract. */
+enum {
+    EV_AUTHENTICATING = 0, EV_ESTABLISHING = 1, EV_RECOVERING = 2, EV_CONNECTED = 3, EV_TLS = 4, EV_DTLS = 5,
+    EV_AUTH_SERVER_ERROR = 6, EV_AUTH_REPEAT_PASSWORD = 7, EV_AUTH_FORM_LIMIT = 8, EV_AUTH_GROUP_REQUIRED = 9,
+    EV_AUTH_UNSUPPORTED_TEXT = 10, EV_AUTH_UNSUPPORTED_PASSWORD = 11, EV_AUTH_UNSUPPORTED_SELECT = 12,
+    EV_AUTH_UNSUPPORTED_FIELD = 13, EV_AUTH_GATEWAY_REJECTED = 14
+};
 struct engine {
     pthread_mutex_t lock;
     pthread_cond_t condition;
     struct openconnect_info *vpn;
     int command_fd, tun_fd, cancelled, in_mainloop, completed, auth_failed, cert_failed, settings_failed;
     int submissions, form_callbacks, selected_group, connected;
+    /* A network change is remembered until a socket is opened on the current network; only one PAUSE is in flight. */
+    int reconnect_pending, pause_queued;
     net_handle_t network;
     char *server, *username, *password;
     JNIEnv *env;
@@ -51,6 +60,13 @@ static void event(struct engine *e, int code) {
 }
 static net_handle_t network(struct engine *e) {
     pthread_mutex_lock(&e->lock); net_handle_t n = e->network; pthread_mutex_unlock(&e->lock); return n;
+}
+/* Caller holds e->lock. Each PAUSE costs a CSTP reconnect and a settings pass, so never stack them. */
+static void queue_pause_locked(struct engine *e) {
+    if (e->in_mainloop && e->command_fd >= 0 && e->reconnect_pending && !e->pause_queued) {
+        char command = OC_CMD_PAUSE;
+        e->pause_queued = write(e->command_fd, &command, 1) == 1;
+    }
 }
 static int protect_socket(void *data, int fd) {
     struct engine *e = data;
@@ -113,13 +129,13 @@ static int process_form(void *data, struct oc_auth_form *form) {
     pthread_mutex_lock(&e->lock); int cancelled = e->cancelled; pthread_mutex_unlock(&e->lock);
     if (cancelled) return OC_FORM_RESULT_CANCELLED;
     // Only fixed reason codes are exposed, never field values or server error text.
-    if (form->error && *form->error) { event(e, 6); goto rejected; }
-    if (e->submissions >= 1) { event(e, 7); goto rejected; }
-    if (++e->form_callbacks > 6) { event(e, 8); goto rejected; }
+    if (form->error && *form->error) { event(e, EV_AUTH_SERVER_ERROR); goto rejected; }
+    if (e->submissions >= 1) { event(e, EV_AUTH_REPEAT_PASSWORD); goto rejected; }
+    if (++e->form_callbacks > 6) { event(e, EV_AUTH_FORM_LIMIT); goto rejected; }
     if (form->authgroup_opt) {
         int selected = form->authgroup_selection;
         if (selected < 0 || selected >= form->authgroup_opt->nr_choices ||
-            openconnect_set_option_value(&form->authgroup_opt->form, form->authgroup_opt->choices[selected]->name)) { event(e, 9); goto rejected; }
+            openconnect_set_option_value(&form->authgroup_opt->form, form->authgroup_opt->choices[selected]->name)) { event(e, EV_AUTH_GROUP_REQUIRED); goto rejected; }
         if (!e->selected_group) { e->selected_group = 1; return OC_FORM_RESULT_NEWGROUP; }
     }
     int supplied = 0;
@@ -130,7 +146,8 @@ static int process_form(void *data, struct oc_auth_form *form) {
         if (opt->type == OC_FORM_OPT_TEXT && (!strcasecmp(name, "username") || !strcasecmp(name, "user"))) value = e->username;
         if (opt->type == OC_FORM_OPT_PASSWORD && (!strcasecmp(name, "password") || !strcasecmp(name, "passwd"))) { value = e->password; supplied = 1; }
         if (!value || openconnect_set_option_value(opt, value)) {
-            event(e, opt->type == OC_FORM_OPT_TEXT ? 10 : opt->type == OC_FORM_OPT_PASSWORD ? 11 : opt->type == OC_FORM_OPT_SELECT ? 12 : 13);
+            event(e, opt->type == OC_FORM_OPT_TEXT ? EV_AUTH_UNSUPPORTED_TEXT : opt->type == OC_FORM_OPT_PASSWORD ? EV_AUTH_UNSUPPORTED_PASSWORD :
+                opt->type == OC_FORM_OPT_SELECT ? EV_AUTH_UNSUPPORTED_SELECT : EV_AUTH_UNSUPPORTED_FIELD);
             goto rejected;
         }
     }
@@ -187,13 +204,15 @@ failure:
 static void reconnected(void *data) {
     struct engine *e = data;
     if (apply_settings(e)) { pthread_mutex_lock(&e->lock); e->cancelled = 1; char cmd = OC_CMD_CANCEL; (void)write(e->command_fd, &cmd, 1); pthread_mutex_unlock(&e->lock); }
-    else { event(e, 4); event(e, 3); }
+    else { event(e, EV_TLS); event(e, EV_CONNECTED); }
 }
 static void progress(void *data, int level, const char *format, ...) {
     struct engine *e = data;
-    if (e->connected && (strstr(format, "SSL read error") || strstr(format, "Server has disconnected") || strstr(format, "sleep %ds, remaining timeout"))) event(e, 2);
-    if (strstr(format, "Established DTLS connection")) event(e, 5);
-    if (strstr(format, "DTLS Dead Peer Detection detected dead peer") || strstr(format, "DTLS handshake failed")) event(e, 4);
+    // Only fixed upstream format strings are matched; formatted text may contain cookies, URLs or form data.
+    if (e->connected && (strstr(format, "SSL read error") || strstr(format, "Server has disconnected") ||
+        strstr(format, "sleep %ds, remaining timeout") || strstr(format, "CSTP Dead Peer Detection detected dead peer"))) event(e, EV_RECOVERING);
+    if (strstr(format, "Established DTLS connection")) event(e, EV_DTLS);
+    if (strstr(format, "DTLS Dead Peer Detection detected dead peer") || strstr(format, "DTLS handshake failed")) event(e, EV_TLS);
 }
 static void stats(void *data, const struct oc_stats *stats) {
     struct engine *e = data;
@@ -239,23 +258,32 @@ JNIEXPORT jintArray JNICALL Java_com_xd_vpn_android_engine_NativeEngine_run(JNIE
     openconnect_set_reconnected_handler(e->vpn, reconnected);
     openconnect_set_stats_handler(e->vpn, stats);
     openconnect_set_reqmtu(e->vpn, 1400);
+    openconnect_set_dpd(e->vpn, 30); // Same as iOS: notice a dead gateway path within a minute instead of waiting for the server default.
     if (openconnect_set_protocol(e->vpn, "anyconnect") || openconnect_set_reported_os(e->vpn, "android") || openconnect_parse_url(e->vpn, e->server)) { result = -EINVAL; goto finished; }
     if (await_network(e)) { result = -EINTR; goto finished; }
-    event(e, 0);
+    event(e, EV_AUTHENTICATING);
     result = openconnect_obtain_cookie(e->vpn); erase(&e->password);
-    if (result) { if (result == -EPERM && !e->auth_failed && !e->cert_failed) event(e, 14); goto finished; }
-    e->completed = 1; event(e, 1);
+    if (result) { if (result == -EPERM && !e->auth_failed && !e->cert_failed) event(e, EV_AUTH_GATEWAY_REJECTED); goto finished; }
+    e->completed = 1; event(e, EV_ESTABLISHING);
+    // The CSTP socket below binds to the network current at this point; only later changes need a PAUSE.
+    pthread_mutex_lock(&e->lock); e->reconnect_pending = 0; pthread_mutex_unlock(&e->lock);
     result = openconnect_make_cstp_connection(e->vpn);
     if (result) goto finished;
     if (apply_settings(e)) { result = -EINVAL; goto finished; }
     openconnect_setup_dtls(e->vpn, 30);
-    e->connected = 1; event(e, 4); event(e, 3);
+    e->connected = 1; event(e, EV_TLS); event(e, EV_CONNECTED);
+    int fresh = 0; // Set once mainloop must reconnect anyway, so a pending change needs no extra PAUSE.
     do {
         if (await_network(e)) { result = -EINTR; break; }
-        pthread_mutex_lock(&e->lock); e->in_mainloop = 1; pthread_mutex_unlock(&e->lock);
+        pthread_mutex_lock(&e->lock);
+        e->in_mainloop = 1;
+        // A change during settings setup or authentication arrived before mainloop existed. Do not lose it.
+        if (fresh) e->reconnect_pending = 0; else queue_pause_locked(e);
+        pthread_mutex_unlock(&e->lock);
         result = openconnect_mainloop(e->vpn, 90, 2);
-        pthread_mutex_lock(&e->lock); e->in_mainloop = 0; pthread_mutex_unlock(&e->lock);
-        if (result == 0) { openconnect_reset_ssl(e->vpn); event(e, 2); }
+        pthread_mutex_lock(&e->lock); e->in_mainloop = 0; e->pause_queued = 0; pthread_mutex_unlock(&e->lock);
+        fresh = 1;
+        if (result == 0) { openconnect_reset_ssl(e->vpn); event(e, EV_RECOVERING); }
     } while (result == 0);
 finished:
     pthread_mutex_lock(&e->lock); e->command_fd = -1; e->in_mainloop = 0; pthread_mutex_unlock(&e->lock);
@@ -272,12 +300,10 @@ JNIEXPORT void JNICALL Java_com_xd_vpn_android_engine_NativeEngine_control(JNIEn
     struct engine *e = from(handle); pthread_mutex_lock(&e->lock);
     char command = 0;
     if (action == 0) { e->cancelled = 1; command = OC_CMD_CANCEL; }
-    if (action == 3 || (action == 1 && e->network != (net_handle_t)net)) {
-        e->network = (net_handle_t)net;
-        if (e->in_mainloop) command = OC_CMD_PAUSE;
-    }
+    if (action == 3 || (action == 1 && e->network != (net_handle_t)net)) { e->network = (net_handle_t)net; e->reconnect_pending = 1; }
     if (action == 2 && e->in_mainloop) command = OC_CMD_STATS;
     if (command && e->command_fd >= 0) (void)write(e->command_fd, &command, 1);
+    queue_pause_locked(e);
     pthread_cond_broadcast(&e->condition); pthread_mutex_unlock(&e->lock);
 }
 JNIEXPORT void JNICALL Java_com_xd_vpn_android_engine_NativeEngine_destroy(JNIEnv *env, jobject self, jlong handle) {

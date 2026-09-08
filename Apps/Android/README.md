@@ -1,8 +1,8 @@
-# XD VPN Android 0.1.0
+# XD VPN Android 0.1.2
 
-Android 9+ 独立原生开发验证版。Kotlin / Jetpack Compose / VpnService / JNI OpenConnect；arm64-v8a 和 x86_64。UI 与 main@d162185 的 iOS 版本对齐，保留「连接 / 设置 / 连接质量」三个页签。
+Android 9+ 独立原生开发验证版。Kotlin / Jetpack Compose / VpnService / JNI OpenConnect；arm64-v8a 和 x86_64。UI 与 main@945d90b 的 iOS 版本对齐（含未配置时的设置引导、连接质量页的状态/提示分区），保留「连接 / 设置 / 连接质量」三个页签。
 
-[技术方案与最佳实践](../../docs/design/2026-09-07-android-support.md) · [验证记录](VERIFICATION.md)
+[技术方案与最佳实践](../../docs/design/2026-09-07-android-support.md) · [验证记录](VERIFICATION.md) · [真机验收 09-07](DEVICE-VERIFICATION-2026-09-07.md) · [真机验收 09-08](DEVICE-VERIFICATION-2026-09-08.md)
 
 ## 使用
 
@@ -64,7 +64,7 @@ bash scripts/ci-device-test.sh 36
 - `ui/`：原生Compose页面与状态动画。
 - `scripts/patch-openconnect.py`：只作用于固定9.21源码的Android补丁；不启动脚本、只接外部TUN、socket保护失败返回错误。保护回调是**本构建的局部ABI变更**，不可混用上游未修改头文件/二进制。
 
-Service在冷恢复期间保留系统TUN以避免先放行原全隧道流量；JNI独占复制的fd。断开时先撤回持久化意图，再取消命令管道，等worker退出后释放fd、监听器和通知。网关DNS使用选定物理网络，TLS/DTLS新socket先protect再绑定物理Network；整个App不绕过VPN。
+Service在冷恢复期间保留系统TUN以避免先放行原全隧道流量；JNI独占复制的fd。网关下发的设置与已应用的相同时（传输层重连、同地址冷恢复）不重建系统接口，只再复制一份描述符，避免每次重连都重置全系统的连接。物理网络只在本机地址变化时强制引擎重连，DNS/路由抖动不触发；引擎侧 DPD 30 秒，换网请求在认证期间也会保留，且同一时刻最多排队一次暂停命令。断开时先撤回持久化意图，再取消命令管道，等worker退出后释放fd、监听器和通知。网关DNS使用选定物理网络，TLS/DTLS新socket先protect再绑定物理Network；整个App不绕过VPN。
 
 ## 分发准备
 

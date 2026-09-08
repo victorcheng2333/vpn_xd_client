@@ -2,7 +2,7 @@
 
 基线：`main@d162185`；开发：`codex/android-support`；以下为首轮版本0.1.0验证，min API28 / target API36。
 
-后续 0.1.1 最终 APK 与真机结果见 [Android 真机验收记录](DEVICE-VERIFICATION-2026-09-07.md)。
+后续 0.1.1 最终 APK 与真机结果见 [Android 真机验收记录](DEVICE-VERIFICATION-2026-09-07.md)；合并 main@945d90b 后的 0.1.2（UI 对齐 iOS、引擎/服务稳定性）见 [2026-09-08 真机验收记录](DEVICE-VERIFICATION-2026-09-08.md)。
 
 ## 结果
 

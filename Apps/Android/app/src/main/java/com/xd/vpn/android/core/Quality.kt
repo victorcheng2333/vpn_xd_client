@@ -12,7 +12,10 @@ enum class EventKind(val label: String) {
     PROCESS_RESTART("服务进程重新启动"), STORAGE_ERROR("历史记录不完整")
 }
 data class QualityEvent(val kind: EventKind, val wall: Long, val elapsed: Long, val boot: Int, val recovery: String? = null)
-data class QualitySummary(val successes: Int, val failures: Int, val lastDurationMs: Long?, val incomplete: Boolean)
+/** `last` is the newest completed recovery in the window; `lastDurationMs` is null when its start was not observed on this boot. */
+data class QualitySummary(val successes: Int, val failures: Int, val lastDurationMs: Long?, val incomplete: Boolean, val last: QualityEvent? = null) {
+    val completed get() = successes + failures
+}
 object Quality {
     fun summarize(events: List<QualityEvent>, now: Long, incomplete: Boolean): QualitySummary {
         val starts = events.filter { it.kind == EventKind.RECOVERY_START }.associateBy { it.recovery }
@@ -21,7 +24,17 @@ object Quality {
         val start = last?.let { starts[it.recovery] }
         val duration = if (last != null && start != null && last.boot >= 0 && last.boot == start.boot && start.elapsed >= 0 && last.elapsed >= start.elapsed) last.elapsed - start.elapsed else null
         return QualitySummary(completed.count { it.kind == EventKind.RECOVERY_OK }, completed.count { it.kind == EventKind.RECOVERY_FAILED }, duration,
-            incomplete || completed.any { starts[it.recovery] == null })
+            incomplete || completed.any { starts[it.recovery] == null }, last)
+    }
+    /** Same wording as the iOS quality page. */
+    fun duration(milliseconds: Long): String {
+        val seconds = (milliseconds / 1000).coerceAtLeast(0)
+        return when {
+            seconds < 1 -> "不到 1 秒"
+            seconds < 60 -> "$seconds 秒"
+            seconds < 3600 -> "${seconds / 60} 分 ${seconds % 60} 秒"
+            else -> "${seconds / 3600} 小时 ${seconds % 3600 / 60} 分"
+        }
     }
 }
 data class Snapshot(val phase: Phase = Phase.IDLE, val address: String = "—", val transport: String = "—", val connectedAt: Long? = null,

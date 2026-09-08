@@ -1,6 +1,8 @@
 package com.xd.vpn.android
 
 import com.xd.vpn.android.core.*
+import com.xd.vpn.android.data.ViewState
+import com.xd.vpn.android.engine.NativeEvent
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -65,11 +67,20 @@ class PolicyTest {
         listOf("127.1", "010.0.0.1", "256.0.0.1", "0x7f.0.0.1", "1.2.3.-1", "1.2.3.4.example.com").forEach { assertFalse(NetworkPlan.ipv4(it)) }
         assertTrue(NetworkPlan.ipv6("2001:db8::1")); assertFalse(NetworkPlan.ipv6("example.com"))
     }
+    @Test fun identicalGatewaySettingsCompareEqualSoTheTunnelIsReused() {
+        // XDVpnService only re-establishes the system interface when the plan differs from the applied one.
+        assertEquals(plan(), plan())
+        assertNotEquals(plan(), plan(dns = listOf("10.0.0.54")))
+        assertNotEquals(plan(), plan(mtu = 1300))
+    }
     private fun event(kind: EventKind, time: Long, elapsed: Long, boot: Int = 1, id: String = "r") = QualityEvent(kind, time, elapsed, boot, id)
     @Test fun qualityDeduplicatesCompletionAndIgnoresCancelledRecovery() {
         val events = listOf(event(EventKind.RECOVERY_START, 100, 10), event(EventKind.RECOVERY_OK, 300, 210), event(EventKind.RECOVERY_OK, 300, 210),
             event(EventKind.RECOVERY_START, 400, 310, id = "r2"), event(EventKind.CANCEL, 500, 410, id = "r2"))
-        assertEquals(QualitySummary(1, 0, 200, false), Quality.summarize(events, 600, false))
+        val summary = Quality.summarize(events, 600, false)
+        assertEquals(QualitySummary(1, 0, 200, false, events[1]), summary)
+        assertEquals(1, summary.completed)
+        assertNull(Quality.summarize(emptyList(), 600, false).last)
     }
     @Test fun qualityDoesNotInventDurationAcrossBootOrUnknownStart() {
         assertNull(Quality.summarize(listOf(event(EventKind.RECOVERY_START, 100, 10), event(EventKind.RECOVERY_OK, 200, 110, boot = 2)), 300, false).lastDurationMs)
@@ -81,5 +92,26 @@ class PolicyTest {
         val events = listOf(event(EventKind.RECOVERY_START, 1, 1), event(EventKind.RECOVERY_OK, 100, 100), event(EventKind.RECOVERY_FAILED, 200_000_000, 200, id = "f"))
         assertEquals(0, Quality.summarize(events, 86_400_101, false).successes)
         assertEquals(0, Quality.summarize(events, 86_400_101, false).failures)
+    }
+    @Test fun durationsUseTheIosWording() {
+        assertEquals("不到 1 秒", Quality.duration(400)); assertEquals("2 秒", Quality.duration(2_241))
+        assertEquals("1 分 16 秒", Quality.duration(76_000)); assertEquals("2 小时 5 分", Quality.duration(7_500_000))
+        assertEquals("不到 1 秒", Quality.duration(-5))
+    }
+    @Test fun recoveryStatusAndToggleCopyFollowTheIosModel() {
+        val saved = ViewState(Profile(username = "u", autoConnect = true), hasPassword = true)
+        assertEquals("下次手动连接后启用", saved.recoveryStatus)
+        assertEquals("已关闭", saved.copy(profile = saved.profile.copy(autoConnect = false)).recoveryStatus)
+        assertEquals("已启用", saved.copy(armed = true, snapshot = Snapshot(phase = Phase.CONNECTED)).recoveryStatus)
+        assertEquals("等待系统恢复连接", saved.copy(armed = true).recoveryStatus)
+        assertEquals("已暂停，需处理异常", saved.copy(blocked = Failure.BUDGET).recoveryStatus)
+        assertEquals("先在设置中保存账号，即可开启自动连接。", ViewState(Profile(), hasPassword = false).autoConnectDescription)
+        assertEquals("本轮连接允许自动恢复；手动断开后保持断开。", saved.copy(armed = true, snapshot = Snapshot(phase = Phase.RECOVERING)).autoConnectDescription)
+    }
+    @Test fun nativeEventCodesAreContiguousAndUnique() {
+        val codes = NativeEvent.entries.map { it.code }
+        assertEquals((0 until NativeEvent.entries.size).toList(), codes)
+        assertEquals(NativeEvent.AUTH_GATEWAY_REJECTED, NativeEvent.from(14)); assertNull(NativeEvent.from(15))
+        assertEquals(EventKind.AUTHENTICATING, NativeEvent.from(0)?.kind)
     }
 }
