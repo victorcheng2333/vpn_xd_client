@@ -1,6 +1,6 @@
-# XD VPN Android 0.1.2
+# XD VPN Android
 
-Android 9+ 独立原生开发验证版。Kotlin / Jetpack Compose / VpnService / JNI OpenConnect；arm64-v8a 和 x86_64。UI 与 main@945d90b 的 iOS 版本对齐（含未配置时的设置引导、连接质量页的状态/提示分区），保留「连接 / 设置 / 连接质量」三个页签。
+版本号与 macOS 共用 `Resources/Info.plist`（正式版本 = `CFBundleShortVersionString`，versionCode = `CFBundleVersion`；开发/测试构建的 versionName 追加 `-dev.N`/`-test.N`）。Android 9+ 独立原生客户端。Kotlin / Jetpack Compose / VpnService / JNI OpenConnect；arm64-v8a 和 x86_64。UI 与 main@945d90b 的 iOS 版本对齐（含未配置时的设置引导、连接质量页的状态/提示分区），保留「连接 / 设置 / 连接质量」三个页签。
 
 [技术方案与最佳实践](../../docs/design/2026-09-07-android-support.md) · [验证记录](VERIFICATION.md) · [真机验收 09-07](DEVICE-VERIFICATION-2026-09-07.md) · [真机验收 09-08](DEVICE-VERIFICATION-2026-09-08.md)
 
@@ -37,9 +37,9 @@ bash scripts/check.sh
 产物：
 
 - `app/build/outputs/apk/debug/app-debug.apk`：开发签名，可 `adb install -r` 安装。
-- `app/build/outputs/apk/release/app-release-unsigned.apk`：R8精简后的未签名产物，验证构建用，不能直接安装。
+- `app/build/outputs/apk/release/app-release.apk`：R8 精简后的签名产物。签名来源依次为 `signing.properties`、`ANDROID_KEYSTORE_*` 环境变量、本机 `~/.android/debug.keystore`；三者都没有时只产出 `app-release-unsigned.apk`。正式发布经根目录 `scripts/release-android.sh`（由 `scripts/release.sh prepare` 调用）校验后上传 GitHub Release，见 [发布说明](../../docs/releasing.md)。
 
-构建成功不等于真机网关验收。Android Studio开发签名只用于本地测试；正式签名/商店或企业分发尚未配置。
+构建成功不等于真机网关验收。GitHub Release 中的 APK 目前仍使用开发测试签名（与此前测试手机上的包同一把钥匙，可覆盖升级）；专用发布钥匙与商店/企业分发尚未配置。
 
 ## 测试与 CI
 

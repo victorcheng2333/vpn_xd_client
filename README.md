@@ -10,7 +10,7 @@
 
 移动端的配置授权、Cisco/Hillstone 反馈、网络切换与休眠恢复实践见 [iOS VPN 可靠性调研](docs/design/2026-09-06-ios-vpn-reliability-research.md)。On Demand 与真机恢复验证提前纳入首个技术验证阶段。
 
-根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已完成 iPhone 签名安装、真实内网访问、后台飞行模式恢复及连接质量统计验证；长时间锁屏、Wi-Fi/蜂窝切换等完整矩阵仍待验收。`Apps/Android` 已建立独立 Kotlin/Compose + VpnService + JNI OpenConnect 开发验证版，三个页签、配置、恢复与质量统计对齐 iOS；构建与安装见 [Android 说明](Apps/Android/README.md)，架构与最佳实践见 [Android 技术方案](docs/design/2026-09-07-android-support.md)。Android 真实网关和物理换网验收状态见其验证记录。两端均不依赖 macOS 的 `VPNCore`。
+根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已完成 iPhone 签名安装、真实内网访问、后台飞行模式恢复及连接质量统计验证；长时间锁屏、Wi-Fi/蜂窝切换等完整矩阵仍待验收。`Apps/Android` 已建立独立 Kotlin/Compose + VpnService + JNI OpenConnect 开发验证版，三个页签、配置、恢复与质量统计对齐 iOS；构建与安装见 [Android 说明](Apps/Android/README.md)，架构与最佳实践见 [Android 技术方案](docs/design/2026-09-07-android-support.md)。自 1.1.24 起 Android APK 随每个 GitHub Release 一同发布（`XD-VPN-<版本>-Android.apk`，版本号与 macOS 共用 `Resources/Info.plist`），发布流程见 [发布说明](docs/releasing.md)；真实网关和物理换网验收状态见其验证记录。两端均不依赖 macOS 的 `VPNCore`。
 
 ## 直接使用
 

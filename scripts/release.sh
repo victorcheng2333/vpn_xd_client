@@ -39,6 +39,8 @@ for ARCH in arm64 x86_64; do
     python3 scripts/verify-release-dmg.py "build/XD-VPN-$VERSION-macOS-$ARCH.dmg"
 done
 tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
+# Android ships in the same release: signed release APK, verified and staged as build/XD-VPN-<version>-Android.apk.
+bash scripts/release-android.sh
 python3 scripts/release-notes.py > build/release-notes.md
-printf '\nPrepared both signed and notarized DMGs. Push the matching tag, then publish:\n'
+printf '\nPrepared both signed and notarized DMGs and the Android APK. Push the matching tag, then publish:\n'
 printf 'bash scripts/release.sh publish %s\n' "$RELEASE_TAG"
