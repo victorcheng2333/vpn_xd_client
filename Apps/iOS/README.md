@@ -110,3 +110,8 @@ Apps/iOS/scripts/test-native.sh SIMULATOR_UDID https://127.0.0.1:TEST_PORT https
 `build-engine.sh` 固定源码及摘要，`patch-openconnect.py` 仅作用于 iOS 缓存源码：拒绝脚本/外部认证程序、只接受外部包 fd、移除身份切换。原始压缩包、修改后源码及许可证位于 `.build/engine/`，各端可独立更新版本。
 
 公司 TestFlight 使用现有 App Store Connect 应用 XD VPN（Apple ID `6809404398`，Bundle ID `com.xd.vpn.ios.poc`），版本 `0.1.0`。上传前递增 `Configuration/Base.xcconfig` 中的构建号，以 Release 配置 Archive，使用公司团队自动签名导出到 App Store Connect。TestFlight 处理完成并可测试后才算完成发布；不提交 App Store 正式审核。保留每次构建对应的源码、OpenConnect 修改及静态链接材料。
+
+
+## TestFlight 自动化
+
+API Key 配置、一条命令发布、状态查询和中断恢复见 [TestFlight 发布说明](TESTFLIGHT.md)。

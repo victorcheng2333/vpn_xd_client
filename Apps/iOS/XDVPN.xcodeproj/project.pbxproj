@@ -131,10 +131,22 @@
 			path = "Configuration/Base.xcconfig";
 			sourceTree = "SOURCE_ROOT";
 		};
+		92A068B5CDD81C833665C196 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.xml";
+			path = "Configuration/PrivacyInfo.xcprivacy";
+			sourceTree = "SOURCE_ROOT";
+		};
 		8DD0E91534D9745158476C3F = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "text.xcconfig";
 			path = "Configuration/Signing.example.xcconfig";
+			sourceTree = "SOURCE_ROOT";
+		};
+		BCE2059FD17415FF9FD7A61F = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text";
+			path = "Configuration/TestFlight.json";
 			sourceTree = "SOURCE_ROOT";
 		};
 		9F2E984A1ACB26099A83268A = {
@@ -199,7 +211,7 @@
 		};
 		341E6928838892729241ECD7 = {
 			isa = "PBXGroup";
-			children = ("14A498FEEF74EEE556D3031B", "EDA2FCE9C65883A2518904E0", "5CE80E5C0EEC46D453778C6F", "8DD0E91534D9745158476C3F", "9F2E984A1ACB26099A83268A", "4ED65F7B91B41C958EE734AB");
+			children = ("14A498FEEF74EEE556D3031B", "EDA2FCE9C65883A2518904E0", "5CE80E5C0EEC46D453778C6F", "92A068B5CDD81C833665C196", "8DD0E91534D9745158476C3F", "BCE2059FD17415FF9FD7A61F", "9F2E984A1ACB26099A83268A", "4ED65F7B91B41C958EE734AB");
 			name = "Configuration";
 			sourceTree = "<group>";
 		};
@@ -342,10 +354,20 @@
 			files = ("D3E431BF0AB404567122E79E", "B05F91A53A338AEA240ED0A7", "31BE32E8FC09C5AF2391AF55", "6478E79B3C3DD2C225A5F842", "1B2D0DC211C97985E0D27F4A", "A37C796D765B9CA49A197426", "C2FDEF83E5305D80A5166A3F", "366B1D8CC4489DB2499ECA96", "D721C36A9D1C9BBB7148A33B", "E003574D428223EDBB08EAF2", "E3D04C3C9FEC50033D425238");
 			runOnlyForDeploymentPostprocessing = "0";
 		};
+		615E8CBB106FD48AC3293746 = {
+			isa = "PBXBuildFile";
+			fileRef = "92A068B5CDD81C833665C196";
+		};
+		E5DA9DF48EB2DCAA079D6ED4 = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = "2147483647";
+			files = ("615E8CBB106FD48AC3293746");
+			runOnlyForDeploymentPostprocessing = "0";
+		};
 		8C7F3859D0A2D53BF12CC924 = {
 			isa = "PBXNativeTarget";
 			buildConfigurationList = "B726505C67A738372CB0D8F4";
-			buildPhases = ("AAFAD91FA3DAD868EE86E356", "11B19F97417707025E83A693");
+			buildPhases = ("AAFAD91FA3DAD868EE86E356", "11B19F97417707025E83A693", "E5DA9DF48EB2DCAA079D6ED4");
 			buildRules = ();
 			dependencies = ();
 			name = "PacketTunnel";
@@ -385,10 +407,14 @@
 			isa = "PBXBuildFile";
 			fileRef = "8BF729FFE074CAEE622C0292";
 		};
+		7D99DABCD71BDA315AE6DC5C = {
+			isa = "PBXBuildFile";
+			fileRef = "92A068B5CDD81C833665C196";
+		};
 		1DFD5F368D483BDC3458D4EB = {
 			isa = "PBXResourcesBuildPhase";
 			buildActionMask = "2147483647";
-			files = ("53D1B124C3CFA512382233B6");
+			files = ("53D1B124C3CFA512382233B6", "7D99DABCD71BDA315AE6DC5C");
 			runOnlyForDeploymentPostprocessing = "0";
 		};
 		B00CCDD09424E369308D67FA = {

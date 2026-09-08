@@ -2,3 +2,5 @@
 Configuration/Signing.local.xcconfig
 xcuserdata/
 *.xcuserstate
+
+Configuration/TestFlight.local.json
