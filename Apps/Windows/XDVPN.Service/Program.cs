@@ -10,6 +10,7 @@ if (!OperatingSystem.IsWindows()) return 1;
 using var identity = WindowsIdentity.GetCurrent();
 if (!identity.IsSystem) return 2;
 if (!Path.GetFullPath(AppContext.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar).Equals(Paths.Install, StringComparison.OrdinalIgnoreCase)) return 3;
+try { ServiceDataSecurity.Validate(Paths.ServiceData, includeChildren: args.Length == 0); } catch { return 6; }
 if (args is ["--network-script"])
 {
     if (!Guid.TryParse(Environment.GetEnvironmentVariable("XDVPN_SESSION"), out var session)) return 4;
@@ -22,6 +23,8 @@ sealed class VpnService : ServiceBase
 {
     private readonly CancellationTokenSource lifetime = new();
     private Controller? controller;
+    private readonly OwnerLease ownerLease = new();
+    private static double Now => Environment.TickCount64 / 1000d;
     private Task? runner;
     private JobObject? lifetimeJob;
     public VpnService() { ServiceName = Protocol.ServiceName; CanHandlePowerEvent = true; CanShutdown = true; }
@@ -44,7 +47,8 @@ sealed class VpnService : ServiceBase
             while (!lifetime.IsCancellationRequested)
             {
                 var now = Environment.TickCount64;
-                if (now - previous > 10000) controller!.Power(false);
+                if (now - previous > 10000) { ownerLease.Power(false, Now); controller!.Power(false); }
+                ownerLease.Expire(Now, () => controller!.OwnerGone());
                 previous = now;
                 try { controller!.Tick(PhysicalNetwork.Capture()); } catch (System.Net.NetworkInformation.NetworkInformationException) { controller!.Tick(""); }
                 await Task.Delay(500, lifetime.Token);
@@ -52,12 +56,15 @@ sealed class VpnService : ServiceBase
         });
         try
         {
+            // Retain the first-instance handle across clients, closing the name-squatting gap.
+            using var pipe = PipeWire.CreateServer(owner);
             while (!lifetime.IsCancellationRequested)
             {
-                using var pipe = PipeWire.CreateServer(owner);
+                bool accepted = false;
                 try
                 {
                     await pipe.WaitForConnectionAsync(lifetime.Token);
+                    accepted = true;
                     while (pipe.IsConnected && !lifetime.IsCancellationRequested)
                     {
                         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); deadline.CancelAfter(TimeSpan.FromSeconds(12));
@@ -65,20 +72,30 @@ sealed class VpnService : ServiceBase
                         bool authorized = false;
                         pipe.RunAsClient(() => { using var client = WindowsIdentity.GetCurrent(); authorized = client.User == owner && !client.IsAnonymous && client.ImpersonationLevel >= TokenImpersonationLevel.Impersonation; });
                         if (!authorized) throw new UnauthorizedAccessException();
+                        ownerLease.Renew(Now);
                         var reply = await controller!.Request(request).WaitAsync(deadline.Token);
                         await PipeWire.Write(pipe, reply, deadline.Token);
                     }
                 }
                 catch (Exception ex) when (ex is IOException or OperationCanceledException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
-                finally { controller!.OwnerGone(); }
+                finally
+                {
+                    // EOF changes PipeStream to Broken (IsConnected=false). It
+                    // still needs Disconnect before this same server can accept again.
+                    if (accepted)
+                    {
+                        try { pipe.Disconnect(); }
+                        catch (IOException) when (lifetime.IsCancellationRequested) { }
+                    }
+                }
             }
         }
         finally { lifetime.Cancel(); try { await network; } catch (OperationCanceledException) { } }
     }
     protected override bool OnPowerEvent(PowerBroadcastStatus status)
     {
-        if (status == PowerBroadcastStatus.Suspend) controller?.Power(true);
-        else if (status is PowerBroadcastStatus.ResumeAutomatic or PowerBroadcastStatus.ResumeSuspend or PowerBroadcastStatus.ResumeCritical) controller?.Power(false);
+        if (status == PowerBroadcastStatus.Suspend) { ownerLease.Power(true, Now); controller?.Power(true); }
+        else if (status is PowerBroadcastStatus.ResumeAutomatic or PowerBroadcastStatus.ResumeSuspend or PowerBroadcastStatus.ResumeCritical) { ownerLease.Power(false, Now); controller?.Power(false); }
         return true;
     }
     protected override void OnStop()

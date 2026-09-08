@@ -1,6 +1,11 @@
 using System.Diagnostics;
 namespace XDVPN.Platform;
 
+public sealed class NetworkScriptException(int exitCode) : IOException($"网络配置 / 清理验证失败（{exitCode}）。")
+{
+    public int ExitCode { get; } = exitCode;
+}
+
 public static class NetworkScript
 {
     public static async Task Run(string mode, Guid session, CancellationToken token = default)
@@ -17,7 +22,7 @@ public static class NetworkScript
         try { await process.WaitForExitAsync(token).WaitAsync(TimeSpan.FromSeconds(30), token); }
         catch { process.Kill(true); await process.WaitForExitAsync(CancellationToken.None); throw; }
         await Task.WhenAll(output, error);
-        if (process.ExitCode != 0) throw new IOException($"网络配置 / 清理验证失败（{process.ExitCode}）。");
+        if (process.ExitCode != 0) throw new NetworkScriptException(process.ExitCode);
     }
     public static async Task CleanupAll()
     {

@@ -4,5 +4,7 @@
   <Project Path="XDVPN.Platform.Tests/XDVPN.Platform.Tests.csproj" />
   <Project Path="XDVPN.Platform/XDVPN.Platform.csproj" />
   <Project Path="XDVPN.Service/XDVPN.Service.csproj" />
+  <Project Path="XDVPN.Service.Tests/XDVPN.Service.Tests.csproj" />
   <Project Path="XDVPN.Tests/XDVPN.Tests.csproj" />
+  <Project Path="XDVPN.UI.Tests/XDVPN.UI.Tests.csproj" />
 </Solution>

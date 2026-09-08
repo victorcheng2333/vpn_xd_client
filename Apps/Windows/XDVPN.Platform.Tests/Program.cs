@@ -5,6 +5,8 @@ using System.Text;
 using XDVPN.Core;
 using XDVPN.Platform;
 
+if (await EngineLifecycleTests.TryRunHelper(args)) return 0;
+
 void Check(bool value, string message) { if (!value) throw new Exception(message); }
 using (var stream = new MemoryStream())
 {
@@ -20,6 +22,10 @@ foreach(var count in new[]{-1,0,Protocol.MaxFrameBytes+1})
     Check(rejected,"Invalid frame accepted");
 }
 Console.WriteLine("PASS IPC roundtrip and invalid frame bounds");
+DataSecurityTests.Run();
+await PipeReconnectTests.Run();
+await HealthTests.Run();
+await EngineLifecycleTests.Run();
 if(args is ["--service"])
 {
     using var client=new ServiceClient();var response=await client.Send(new(RequestKind.Status));

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../XDVPN.Platform/XDVPN.Platform.csproj" /><Compile Include="../XDVPN.Service/Controller.cs" Link="Controller.cs" /></ItemGroup>
+</Project>

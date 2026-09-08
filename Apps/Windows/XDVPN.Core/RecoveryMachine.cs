@@ -1,7 +1,7 @@
 namespace XDVPN.Core;
 
 // All methods run on one service actor. Time is elapsed monotonic seconds, never wall clock.
-public sealed class RecoveryMachine(Func<double>? jitter = null)
+public sealed class RecoveryMachine(Func<double>? jitter = null, double recoveryWindowSeconds = 3)
 {
     public ConnectionState State { get; private set; }
     public bool Desired { get; private set; }
@@ -12,6 +12,7 @@ public sealed class RecoveryMachine(Func<double>? jitter = null)
     public bool Running { get; private set; }
     public bool Established { get; private set; }
     public Failure LastFailure => failure;
+    private readonly double recoveryWindow = recoveryWindowSeconds is > 0 and <= 90 ? recoveryWindowSeconds : throw new ArgumentOutOfRangeException(nameof(recoveryWindowSeconds));
     private bool online, sleeping, stopping, immediate, cleanupBlocked, attempted;
     private string network = "";
     private double due = double.PositiveInfinity, loginDeadline, recoveryDeadline = double.PositiveInfinity;
@@ -71,17 +72,21 @@ public sealed class RecoveryMachine(Func<double>? jitter = null)
         if (attempt != Attempt || !Running || stopping || !Desired) return;
         Established = true; Retry = 0; failure = Failure.None;
         recoveryDeadline = double.PositiveInfinity;
-        Set(ConnectionState.Connected, "工作网络已连接。");
+        Set(ConnectionState.Connected, "VPN 通道已建立，数据通路待验证。");
     }
     public void Lost(Guid attempt, double now)
     {
         if (attempt != Attempt || !Running || stopping || !Desired || !Established) return;
-        if (double.IsPositiveInfinity(recoveryDeadline)) recoveryDeadline = now + 3;
+        if (double.IsPositiveInfinity(recoveryDeadline)) recoveryDeadline = now + recoveryWindow;
         Set(ConnectionState.Recovering, "连接暂时中断，正在恢复原会话。");
     }
     public void Failed(Guid attempt, Failure reason)
     {
-        if (attempt != Attempt || !Running || stopping) return;
+        if (attempt != Attempt || !Running || reason == Failure.None) return;
+        // A stop already in flight suppresses another Stop effect, not late terminal evidence.
+        // Preserve explicit cancellation and the first terminal error.
+        if (stopping && !Desired) return;
+        if (failure is not (Failure.None or Failure.Transport)) return;
         failure = reason;
         if (reason == Failure.Configuration && Established) { failure = Failure.Transport; immediate = true; }
         if (failure is not (Failure.None or Failure.Transport)) Desired = false;

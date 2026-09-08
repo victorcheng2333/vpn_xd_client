@@ -150,3 +150,16 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.24 \
 签名／公证通过不代表系统服务已经批准。实际验收需覆盖启用、系统设置批准、构建握手、另一连接拒绝、失联清理、移除与重新注册。可从已安装 App 执行 `Contents/MacOS/XDVPN --service-command status` 或 `smoke`，诊断路径不创建 VPNModel、不读取 VPN 凭据、不启动 VPN 引擎。`register`、`unregister`、`migrate` 是明确改变本机服务状态的管理命令。
 
 旧版授权在新服务可用之前保留；旧版仍运行或正在清理时必须阻止迁移。测试通过后仍须在真实服务器验证连接、网络切换、退出清理，不能将无网络的 smoke 结果当作真实 VPN 验收。
+
+## Windows 独立预览发布
+
+Windows 使用 `Apps/Windows/XDVPN.App/XDVPN.App.csproj` 的版本及 `windows-v<version>` 标签，不参与 macOS 自动更新的正式版本序列。App、Service、Setup 和界面版本须一致。
+
+推送标签后，在 Actions 手动运行 **Windows Release**，输入对应标签。该流程重建引擎、执行回归与 SYSTEM 服务测试、打包 EXE 和 ZIP，并验证 GitHub 上传资产的 SHA-256 后发布 prerelease。只有发布 job 获得 contents: write；推送代码或标签本身不会触发发布。已发布版本不能覆盖，不设为 Latest。版本说明位于 `docs/releases/windows-v<version>.md`。
+
+本地也可在干净且 HEAD 等于标签的 Windows 工作区运行（需要已构建原生引擎、.NET 10 和已登录的 GitHub CLI）：
+
+```powershell
+./scripts/release-windows.ps1 prepare -Tag windows-v0.1.4
+./scripts/release-windows.ps1 publish -Tag windows-v0.1.4
+```

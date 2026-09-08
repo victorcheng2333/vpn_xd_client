@@ -1,10 +1,10 @@
 name: Windows
 on:
   pull_request:
-    paths: ['Apps/Windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
   push:
     branches: [main, codex/windows-support]
-    paths: ['Apps/Windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
           msystem: UCRT64
           update: true
           install: >-
-            make patch tar unzip curl
+            make patch tar unzip curl diffutils
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-python
             mingw-w64-ucrt-x86_64-pkgconf
@@ -49,5 +49,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: XDVPN-windows-x64-preview
-          path: dist/XDVPN-windows-x64-preview.zip
+          path: |
+            dist/XDVPN-windows-x64-preview.zip
+            dist/XDVPN-Setup-windows-x64-preview.exe
           if-no-files-found: error

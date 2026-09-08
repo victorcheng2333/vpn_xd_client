@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Run inside the MSYS2 UCRT64 shell on Windows. Sources are pinned; dependency versions are recorded.
 set -euo pipefail
+export PYTHONUTF8=1
 [ "${MSYSTEM:-}" = UCRT64 ] || { echo 'Use the MSYS2 UCRT64 environment'; exit 1; }
-ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../../.." && pwd -P)"
 BUILD="$ROOT/.build/windows-engine"
 mkdir -p "$BUILD/downloads"
+[ "$(cd "$BUILD" && pwd -P)" = "$BUILD" ] || { echo 'Build directory must not redirect outside the workspace'; exit 1; }
 rm -rf "$BUILD/runtime" "$BUILD/licenses"
 mkdir -p "$BUILD/runtime" "$BUILD/licenses"
 fetch() {
@@ -20,13 +22,14 @@ tar -xzf "$BUILD/downloads/openconnect-9.21.tar.gz" -C "$BUILD/source" --strip-c
 python "$ROOT/Apps/Windows/native/patch-openconnect.py" "$BUILD/source"
 cd "$BUILD/source"
 ./configure --host=x86_64-w64-mingw32 --disable-shared --enable-static --disable-nls --disable-maintainer-mode \
- --with-gnutls --without-openssl --without-libproxy --without-stoken --without-libpskc --without-gssapi --without-pcsclite --with-builtin-json
+ --with-gnutls --without-openssl --without-libproxy --without-stoken --without-libpskc --without-gssapi --with-vpnc-script=XDVPN.Service.exe --with-builtin-json
 make -j2 openconnect.exe
+bash "$ROOT/Apps/Windows/scripts/test-native-control.sh" "$BUILD/source"
 cp openconnect.exe "$BUILD/runtime/openconnect.exe"
-python - "$BUILD/runtime" <<'PY'
+python - "$BUILD/runtime" "$(cygpath -w /ucrt64/bin)" <<'PY'
 from pathlib import Path
 import subprocess,sys,shutil
-out=Path(sys.argv[1]); lib=Path('/ucrt64/bin'); dlls={p.name.lower():p for p in lib.glob('*.dll')}
+out=Path(sys.argv[1]); lib=Path(sys.argv[2]); dlls={p.name.lower():p for p in lib.glob('*.dll')}
 pending=[out/'openconnect.exe']; seen=set()
 while pending:
     file=pending.pop()

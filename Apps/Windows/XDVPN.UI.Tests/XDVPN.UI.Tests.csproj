@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><OutputType>Exe</OutputType><UseWPF>true</UseWPF><AssemblyName>XDVPN.UI.Tests</AssemblyName></PropertyGroup>
+ <ItemGroup><ProjectReference Include="../XDVPN.App/XDVPN.App.csproj"/></ItemGroup>
+</Project>
