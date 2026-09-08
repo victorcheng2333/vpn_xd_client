@@ -79,8 +79,9 @@ struct NetworkPlan {
         if full4 != full6 && !blocksIPv6 {
             throw ConfigurationError.invalid("暂不支持 IPv6 单栈全隧道或混合全隧道/分流策略。")
         }
-        // includeAllNetworks cannot honor explicit route exclusions. Never
-        // silently replace a server exclusion policy with a different one.
+        // Route exclusions inside a full tunnel have not been verified on a
+        // device. Never silently replace a server exclusion policy with a
+        // different one.
         if requiresFullTunnel && !excludes.isEmpty {
             throw ConfigurationError.invalid("全隧道包含排除路由，当前版本无法完整应用该策略。")
         }

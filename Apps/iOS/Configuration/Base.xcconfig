@@ -10,7 +10,9 @@ CLANG_ENABLE_OBJC_ARC = YES
 CLANG_WARN_DOCUMENTATION_COMMENTS = YES
 ENABLE_USER_SCRIPT_SANDBOXING = NO
 CODE_SIGN_STYLE = Automatic
-CURRENT_PROJECT_VERSION = 1
+// Tools UG. Team IDs are public (they sit in every signed bundle); override in Signing.local.xcconfig for another team.
+DEVELOPMENT_TEAM = KQY8A3BNVG
+CURRENT_PROJECT_VERSION = 5
 MARKETING_VERSION = 0.1.0
 XDVPN_BUNDLE_ID = com.xd.vpn.ios.poc
 XDVPN_APP_GROUP = group.com.xd.vpn.ios.poc

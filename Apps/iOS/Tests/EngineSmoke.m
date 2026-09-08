@@ -2,6 +2,8 @@
 #import "OCEngine.h"
 #include <errno.h>
 #include <stdlib.h>
+#include <sys/socket.h>
+#include <poll.h>
 #include "openconnect.h"
 @interface OCEngine (FormTest)
 - (int)processForm:(struct oc_auth_form *)form;
@@ -86,11 +88,48 @@ int main(int argc, const char *argv[]) {
             NSString *url = [NSString stringWithFormat:@"https://127.0.0.1:%ld", port];
             LoopbackSessionProbe *engine = [[LoopbackSessionProbe alloc] initWithServer:url
                 username:@"test-only" password:@"test-only" group:@"" useDTLS:NO];
+            BOOL recovery = argc > 4 && !strcmp(argv[4], "recovery");
+            __block int configurations = 0, connections = 0, packetFD = -1;
+            dispatch_semaphore_t packetChecked = dispatch_semaphore_create(0);
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC),
                 dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ [engine cancel]; });
             NSInteger result = [engine runWithSettingsHandler:^BOOL(NSDictionary *settings, int fd) {
+                if (recovery) {
+                    packetFD = fd;
+                    if (++configurations == 1) {
+                        // The old implementation loses this request before mainloop starts.
+                        [engine updateNetworkAvailable:NO reconnect:YES];
+                        [engine updateNetworkAvailable:YES reconnect:YES];
+                    }
+                    return YES;
+                }
                 check(NO, "expired fixture session cannot configure tunnel"); return NO;
-            } eventHandler:^(NSString *event) {}];
+            } eventHandler:^(NSString *event) {
+                if (!recovery || ![event isEqual:@"connected"]) return;
+                if (++connections != 2) return;
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                    // Healthy wakes must not cause more CONNECTs or settings callbacks.
+                    for (int i = 0; i < 10; i++) [engine checkConnection];
+                    unsigned char packet[24] = {0, 0, 0, AF_INET, 0x45, 0, 0, 20};
+                    check(send(packetFD, packet, sizeof(packet), 0) == sizeof(packet), "send packet after network recovery");
+                    struct pollfd ready = {.fd = packetFD, .events = POLLIN};
+                    check(poll(&ready, 1, 2000) > 0, "recovered tunnel receives data within deadline");
+                    unsigned char echoed[24];
+                    check(recv(packetFD, echoed, sizeof(echoed), 0) == sizeof(echoed) &&
+                          !memcmp(packet, echoed, sizeof(packet)), "bidirectional packet survives transport recovery");
+                    usleep(500000);
+                    dispatch_semaphore_signal(packetChecked);
+                    [engine cancel];
+                });
+            }];
+            if (recovery) {
+                check(dispatch_semaphore_wait(packetChecked, DISPATCH_TIME_NOW) == 0,
+                      "path change during settings must reconnect before watchdog");
+                check(result == -EINTR && configurations == 2 && connections == 2,
+                      "one coalesced recovery and no reconnect for healthy wakes");
+                puts("Native recovery race, healthy wake and bidirectional packet checks passed.");
+                return 0;
+            }
             check(result == -EPERM && engine.authenticationCompleted && !engine.authenticationFailed,
                   "real CONNECT 401 after successful login is session expiry, not rejected credentials");
             check(!engine.certificateFailed, "fixture must reach HTTP session exchange");

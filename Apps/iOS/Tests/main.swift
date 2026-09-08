@@ -106,8 +106,18 @@ policy.connected(now: now.addingTimeInterval(21))
 let persisted = try JSONEncoder().encode(policy)
 var restored = try JSONDecoder().decode(RecoveryPolicy.self, from: persisted)
 rejects("rapid cold restart budget survives successful connect and process restart") { try restored.begin(now: now.addingTimeInterval(30)) }
-expect(restored.blockedReason != nil, "persist permanent pause")
-rejects("pause survives timeout window") { try restored.begin(now: now.addingTimeInterval(600)) }
+expect(restored.blockedReason == nil, "rate limit never permanently blocks automatic recovery")
+do {
+    try restored.begin(now: now.addingTimeInterval(30))
+    expect(false, "rate limit must wait")
+} catch let cooldown as RecoveryPolicy.Cooldown {
+    expect(cooldown.retryAt == now.addingTimeInterval(300), "retry scheduled when oldest attempt expires")
+}
+try restored.begin(now: now.addingTimeInterval(300))
+expect(restored.attempts.count == 3, "cooldown expires automatically without resetting the remaining budget")
+rejects("cooldown does not allow a burst after expiry") { try restored.begin(now: now.addingTimeInterval(301)) }
+var credentialBlock = RecoveryPolicy(blockedReason: "认证被拒绝")
+rejects("actual credential blocks stay permanent") { try credentialBlock.begin(now: now.addingTimeInterval(600)) }
 var expired = policy
 try expired.begin(now: now.addingTimeInterval(600))
 expect(expired.attempts.count == 1, "old transient attempts expire")

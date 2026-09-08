@@ -1,5 +1,13 @@
 # 验证记录
 
+## 2026-09-08：切网恢复钩子原生化（test.32）实机验收通过
+
+- 根因：`reconnect` 阶段仍启动 vpnc-script，而 OpenConnect 在脚本返回前阻塞主循环、不转发任何数据包。脚本本身约 10 ms，耗时来自每次 hook 都原子重写 `vpnc-managed-script`（新 inode）并直接 exec：macOS syspolicyd 对首次执行的新文件做 Gatekeeper 评估并联网查公证票据，统一日志记录 `transaction_duration_ms=3004 … cloudkit request failed -1001` 后才放行脚本。隧道被阻塞、系统解析器又指向隧道 DNS 时每次约 3.2 秒，正常约 0.25 秒；同一窗口内全机 DNS 查询 `duration: 3s–6s`。1.1.22 及之前日志中 `hook exited phase=reconnect` 6 次里 4 次 3.2–3.35 秒，UI 早于此已显示“已连接”。
+- 修复：`reconnect` 阶段与 attempt-reconnect 一样原生核对服务器路由后返回 0；其余阶段脚本改由 `/bin/sh <脚本>` 启动，不再 exec 新文件。本机实测新 inode 直接 exec 240–510 ms、`/bin/sh` 启动 6–8 ms。Release 回归 225 项通过、0 失败，新增 reconnect 原生、runner 经 shell 启动、watchdog 结束进程组三个用例。
+- test.32（`32-test-20260907T142834Z-d162185-dirty`，公司签名）实机：15:13Z 起所有恢复的 `hook exited phase=reconnect status=0 native=true`，`CSTP connected` 到钩子退出 0.064–0.093 秒（含助手启动与签名校验），SIGUSR2 到 `CSTP connected` 0.18–0.66 秒；网络就绪后仍有约 1.0 秒防抖。Wi-Fi ↔ 有线／扩展坞、Wi-Fi ↔ iPhone 热点（16:20:07Z 经 172.20.10.1 恢复 0.66 秒，16:21:06Z 切回 Wi-Fi 0.55 秒）均一次恢复成功，用户确认业务丝滑。
+- 15:48:16Z 与 15:55:22Z 两次 `recovery.deadline` 不是本改动问题：Mac 已切到 iPhone 热点但手机端 VPN 的 `includeAllNetworks` 使热点不再应答 DHCP（configd `INIT-REBOOT timed out`），期限到达后重新登录属预期；iOS 端修复见 `Apps/iOS/DEVICE-VERIFICATION-2026-09-07.md`。
+- 未做：防抖改为主接口就绪信号、OpenConnect 10 秒重连退避接管，仍是后续项。此次 test.32 未公证，不作为正式交付。
+
 ## 2026-09-07：1.1.22 正式发布准备通过
 
 - 目标版本 **1.1.22 / build 31**，此前被测试拦截的 `v1.1.20`、`v1.1.21` 标签保留，不替换历史源码，不作为正式 Release 发布。

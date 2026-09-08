@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing stable tag, e.g. v1.1.22'
+        description: 'Existing stable tag, e.g. v1.1.24'
         required: true
         type: string
 permissions:
@@ -83,7 +83,7 @@ jobs:
             tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
           fi
       # Internal build artifacts include checksums and source archives.
-      # github-release.py publishes only the two architecture DMGs.
+      # github-release.py publishes the two architecture DMGs and the Android APK.
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
@@ -97,8 +97,59 @@ jobs:
         if: always()
         run: security delete-keychain "$RUNNER_TEMP/xdvpn-signing.keychain-db" || true
 
+  android:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install pinned Android toolchain
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+      - uses: actions/cache@v4
+        with:
+          path: Apps/Android/.build/engine/downloads
+          key: android-sources-${{ hashFiles('Apps/Android/scripts/build-engine.sh') }}
+      # A runner-generated debug key would change with every run and break in-place upgrades,
+      # so the release keystore must come from repository secrets.
+      - name: Configure Android release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo 'Configure ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD secrets (see docs/releasing.md).' >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xdvpn-release.keystore"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/xdvpn-release.keystore" >> "$GITHUB_ENV"
+      - name: Build, test and verify the Android release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash scripts/release-android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: |
+            build/*.apk
+            build/*.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xdvpn-release.keystore"
+
   publish:
-    needs: build
+    needs: [build, android]
     runs-on: macos-15
     permissions:
       contents: write

@@ -4,13 +4,13 @@
 
 完整设计与实现说明见 [技术方案文档](docs/technical-solution.md)（Markdown，含架构、UI、状态机、恢复清理与质量监控等 13 张图，并注明版本基线与开发增量）。
 
-## 多端规划与 iOS 开发
+## 多端开发
 
 [多端架构与 iOS 接入方案](docs/design/2026-09-06-ios-support.md) 采用同仓库、独立 macOS/iOS/Android 原生客户端、统一产品与视觉规范。各端独立实现配置、权限、连接生命周期与 UI，不共享 Swift 运行时代码包。
 
 移动端的配置授权、Cisco/Hillstone 反馈、网络切换与休眠恢复实践见 [iOS VPN 可靠性调研](docs/design/2026-09-06-ios-vpn-reliability-research.md)。On Demand 与真机恢复验证提前纳入首个技术验证阶段。
 
-根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已完成 iPhone 签名安装、真实内网访问、后台飞行模式恢复及连接质量统计验证；长时间锁屏、Wi-Fi/蜂窝切换等完整矩阵仍待验收。未来 Android 在 `Apps/Android` 独立实现 Kotlin/Compose + VpnService，两端均不依赖 macOS 的 `VPNCore`。
+根目录仍是现有 macOS 工程。`Apps/iOS` 已建立独立 SwiftUI + Network Extension + OpenConnect 验证版 0.1.0，安装与验证步骤见 [iOS 验证版说明](Apps/iOS/README.md)。已完成 iPhone 签名安装、真实内网访问、后台飞行模式恢复及连接质量统计验证；长时间锁屏、Wi-Fi/蜂窝切换等完整矩阵仍待验收。`Apps/Android` 已建立独立 Kotlin/Compose + VpnService + JNI OpenConnect 开发验证版，三个页签、配置、恢复与质量统计对齐 iOS；构建与安装见 [Android 说明](Apps/Android/README.md)，架构与最佳实践见 [Android 技术方案](docs/design/2026-09-07-android-support.md)。自 1.1.24 起 Android APK 随每个 GitHub Release 一同发布（`XD-VPN-<版本>-Android.apk`，版本号与 macOS 共用 `Resources/Info.plist`），发布流程见 [发布说明](docs/releasing.md)；真实网关和物理换网验收状态见其验证记录。两端均不依赖 macOS 的 `VPNCore`。
 
 ## Windows 开发
 
@@ -43,7 +43,7 @@
 - 连接存活由 OpenConnect 的 DPD 探测，配置间隔为 20 秒（`--force-dpd=20`）。这是隧道存活探测，不是每 20 秒重新登录；实际失联判定还取决于最近收到的数据和探测回应。客户端没有额外定时 ping 公司业务网站。
 - 物理网络断开时，已建立的会话暂停客户端主动恢复与恢复期限，不主动发送断开或 SIGUSR2。网络重新就绪后尝试恢复旧会话。手动断开、退出和引擎自行结束仍会进入清理；尚未完成的首次登录会停止并核对部分配置，等网络恢复后继续。
 - 系统唤醒、Wi-Fi SSID／链路变化、物理网卡 IP／网关变化会主动触发恢复，不等待 20 秒 DPD。通过 SystemConfiguration 读取同一物理接口的有效链路与可用 IPv4／IPv6 地址，不把 VPN 的全局路由或 DNS 状态作为网络就绪条件；只有链路、DHCP 尚未分配地址或仅有自分配／链路本地地址时继续等待。CoreWLAN 与 configd 使用同一个物理配置比较入口，重复的链路／电源通知不会再请求重连。SSID 变化通知仍独立触发恢复，不读取 SSID 或 BSSID；同地址同 SSID 漫游若没有可确认的配置变化，交由 OpenConnect 自身恢复。物理配置监听失败时才使用排除虚拟接口的 NWPathMonitor 回退。
-- 网络就绪后约 1 秒防抖合并连续通知，向已建立的 OpenConnect 会话发送 SIGUSR2，立即重新建立隧道。Wi-Fi 切换时即使网络一直显示可用，也会触发；等待中的重试跳过原有退避时间。
+- 网络就绪后约 1 秒防抖合并连续通知，向已建立的 OpenConnect 会话发送 SIGUSR2，立即重新建立隧道。Wi-Fi 切换时即使网络一直显示可用，也会触发；等待中的重试跳过原有退避时间。恢复阶段的 attempt-reconnect／reconnect 钩子由助手原生完成、不启动 shell 脚本，隧道重建后立即恢复转发；其余阶段的脚本以 `/bin/sh <脚本>` 启动，避免 macOS 对新生成文件的首次执行评估拖慢钩子。
 - 助手 6 在 connect／attempt-reconnect／reconnect 钩子中核对到 VPN 服务器的 IPv4 主机路由。使用当前物理接口的作用域默认路由核对网关和源地址，读取完整路由表区分同地址的作用域缓存与无作用域静态路由；切网时对本次静态路由精确删除后重建，同时更新网关与源地址并读回验证，避免同为 en0 时仍保留旧源地址导致 `EADDRNOTAVAIL`。物理出口尚未就绪时推迟恢复；断开与异常退出会删除并复核本次创建的服务器路由。已有其他来源的静态路由不接管。详见 [服务器路由恢复设计](docs/design/2026-09-06-server-route-recovery.md)。
 - 物理网络就绪只表示链路与地址可用，不保证能访问互联网。新 Wi-Fi 需要网页登录或无法访问 VPN 时，恢复期限到达后先清理失效隧道，让普通上网／认证页有机会恢复；Auto Connect 关闭时保持断开，开启时按退避重试。此策略有意缩短客户端等待旧会话的时间，不承诺保留 OpenConnect 完整的 300 秒窗口。
 - 同一个 VPN 进程的两次主动恢复命令至少间隔 3 秒。冷却期间收到的新网络变化会保留，等防抖和冷却都结束后处理；单调时钟保证系统时间调整不会影响这个间隔。

@@ -2,13 +2,13 @@
 
 ## 版本约定
 
-唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.22 / build 31**。
+唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.24 / build 34**；Android 的 versionName / versionCode 也直接读取同一文件。
 
 | 渠道 | 界面版本示例 | DMG | GitHub Release / 自动更新 |
 | --- | --- | --- | --- |
-| development | `1.1.22-dev.31` | 默认不打包 | 不发布、不参与正式更新 |
-| test | `1.1.22-test.32` | 文件名含 `-test.32` | 不发布、不参与正式更新 |
-| release | `1.1.22` | 文件名只含正式版本与芯片 | 仅 `v1.1.22` 正式标签 |
+| development | `1.1.24-dev.34` | 默认不打包 | 不发布、不参与正式更新 |
+| test | `1.1.24-test.35` | 文件名含 `-test.34` | 不发布、不参与正式更新 |
+| release | `1.1.24` | 文件名只含正式版本与芯片 | 仅 `v1.1.24` 正式标签 |
 
 开发／测试的构建号不占用正式版本，也不与正式版本比较大小。测试分发应显式使用新的构建号。正式版必须同时满足：标签匹配 plist、标签指向 HEAD、工作区干净、构建号匹配版本文件，且版本大于所有已发布的正式版本。不会回写或自动递增源文件。已发布版本禁止覆盖或降级；修复必须使用新版本。失败时仅能恢复尚未发布的同名草稿。
 
@@ -68,32 +68,42 @@ BUILD_CHANNEL=test BUILD_NUMBER=32 ARCHS=arm64 \
 
 ## 本地打包、公证后上传 GitHub Release（默认流程）
 
-先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.22`；正式发布必须递增版本，不能把旧测试包重命名发布。
+先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.24`；正式发布必须递增版本，不能把旧测试包重命名发布。
 
 ```bash
 # 在已提交的版本提交上创建标签
-git tag -a v1.1.22 -m 'XD VPN 1.1.22'
+git tag -a v1.1.24 -m 'XD VPN 1.1.24'
 
 # 本地构建、测试、签名、公证、打包和复核，不上传 GitHub Release
-bash scripts/release.sh prepare v1.1.22
+bash scripts/release.sh prepare v1.1.24
 
 # 确保版本提交和标签均已推送到源仓库
 git push origin main
-git push origin v1.1.22
+git push origin v1.1.24
 
 # 仅上传已验证的产物，再将草稿发布为正式 Latest
-bash scripts/release.sh publish v1.1.22
+bash scripts/release.sh publish v1.1.24
 ```
 
-`prepare` 使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
+`prepare` 在两份 DMG 之后调用 `scripts/release-android.sh` 构建、校验并暂存 Android APK（见下文「Android 安装包」）；使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
 
-Release 仅上传两种芯片的 `XD-VPN-<版本>-macOS-<架构>.dmg`。两个 `.dmg.sha256`、`third-party-sources.tar.gz` 和 `build/release-notes.md` 保留为本地／Actions 构建产物，不作为 Release 附件上传。GitHub 自动生成的 Source code ZIP／tar.gz 链接仍会显示。本地构建默认不自动建立标签、不提交代码，也不上传 Release。
+Release 上传两种芯片的 `XD-VPN-<版本>-macOS-<架构>.dmg` 和 `XD-VPN-<版本>-Android.apk`。macOS 客户端按精确文件名只识别本平台 DMG，APK 不影响自动更新。两个 `.dmg.sha256`、`third-party-sources.tar.gz` 和 `build/release-notes.md` 保留为本地／Actions 构建产物，不作为 Release 附件上传。GitHub 自动生成的 Source code ZIP／tar.gz 链接仍会显示。本地构建默认不自动建立标签、不提交代码，也不上传 Release。
 
-`publish` 再次核对当前版本／标签／提交以及安装包内嵌信息，验证真实公证票据和公司签名，再创建草稿、上传两份 DMG 并比较 GitHub 资产 digest。全部通过才设为正式 Latest。客户端直接使用 DMG 的 GitHub digest 校验更新下载，不依赖独立的校验文件。已发布版本不可覆盖；失败时仅可重试未发布的同名草稿。发布说明记录源码提交。构建归档中的第三方源码包提供对应 OpenConnect／OpenSSL／vpnc-script 源码，重建脚本位于同一标签的源码仓库。
+`publish` 再次核对当前版本／标签／提交以及安装包内嵌信息，验证真实公证票据和公司签名，用 `scripts/verify-release-apk.py` 复核 APK 内嵌版本与签名块，再创建草稿、上传两份 DMG 与 APK 并比较 GitHub 资产 digest。全部通过才设为正式 Latest。客户端直接使用 DMG 的 GitHub digest 校验更新下载，不依赖独立的校验文件。已发布版本不可覆盖；失败时仅可重试未发布的同名草稿。发布说明记录源码提交。构建归档中的第三方源码包提供对应 OpenConnect／OpenSSL／vpnc-script 源码，重建脚本位于同一标签的源码仓库。
+
+## Android 安装包
+
+`Apps/Android/app/build.gradle.kts` 直接读取 `Resources/Info.plist`：`versionName` 为正式版本（开发／测试渠道追加 `-dev.N`／`-test.N`，与 macOS 显示版本一致），`versionCode` 为构建号；构建时把版本、渠道和签名方式写入 `assets/xdvpn-version.json`，发布校验不依赖 Android SDK 即可读取。
+
+`scripts/release-android.sh` 执行 JVM 测试、release lint、R8 打包，运行 `Apps/Android/scripts/verify-apk.py`（两个 ABI、16 KB 对齐、无测试凭据）和 `scripts/verify-release-apk.py`（文件名、内嵌版本＝标签版本、存在 v2/v3 签名块），产出 `build/XD-VPN-<版本>-Android.apk` 与 `.sha256`。
+
+签名来源按顺序：`Apps/Android/signing.properties`（`storeFile`／`storePassword`／`keyAlias`／`keyPassword`，已在 `.gitignore`）→ 环境变量 `ANDROID_KEYSTORE_FILE`／`ANDROID_KEYSTORE_PASSWORD`／`ANDROID_KEY_ALIAS`／`ANDROID_KEY_PASSWORD` → 本机 `~/.android/debug.keystore`。**目前正式包仍使用本机开发测试签名**：这与此前发给测试手机的包是同一把钥匙，可以覆盖升级；切换到专用发布钥匙后，已安装设备必须卸载重装（配置需重新填写），请提前通知。GitHub Actions 发布不接受运行器临时生成的调试钥匙，须配置 Secrets `ANDROID_KEYSTORE_BASE64`（keystore 文件 Base64）、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`，缺失时 Android 作业直接失败。
+
+Android 客户端暂不在应用内检查更新；下载需允许安装未知来源应用。真机验收记录见 `Apps/Android/DEVICE-VERIFICATION-*.md`。
 
 ## GitHub Actions 发布（手动备用流程）
 
-Actions → Release → Run workflow，输入已有并已推送的正式标签。工作流使用 ARM / Intel 原生 runner，执行与本地相同的公司签名、公证和产物验证。推送标签本身不再自动触发云端发布，避免与本地发布重复竞争。签名与公证均为必需项，不能通过仓库变量关闭。
+Actions → Release → Run workflow，输入已有并已推送的正式标签。工作流使用 ARM / Intel 原生 runner 构建 macOS，另有 Ubuntu 作业构建 Android APK，执行与本地相同的签名、公证和产物验证。推送标签本身不再自动触发云端发布，避免与本地发布重复竞争。签名与公证均为必需项，不能通过仓库变量关闭。
 
 ## 公证实际做了什么
 
@@ -109,7 +119,7 @@ Actions → Release → Run workflow，输入已有并已推送的正式标签�
 ## 单独本机正式打包
 
 ```bash
-BUILD_CHANNEL=release RELEASE_TAG=v1.1.22 \
+BUILD_CHANNEL=release RELEASE_TAG=v1.1.24 \
   NOTARY_KEYCHAIN_PROFILE=xdvpn-notary bash scripts/package.sh
 ```
 

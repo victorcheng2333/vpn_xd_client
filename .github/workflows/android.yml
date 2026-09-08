@@ -1,0 +1,48 @@
+name: Android
+on:
+  pull_request:
+    paths: ["Apps/Android/**", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
+  push:
+    branches: [main, "codex/android-*"]
+    paths: ["Apps/Android/**", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [28, 36]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install pinned Android toolchain
+        run: sdkmanager "platform-tools" "emulator" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
+      - name: Enable KVM for the CI emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/cache@v4
+        with:
+          path: Apps/Android/.build/engine/downloads
+          key: android-sources-${{ hashFiles('Apps/Android/scripts/build-engine.sh') }}
+      - name: Build and verify both ABIs
+        run: bash Apps/Android/scripts/check.sh
+      - name: Test native engine, service, storage and Compose
+        run: bash Apps/Android/scripts/ci-device-test.sh ${{ matrix.api }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-api-${{ matrix.api }}
+          path: |
+            Apps/Android/app/build/outputs/apk/
+            Apps/Android/app/build/reports/
+            Apps/Android/.build/emulator.log

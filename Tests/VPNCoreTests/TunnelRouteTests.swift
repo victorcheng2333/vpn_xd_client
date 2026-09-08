@@ -256,6 +256,30 @@ final class TunnelRouteTests: XCTestCase {
         XCTAssertEqual(fixture.updates.map(\.0), [.add, .delete, .add, .delete, .add])
     }
 
+    func testReconnectHookVerifiesRouteNativelyWithoutLaunchingTheScript() throws {
+        let fixture = RouteFixture(), session = try session(fixture)
+        defer { remove(session) }
+        try session.prepareServerRoute(environment: env, diagnostic: { _ in })
+        var messages: [String] = []
+        let unchanged = ManagedNetworkScript.execute(reason: .reconnect, session: session, environment: env, processID: 42424,
+            parentExited: { false }, runScript: {
+                XCTFail("The bundled script does nothing in this phase, yet its launch blocked OpenConnect for up to 3 s")
+                throw NetworkScriptRunner.Failure.timedOut
+            }, diagnostic: { messages.append($0) })
+        XCTAssertEqual(unchanged, 0)
+        XCTAssertTrue(messages.contains { $0.contains("route verified unchanged") })
+        XCTAssertEqual(messages.last, "XDVPN hook exited phase=reconnect status=0 native=true")
+        fixture.physical = .init(interface: "en0", index: 14, address: "192.168.124.37", gateway: "192.168.124.1")
+        messages.removeAll()
+        let moved = ManagedNetworkScript.execute(reason: .reconnect, session: session, environment: env, processID: 42424,
+            parentExited: { false }, runScript: { XCTFail("No shell in the reconnect phase"); return 1 }, diagnostic: { messages.append($0) })
+        XCTAssertEqual(moved, 0)
+        XCTAssertEqual(fixture.current?.gateway, "192.168.124.1")
+        XCTAssertEqual(fixture.current?.source, "192.168.124.37")
+        XCTAssertTrue(messages.contains { $0.contains("route add verified") })
+        XCTAssertEqual(messages.last, "XDVPN hook exited phase=reconnect status=0 native=true")
+    }
+
     func testAttemptReconnectNeverReportsSuccessWhenNativeRouteUpdateFails() throws {
         let fixture = RouteFixture(), session = try session(fixture)
         defer { remove(session) }

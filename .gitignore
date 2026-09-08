@@ -12,3 +12,6 @@ __pycache__/
 Apps/Windows/**/bin/
 Apps/Windows/**/obj/
 Apps/Windows/.vs/
+
+# Local Claude permission settings
+.claude/settings.local.json

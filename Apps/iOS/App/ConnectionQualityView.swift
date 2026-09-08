@@ -145,7 +145,7 @@ struct ConnectionQualityView: View {
         case .authentication: return ("账号认证失败", "请检查设置中的账号和密码，保存后手动连接。")
         case .certificate: return ("服务器证书校验失败", "请确认服务器地址和手机时间；仍失败时联系管理员。")
         case .configuration: return ("连接配置需要检查", "请检查已保存的配置；仍失败时分享诊断报告。")
-        case .retryLimit: return ("自动重试已暂停", "短时间内连接尝试过多。检查网络后点击「连接 VPN」重试。")
+        case .retryLimit: return ("等待下一次自动重试", "短时间内连接尝试过多，正在等待重试额度恢复；无需反复点击连接。")
         case .timeout: return ("连接超时", "请确认网络可用，再尝试连接。")
         case .providerRestart: return ("正在恢复后台连接", "系统重新启动了 VPN 扩展，正在恢复隧道。")
         default: return ("连接暂时中断", "正在尝试恢复，可在详细日志中查看进度。")

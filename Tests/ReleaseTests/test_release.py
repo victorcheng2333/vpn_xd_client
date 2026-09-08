@@ -1,11 +1,13 @@
 import importlib.util
 import hashlib
+import json
 import tempfile
 import os
 from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
+import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 import version
@@ -62,7 +64,8 @@ class VersionTests(unittest.TestCase):
 
     def test_publish_is_last_and_requires_matching_remote_digests(self):
         data = version.metadata('development')
-        names = [f'XD-VPN-{data["version"]}-macOS-{arch}.dmg' for arch in ('arm64', 'x86_64')]
+        names = release.asset_names(data['version'])
+        self.assertEqual(names[-1], f'XD-VPN-{data["version"]}-Android.apk')
         with tempfile.TemporaryDirectory() as folder:
             old = os.getcwd()
             os.chdir(folder)
@@ -77,7 +80,7 @@ class VersionTests(unittest.TestCase):
                 (root / 'release-notes.md').write_text('Release notes')
                 assets = [dict(name=file.name, size=file.stat().st_size,
                                digest='sha256:' + hashlib.sha256(file.read_bytes()).hexdigest())
-                          for file in root.iterdir() if file.suffix == '.dmg']
+                          for file in root.iterdir() if file.suffix in ('.dmg', '.apk')]
                 draft = dict(tag_name=data['tag'], draft=True, prerelease=False, assets=assets)
                 for valid in (True, False):
                     if not valid:
@@ -104,6 +107,31 @@ class VersionTests(unittest.TestCase):
                             self.assertNotIn('edit', [call.args[1] for call in gh.call_args_list])
             finally:
                 os.chdir(old)
+
+    def test_android_apk_metadata_must_match_the_release(self):
+        spec = importlib.util.spec_from_file_location('verify_release_apk', Path(version.__file__).with_name('verify-release-apk.py'))
+        verify = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(verify)
+        data = version.metadata('development')
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {'RELEASE_TAG': data['tag']}):
+            def apk(name, info, signed=True):
+                path = Path(folder) / name
+                with zipfile.ZipFile(path, 'w') as archive:
+                    archive.writestr('assets/xdvpn-version.json', json.dumps(info))
+                    archive.writestr('classes.dex', b'dex')
+                if signed:
+                    path.write_bytes(path.read_bytes() + b'APK Sig Block 42')
+                return path
+            good = dict(version=data['version'], build=int(data['build']), channel='release', displayVersion=data['version'], signing='development')
+            self.assertEqual(verify.check(apk(f'XD-VPN-{data["version"]}-Android.apk', good))['signing'], 'development')
+            for bad in (dict(good, channel='test'), dict(good, version='0.0.1'), dict(good, build=1), dict(good, signing='unsigned'),
+                        dict(good, displayVersion=data['version'] + '-dev.1')):
+                with self.assertRaises(ValueError):
+                    verify.check(apk(f'XD-VPN-{data["version"]}-Android.apk', bad))
+            with self.assertRaises(ValueError):
+                verify.check(apk(f'XD-VPN-{data["version"]}-Android.apk', good, signed=False))
+            with self.assertRaises(ValueError):
+                verify.check(apk('app-release.apk', good))
 
     def test_missing_payload_cannot_create_a_release(self):
         with patch.dict(os.environ, {'RELEASE_TAG': version.metadata('development')['tag']}), \

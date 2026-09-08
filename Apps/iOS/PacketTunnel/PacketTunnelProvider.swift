@@ -42,6 +42,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var timer: DispatchSourceTimer?
     private let store = SharedStore()
     private var lastSettingsError: Error?
+    private var appliedSettings: NSDictionary?
     private var quality = ConnectionQuality()
     private var savedQuality: ConnectionQuality?
 
@@ -85,15 +86,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private func startAttempt() {
         guard !stopping, engine == nil, let profile, let passwordReference else { return }
         retry = nil
-        var failureReason: QualityReason = .configuration
         do {
             var policy = try store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy())
-            do { try policy.begin(now: Date()) }
-            catch { failureReason = .retryLimit; try store.write(policy, name: "recovery"); throw error }
+            try policy.begin(now: Date())
             try store.write(policy, name: "recovery")
             let password = try KeychainStore.read(passwordReference)
             let engine = OCEngine(server: profile.server, username: profile.username, password: password, group: profile.group, useDTLS: profile.useDTLS)
             self.engine = engine
+            appliedSettings = nil
             generation += 1
             let token = generation
             engine.updateNetworkAvailable(available, reconnect: false)
@@ -109,10 +109,28 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 })
                 self.queue.async { self.attemptFinished(engine: engine, result: result, token: token) }
             }
-        } catch { blockAutomatic(error.localizedDescription); finish(error, qualityReason: failureReason) }
+        } catch let cooldown as RecoveryPolicy.Cooldown {
+            // The budget is spent by a healthy account. Keep the provider and system On Demand alive
+            // and retry when the oldest attempt leaves the window; a manual stop cancels the wait.
+            let delay = max(1, cooldown.retryAt.timeIntervalSinceNow)
+            quality.recover(reason: .retryLimit, at: .now())
+            reasserting = startReply == nil
+            record("连接重试过于频繁，等待约 \(Int(ceil(delay))) 秒后自动重试")
+            let job = DispatchWorkItem { [weak self] in
+                guard let self, !self.stopping else { return }
+                self.retry = nil
+                if self.available { self.startAttempt() }
+            }
+            retry = job
+            queue.asyncAfter(deadline: .now() + delay, execute: job)
+        } catch { blockAutomatic(error.localizedDescription); finish(error, qualityReason: .configuration) }
     }
     private func apply(_ dictionary: [String: Any], fd: Int32, token: Int, reply: SettingsReply) {
         guard token == generation, !stopping, reply.pending else { reply.finish(false); return }
+        // Reinstalling identical routes can generate new path notifications and
+        // interrupt packet flow on every transport reconnect.
+        let candidate = NSDictionary(dictionary: dictionary)
+        if pump != nil, appliedSettings == candidate { reply.finish(true); return }
         do {
             let plan = try NetworkPlan(dictionary)
             guard plan.requiresFullTunnel == (profile?.fullTunnel == true) else {
@@ -134,9 +152,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 settings.ipv6Settings = v6
             }
             if plan.blocksIPv6 {
-                // includeAllNetworks enforces capture; a local-only IPv6 address
-                // lets the pump explicitly discard IPv6 instead of forwarding it
-                // to an IPv4-only gateway. This is not a server-assigned address.
+                // The IPv6 default route captures IPv6 into the tunnel; a
+                // local-only IPv6 address lets the pump explicitly discard it
+                // instead of forwarding it to an IPv4-only gateway. This is not
+                // a server-assigned address.
                 let v6 = NEIPv6Settings(addresses: ["fd6d:7864:7670::1"], networkPrefixLengths: [128])
                 v6.includedRoutes = [NEIPv6Route.default()]
                 settings.ipv6Settings = v6
@@ -154,6 +173,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                     guard token == self.generation, !self.stopping, reply.pending else { reply.finish(false); return }
                     self.settingsReply = nil
                     if let error { self.lastSettingsError = error; reply.finish(false); return }
+                    self.appliedSettings = candidate
                     self.snapshot.address = [plan.ipv4?.address, plan.ipv6?.address].compactMap { $0 }.joined(separator: " / ")
                     if let pump = self.pump { pump.mtu = plan.mtu; pump.blocksIPv6 = plan.blocksIPv6 }
                     else {
@@ -219,7 +239,9 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     }
     private func pathChanged(_ path: Network.NWPath) {
         guard !stopping else { return }
-        let names = path.availableInterfaces.filter { $0.type != .other && $0.type != .loopback }.map { $0.name }.sorted().joined(separator: ",")
+        let names = path.availableInterfaces.filter {
+            $0.type != .other && $0.type != .loopback && path.usesInterfaceType($0.type)
+        }.map { $0.name }.joined(separator: ",")
         let signature = "\(path.status)|\(names)|\(path.supportsIPv4)|\(path.supportsIPv6)"
         guard signature != pathSignature else { return }
         let hadPath = pathSignature != nil
@@ -230,7 +252,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pathUpdate?.cancel()
         let job = DispatchWorkItem { [weak self] in
             guard let self, !self.stopping else { return }
-            self.record(self.available ? "网络路径可用" : "等待网络", updatePhase: !self.available)
+            self.record(self.available ? "网络路径可用（\(names.isEmpty ? "未知接口" : names)）" : "等待网络", updatePhase: !self.available)
             self.engine?.updateNetworkAvailable(self.available, reconnect: hadPath)
             if self.available && self.engine == nil && self.retry == nil { self.startAttempt() }
         }
@@ -243,9 +265,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     override func wake() {
         queue.async {
             guard !self.stopping else { return }
-            self.quality.recover(reason: .wake, at: .now())
             self.record("系统唤醒", updatePhase: false)
-            self.engine?.updateNetworkAvailable(self.available, reconnect: true)
+            self.engine?.checkConnection()
         }
     }
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {

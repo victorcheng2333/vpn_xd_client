@@ -6,6 +6,12 @@ import Darwin
 /// then the helper's native dynamic-store cleanup runs independently of it.
 enum NetworkScriptRunner {
     enum Failure: Error { case timedOut }
+    static let shell = "/bin/sh"
+    /// Launch `/bin/sh <script>` rather than exec the script file itself. The
+    /// managed script is a freshly written file on every hook, and macOS
+    /// evaluates each first exec of a new file (Gatekeeper/provenance, with a
+    /// network lookup): 0.25 s online, ~3 s while the tunnel is blocked and
+    /// DNS points at it. Passing the file to the interpreter skips all of that.
     static func run(executable: String, environment: [String: String], timeout: TimeInterval = 15) throws -> Int32 {
         var attributes: posix_spawnattr_t?
         var actions: posix_spawn_file_actions_t?
@@ -23,13 +29,13 @@ enum NetworkScriptRunner {
               posix_spawn_file_actions_addchdir_np(&actions, "/") == 0 else {
             throw VPNError.system("无法隔离网络脚本进程组。")
         }
-        let arguments = [strdup(executable), nil]
+        let arguments = [strdup(shell), strdup(executable), nil]
         let variables = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer { arguments.forEach { free($0) }; variables.forEach { free($0) } }
         var pid: pid_t = 0
         let result = arguments.withUnsafeBufferPointer { argv in
             variables.withUnsafeBufferPointer { envp in
-                posix_spawn(&pid, executable, &actions, &attributes, argv.baseAddress!, envp.baseAddress!)
+                posix_spawn(&pid, shell, &actions, &attributes, argv.baseAddress!, envp.baseAddress!)
             }
         }
         guard result == 0 else { throw VPNError.system("网络脚本无法启动（\(result)）。") }
@@ -99,13 +105,15 @@ public enum ManagedNetworkScript {
                 return 1
             }
         }
-        if reason == .attemptReconnect {
-            // The bundled script only sets the server route in this phase,
-            // and managedScript already overrides that function with a no-op.
-            // Native preparation above has updated and verified the route.
-            // Do not launch another shell while the old tunnel cannot carry
-            // traffic: its startup can consume the whole recovery deadline.
-            diagnostic("XDVPN hook exited phase=attempt-reconnect status=0 native=true")
+        if reason == .attemptReconnect || reason == .reconnect {
+            // The bundled script only sets the server route in attempt-reconnect
+            // (managedScript overrides that function with a no-op) and only runs
+            // the empty /etc/vpnc/reconnect.d hooks in reconnect. Native
+            // preparation above has updated and verified the route. OpenConnect
+            // blocks its main loop until this hook returns, so never launch a
+            // shell here: the old tunnel carries no traffic meanwhile, and the
+            // attempt-reconnect shell once consumed the whole recovery deadline.
+            diagnostic("XDVPN hook exited phase=\(reason.rawValue) status=0 native=true")
             return 0
         }
         if reason == .disconnect {
@@ -122,12 +130,6 @@ public enum ManagedNetworkScript {
         }
         catch NetworkScriptRunner.Failure.timedOut {
             diagnostic("XDVPN hook timeout phase=\(reason.rawValue) budget=15s")
-            if reason == .attemptReconnect || reason == .reconnect {
-                // OpenConnect can continue its own reconnect loop. Returning an
-                // error here produces a generic fatal-looking "Script ... error".
-                diagnostic("XDVPN hook deferred " + reason.rawValue)
-                return 0
-            }
         } catch { diagnostic("XDVPN hook launch failed phase=\(reason.rawValue): \(error.localizedDescription)") }
         if reason == .connect && code == 0 {
             do {

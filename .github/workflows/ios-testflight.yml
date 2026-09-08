@@ -1,0 +1,132 @@
+name: iOS TestFlight
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'iOS version (for example 0.1.0)'
+        required: true
+        default: '0.1.0'
+        type: string
+      build:
+        description: 'New build number, 1-9999; do not reuse an uploaded number'
+        required: true
+        type: string
+      action:
+        description: 'release uploads a new build; resume continues an existing build'
+        default: release
+        type: choice
+        options: [release, resume]
+      notes:
+        description: 'What to test (zh-Hans)'
+        required: true
+        type: string
+      submit_review:
+        description: 'Submit TestFlight Beta Review'
+        type: boolean
+        default: true
+      notify_testers:
+        description: 'Enable automatic tester notification after approval'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  upload:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      IOS_VERSION: ${{ inputs.version }}
+      IOS_BUILD: ${{ inputs.build }}
+      IOS_ACTION: ${{ inputs.action }}
+      IOS_NOTES: ${{ inputs.notes }}
+      IOS_SUBMIT_REVIEW: ${{ inputs.submit_review }}
+      IOS_NOTIFY_TESTERS: ${{ inputs.notify_testers }}
+      ASC_BETA_GROUP_ID: ${{ vars.IOS_BETA_GROUP_ID }}
+      ASC_USES_NON_EXEMPT_ENCRYPTION: ${{ vars.IOS_USES_NON_EXEMPT_ENCRYPTION }}
+      ASC_ENCRYPTION_DECLARATION_ID: ${{ vars.IOS_ENCRYPTION_DECLARATION_ID }}
+      ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.IOS_ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Select Xcode 26 or newer
+        run: |
+          XCODE_APP="$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)"
+          if [ -z "$XCODE_APP" ]; then
+            echo 'Xcode 26+ is required for iOS uploads.' >&2
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
+      - uses: actions/cache@v4
+        with:
+          path: Apps/iOS/.build/engine/downloads
+          key: ios-sources-${{ hashFiles('Apps/iOS/scripts/build-engine.sh') }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install release dependencies
+        run: python3 -m pip install -r Apps/iOS/scripts/requirements-testflight.txt
+      - name: Validate release inputs and pipeline
+        run: |
+          python3 Apps/iOS/scripts/testflight.py check --version "$IOS_VERSION" --build "$IOS_BUILD" --audience external
+          python3 -m unittest discover -s Apps/iOS/Tests -p 'test_*.py' -v
+      - name: Prepare App Store Connect key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.IOS_ASC_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          names = ["ASC_PRIVATE_KEY", "ASC_KEY_ID", "ASC_ISSUER_ID"]
+          missing = [name for name in names if not os.environ.get(name)]
+          if missing:
+              raise SystemExit("Missing iOS TestFlight credentials: " + ", ".join(missing))
+          path = Path(os.environ["RUNNER_TEMP"]) / "xdvpn-ios-asc.p8"
+          fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(fd, "w") as stream:
+              stream.write(os.environ["ASC_PRIVATE_KEY"])
+          with open(os.environ["GITHUB_ENV"], "a") as stream:
+              stream.write(f"ASC_KEY_PATH={path}\n")
+          PY
+      - name: Run TestFlight pipeline
+        run: |
+          python3 - <<'PYTHON'
+          import os, subprocess, sys
+          from pathlib import Path
+          notes = Path(os.environ['RUNNER_TEMP']) / 'test-notes.txt'
+          notes.write_text(os.environ['IOS_NOTES'])
+          cmd = [sys.executable, 'Apps/iOS/scripts/release-testflight.py', os.environ['IOS_ACTION'],
+                 '--version', os.environ['IOS_VERSION'], '--build', os.environ['IOS_BUILD'],
+                 '--notes-file', str(notes)]
+          if os.environ['IOS_SUBMIT_REVIEW'] == 'true':
+              cmd.append('--submit-review')
+          if os.environ['IOS_NOTIFY_TESTERS'] == 'true':
+              cmd.append('--notify-testers')
+          subprocess.run(cmd, check=True)
+          result = Path('Apps/iOS/.build/testflight') / (os.environ['IOS_VERSION'] + '-' + os.environ['IOS_BUILD']) / 'result.json'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+              stream.write('```json\n' + result.read_text() + '\n```\n')
+          PYTHON
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-testflight-${{ inputs.version }}-${{ inputs.build }}
+          path: |
+            Apps/iOS/.build/testflight/*/archive.json
+            Apps/iOS/.build/testflight/*/uploaded.json
+            Apps/iOS/.build/testflight/*/upload-attempt.json
+            Apps/iOS/.build/testflight/*/result.json
+            Apps/iOS/.build/testflight/*/ExportOptions.plist
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove temporary API key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xdvpn-ios-asc.p8"
