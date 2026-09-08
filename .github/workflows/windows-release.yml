@@ -1,0 +1,92 @@
+name: Windows Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing Windows tag, e.g. windows-v0.1.4'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make patch tar unzip curl diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gnutls
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-zlib
+      - name: Build pinned OpenConnect with Windows control bridge
+        shell: msys2 {0}
+        run: bash Apps/Windows/scripts/build-engine.sh
+      - name: Test release publication guards
+        shell: pwsh
+        run: ./scripts/windows/test-release.ps1
+      - name: Build and verify release packages
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: ./scripts/release-windows.ps1 prepare -Tag $env:RELEASE_TAG
+      - name: Verify installed SYSTEM service without a VPN connection
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $version=$env:RELEASE_TAG.Substring('windows-v'.Length)
+          $payload="./dist/windows-release-$version/windows-x64"
+          try {
+            & "$payload/install.ps1"
+            dotnet run --project Apps/Windows/XDVPN.Platform.Tests -c Release -- --service
+            if ($LASTEXITCODE) { throw 'Service smoke test failed' }
+          } finally {
+            if (Get-Service XDVPN -ErrorAction SilentlyContinue) { & "$payload/uninstall.ps1" }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            dist/windows-release-*/XDVPN-Setup-windows-x64-*.exe
+            dist/windows-release-*/XDVPN-windows-x64-*.zip
+            dist/windows-release-*/XDVPN-windows-x64-*.sha256
+            dist/windows-release-*/release.json
+          if-no-files-found: error
+  publish:
+    needs: build
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+      - name: Publish verified Windows preview
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: ./scripts/release-windows.ps1 publish -Tag $env:RELEASE_TAG -Repository $env:GITHUB_REPOSITORY

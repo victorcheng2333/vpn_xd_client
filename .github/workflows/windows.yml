@@ -1,0 +1,55 @@
+name: Windows
+on:
+  pull_request:
+    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
+  push:
+    branches: [main, codex/windows-support]
+    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make patch tar unzip curl diffutils
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gnutls
+            mingw-w64-ucrt-x86_64-libxml2
+            mingw-w64-ucrt-x86_64-zlib
+      - name: Build pinned OpenConnect with Windows control bridge
+        shell: msys2 {0}
+        run: bash Apps/Windows/scripts/build-engine.sh
+      - name: Test and package Windows app
+        shell: pwsh
+        run: ./Apps/Windows/scripts/build.ps1
+      - name: Verify installed SYSTEM service without connecting to a VPN
+        shell: pwsh
+        run: |
+          try {
+            ./dist/windows-x64/install.ps1
+            dotnet run --project Apps/Windows/XDVPN.Platform.Tests -c Release -- --service
+            if ($LASTEXITCODE) { throw "Service smoke test failed" }
+          } finally {
+            if (Get-Service XDVPN -ErrorAction SilentlyContinue) { ./dist/windows-x64/uninstall.ps1 }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XDVPN-windows-x64-preview
+          path: |
+            dist/XDVPN-windows-x64-preview.zip
+            dist/XDVPN-Setup-windows-x64-preview.exe
+          if-no-files-found: error

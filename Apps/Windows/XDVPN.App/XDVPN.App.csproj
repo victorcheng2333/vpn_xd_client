@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework><OutputType>WinExe</OutputType><UseWPF>true</UseWPF><UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings><ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/XDVPN.ico</ApplicationIcon>
+    <Version>0.1.4</Version><Product>XD VPN</Product><Description>XD VPN Windows 客户端</Description>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="../XDVPN.Platform/XDVPN.Platform.csproj" /></ItemGroup>
+  <ItemGroup><Resource Include="Assets/XDVPN.ico"/><Resource Include="Assets/XDVPN.png"/></ItemGroup>
+</Project>
