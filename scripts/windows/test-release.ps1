@@ -1,8 +1,10 @@
 $ErrorActionPreference='Stop'
 $repo=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $fixture=Join-Path $repo ('.build/windows-release-tests-'+[Guid]::NewGuid().ToString('N'))
-New-Item "$fixture/scripts","$fixture/Apps/Windows/XDVPN.App","$fixture/docs/releases","$fixture/dist/windows-release-0.1.4" -ItemType Directory -Force | Out-Null
+New-Item "$fixture/scripts","$fixture/scripts/windows","$fixture/Resources","$fixture/Apps/Windows/XDVPN.App","$fixture/docs/releases","$fixture/dist/windows-release-0.1.4" -ItemType Directory -Force | Out-Null
 Copy-Item "$repo/scripts/release-windows.ps1" "$fixture/scripts/release-windows.ps1"
+Copy-Item "$repo/scripts/windows/version.ps1" "$fixture/scripts/windows/version.ps1"
+'<plist><dict><key>CFBundleShortVersionString</key><string>0.1.4</string><key>CFBundleVersion</key><string>34</string></dict></plist>' | Set-Content "$fixture/Resources/Info.plist"
 '<Project><PropertyGroup><Version>0.1.4</Version></PropertyGroup></Project>' | Set-Content "$fixture/Apps/Windows/XDVPN.App/XDVPN.App.csproj"
 'notes' | Set-Content "$fixture/docs/releases/windows-v0.1.4.md"
 $root="$fixture/dist/windows-release-0.1.4"
@@ -23,10 +25,11 @@ function gh {
     if($args[0] -eq 'api'){
         if($args -contains '--paginate'){
             if($global:windowsReleaseTestScenario -eq 'published'){'[[{"tag_name":"windows-v0.1.4","draft":false}]]'}
-            elseif($global:windowsReleaseTestScenario -eq 'draft'){'[[{"tag_name":"windows-v0.1.4","draft":true}]]'}
+            elseif($global:windowsReleaseTestScenario -eq 'draft' -or @($global:windowsReleaseTestCalls | Where-Object { $_ -like 'release create*' }).Count){'[[{"id":123,"tag_name":"windows-v0.1.4","draft":true}]]'}
             else{'[[]]'}
             return
         }
+        if($args[-1] -like '*/releases/tags/*'){throw 'Draft lookup must use release ID'}
         $remote=@($assets | ForEach-Object { @{name=$_.name;size=$_.size;digest="sha256:$($_.sha256)"} })
         if($global:windowsReleaseTestScenario -eq 'unexpected'){$remote+=@{name='other';size=1;digest='other'}}
         @{draft=$true;assets=$remote} | ConvertTo-Json -Depth 5

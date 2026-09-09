@@ -6,5 +6,10 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
+    <SharedInfo>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../../Resources/Info.plist'))</SharedInfo>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match($(SharedInfo), '&lt;key&gt;CFBundleShortVersionString&lt;/key&gt;\s*&lt;string&gt;([^&lt;]+)&lt;/string&gt;').Groups[1].Value)</Version>
+    <SharedBuild>$([System.Text.RegularExpressions.Regex]::Match($(SharedInfo), '&lt;key&gt;CFBundleVersion&lt;/key&gt;\s*&lt;string&gt;([^&lt;]+)&lt;/string&gt;').Groups[1].Value)</SharedBuild>
+    <AssemblyVersion>$(Version).$(SharedBuild)</AssemblyVersion>
+    <FileVersion>$(AssemblyVersion)</FileVersion>
   </PropertyGroup>
 </Project>

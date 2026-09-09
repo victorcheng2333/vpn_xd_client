@@ -1,10 +1,10 @@
 name: Windows
 on:
   pull_request:
-    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', '.github/workflows/windows.yml']
   push:
     branches: [main, codex/windows-support]
-    paths: ['Apps/Windows/**', 'scripts/windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', '.github/workflows/windows.yml']
   workflow_dispatch:
 permissions:
   contents: read

@@ -153,13 +153,13 @@ BUILD_CHANNEL=release RELEASE_TAG=v1.1.24 \
 
 ## Windows 独立预览发布
 
-Windows 使用 `Apps/Windows/XDVPN.App/XDVPN.App.csproj` 的版本及 `windows-v<version>` 标签，不参与 macOS 自动更新的正式版本序列。App、Service、Setup 和界面版本须一致。
+Windows 与 macOS、Android 共同读取 `Resources/Info.plist` 的版本和 build，使用 `windows-v<version>` 标签，不参与 macOS 自动更新的正式版本序列。App、Service、Setup 和界面版本须一致。
 
 推送标签后，在 Actions 手动运行 **Windows Release**，输入对应标签。该流程重建引擎、执行回归与 SYSTEM 服务测试、打包 EXE 和 ZIP，并验证 GitHub 上传资产的 SHA-256 后发布 prerelease。只有发布 job 获得 contents: write；推送代码或标签本身不会触发发布。已发布版本不能覆盖，不设为 Latest。版本说明位于 `docs/releases/windows-v<version>.md`。
 
 本地也可在干净且 HEAD 等于标签的 Windows 工作区运行（需要已构建原生引擎、.NET 10 和已登录的 GitHub CLI）：
 
 ```powershell
-./scripts/release-windows.ps1 prepare -Tag windows-v0.1.4
-./scripts/release-windows.ps1 publish -Tag windows-v0.1.4
+./scripts/release-windows.ps1 prepare -Tag windows-v1.1.24
+./scripts/release-windows.ps1 publish -Tag windows-v1.1.24
 ```

@@ -123,6 +123,7 @@ public sealed class VpnModel : INotifyPropertyChanged, IDisposable
     public string SuccessDetail { get; private set; } = "成功 0 / 完成 0";
     public string SampleDetail { get; private set; } = "成功连接样本 0 次";
     public string RecoveryDetail { get; private set; } = "成功恢复 0 次";
+    public string VersionLabel => $"WINDOWS · {typeof(VpnModel).Assembly.GetName().Version?.ToString(3)} 预览版";
     public string QualityNote => "此 Windows PC · 最近 24 小时通道建立记录；不代表业务可达性";
     public string CancellationNote { get; private set; } = "取消或中止的尝试不计入成功率。";
     public bool HasSamples => Samples.Count > 0;

@@ -12,7 +12,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("XD VPN Setup")]
 [assembly: AssemblyDescription("XD VPN Windows x64 preview installer")]
-[assembly: AssemblyVersion("0.1.4.0")]
+
 
 internal static class Setup
 {

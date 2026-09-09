@@ -56,7 +56,7 @@
             <Ellipse Width="5" Height="5" Fill="{Binding StatusColor}" Margin="0,0,7,0" />
             <TextBlock Text="{Binding ServiceSummary}" Foreground="#A4B4AA" FontSize="10" />
           </StackPanel>
-          <TextBlock Text="WINDOWS · 0.1.4 预览版" Foreground="#A4B4AA" FontFamily="Consolas" FontSize="9" Margin="12,7,0,0" />
+          <TextBlock Text="{Binding VersionLabel}" Foreground="#A4B4AA" FontFamily="Consolas" FontSize="9" Margin="12,7,0,0" />
         </StackPanel>
       </Grid>
     </Border>
