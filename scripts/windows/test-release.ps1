@@ -24,9 +24,9 @@ function gh {
     $global:windowsReleaseTestCalls.Add(($args -join ' '))
     if($args[0] -eq 'api'){
         if($args -contains '--paginate'){
-            if($global:windowsReleaseTestScenario -eq 'published'){'[[{"tag_name":"windows-v0.1.4","draft":false}]]'}
-            elseif($global:windowsReleaseTestScenario -eq 'draft' -or @($global:windowsReleaseTestCalls | Where-Object { $_ -like 'release create*' }).Count){'[[{"id":123,"tag_name":"windows-v0.1.4","draft":true}]]'}
-            else{'[[]]'}
+            if($global:windowsReleaseTestScenario -eq 'published'){'[[{"id":100,"tag_name":"v0.1.4","draft":false},{"id":123,"tag_name":"windows-v0.1.4","draft":false},{"id":99,"tag_name":"v0.1.3","draft":false}]]'}
+            elseif($global:windowsReleaseTestScenario -eq 'draft' -or @($global:windowsReleaseTestCalls | Where-Object { $_ -like 'release create*' }).Count){'[[{"id":100,"tag_name":"v0.1.4","draft":false},{"id":123,"tag_name":"windows-v0.1.4","draft":true},{"id":99,"tag_name":"v0.1.3","draft":false}]]'}
+            else{'[[{"id":100,"tag_name":"v0.1.4","draft":false},{"id":99,"tag_name":"v0.1.3","draft":false}]]'}
             return
         }
         if($args[-1] -like '*/releases/tags/*'){throw 'Draft lookup must use release ID'}
@@ -37,18 +37,19 @@ function gh {
 }
 $passed=0
 try {
-    foreach($case in @('success','draft','published','dirty','wrong-head','unexpected','tampered')){
+    foreach($case in @('success','draft','published','dirty','wrong-head','unexpected','stable-publish','wrong-tag','tampered')){
         $global:windowsReleaseTestScenario=$case
         $global:windowsReleaseTestCalls=New-Object 'System.Collections.Generic.List[string]'
         if($case -eq 'tampered'){'changed' | Set-Content "$root/$($assets[0].name)"}
         $failure=$null
-        try { & "$fixture/scripts/release-windows.ps1" publish -Tag windows-v0.1.4 | Out-Null } catch {$failure=$_}
+        $tag=if($case -eq 'stable-publish'){'v0.1.4'}elseif($case -eq 'wrong-tag'){'v0.1.3'}else{'windows-v0.1.4'}
+        try { & "$fixture/scripts/release-windows.ps1" publish -Tag $tag | Out-Null } catch {$failure=$_}
         $success=$case -in @('success','draft')
         if($success -and $failure){throw "$case failed: $failure"}
         if(-not $success -and -not $failure){throw "$case incorrectly succeeded"}
         $published=@($global:windowsReleaseTestCalls | Where-Object {$_ -like 'release edit*'}).Count
         if($published -ne [int]$success){throw "$case published unexpectedly"}
-        if($case -in @('published','dirty','wrong-head','tampered') -and @($global:windowsReleaseTestCalls | Where-Object {$_ -like 'release upload*'}).Count){throw "$case uploaded unexpectedly"}
+        if($case -in @('published','dirty','wrong-head','tampered','stable-publish','wrong-tag') -and @($global:windowsReleaseTestCalls | Where-Object {$_ -like 'release upload*'}).Count){throw "$case uploaded unexpectedly"}
         if($case -eq 'draft' -and @($global:windowsReleaseTestCalls | Where-Object {$_ -like 'release create*'}).Count){throw 'Existing draft recreated'}
         $passed++;Write-Output "PASS Windows release: $case"
     }

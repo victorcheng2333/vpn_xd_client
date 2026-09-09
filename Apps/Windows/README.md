@@ -4,6 +4,10 @@ Windows 原生预览版：WPF 界面参照 macOS 的深绿侧栏、浅色卡片�
 
 目标为 Windows 11 x64；Windows 10 22H2 为兼容目标。0.1.3 预览版已在 Windows 完成构建、界面状态测试、离屏渲染校验与原生引擎失败路径测试。UI 按 macOS 的配色、卡片、配置引导和状态反馈调整；本轮未替换正在运行的旧版，也未操作真实 VPN 连接。详细证据与验收项目见 [VERIFICATION.md](VERIFICATION.md)。
 
+## 发布
+
+正式分发与 macOS、Android 共用 `Resources/Info.plist`、`v<version>` 标签及同一个 GitHub Release。下载 `XD-VPN-<version>-Windows-x64.exe`；Windows 安装器仍未签名。完整流程见 [发布文档](../../docs/releasing.md#Windows-统一发布)。下文的 preview 文件名仅用于日常本地构建。
+
 ## 构建
 
 安装 .NET 10 SDK 和 MSYS2，在 **UCRT64** 终端安装构建依赖：

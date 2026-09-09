@@ -36,8 +36,8 @@ def validate(repo, data):
 
 
 def asset_names(version):
-    """Two macOS installers plus the Android package; the macOS client matches its DMG by exact name."""
-    return [f'XD-VPN-{version}-macOS-{arch}.dmg' for arch in ('arm64', 'x86_64')] + [f'XD-VPN-{version}-Android.apk']
+    """macOS, Android and Windows installers; the macOS client matches its DMG by exact name."""
+    return [f'XD-VPN-{version}-macOS-{arch}.dmg' for arch in ('arm64', 'x86_64')] + [f'XD-VPN-{version}-Android.apk', f'XD-VPN-{version}-Windows-x64.exe']
 
 
 def verify_delivery(files):
@@ -46,6 +46,8 @@ def verify_delivery(files):
     for file in files:
         if file.suffix == '.dmg':
             subprocess.run([sys.executable, str(root / 'verify-release-dmg.py'), str(file)], check=True)
+        elif file.suffix == '.exe':
+            subprocess.run([sys.executable, str(root / 'verify-release-windows.py'), str(file)], check=True)
         elif file.suffix == '.apk':
             subprocess.run([sys.executable, str(root / 'verify-release-apk.py'), str(file)], check=True)
 
@@ -65,7 +67,7 @@ def main():
     # Checksums remain local build inputs; only installers appear in Releases.
     required = files + [root / (name + '.sha256') for name in names]
     if any(not file.is_file() or file.stat().st_size == 0 for file in required):
-        raise ValueError('Both architecture DMGs, the Android APK and their local checksums are required.')
+        raise ValueError('Both architecture DMGs, the Android APK, the Windows installer and their local checksums are required.')
     for name in names:
         expected = f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n'
         if (root / (name + '.sha256')).read_text() != expected:

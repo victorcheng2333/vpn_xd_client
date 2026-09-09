@@ -83,7 +83,7 @@ jobs:
             tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
           fi
       # Internal build artifacts include checksums and source archives.
-      # github-release.py publishes the two architecture DMGs and the Android APK.
+      # github-release.py publishes the macOS, Android and Windows installers.
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
@@ -148,8 +148,14 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/xdvpn-release.keystore"
 
+  windows:
+    needs: validate
+    uses: ./.github/workflows/windows-release.yml
+    with:
+      tag: ${{ inputs.tag }}
+
   publish:
-    needs: [build, android]
+    needs: [build, android, windows]
     runs-on: macos-15
     permissions:
       contents: write

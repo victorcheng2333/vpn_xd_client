@@ -41,6 +41,8 @@ done
 tar -czf build/third-party-sources.tar.gz -C .build/openconnect downloads
 # Android ships in the same release: signed release APK, verified and staged as build/XD-VPN-<version>-Android.apk.
 bash scripts/release-android.sh
+# Download release-windows from Windows Release Build for this exact tag into build/.
+python3 scripts/verify-release-windows.py "build/XD-VPN-$VERSION-Windows-x64.exe"
 python3 scripts/release-notes.py > build/release-notes.md
-printf '\nPrepared both signed and notarized DMGs and the Android APK. Push the matching tag, then publish:\n'
+printf '\nPrepared and verified macOS, Android and Windows installers. Push the matching tag, then publish:\n'
 printf 'bash scripts/release.sh publish %s\n' "$RELEASE_TAG"

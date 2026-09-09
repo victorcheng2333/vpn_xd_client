@@ -1,9 +1,14 @@
-name: Windows Release
+name: Windows Release Build
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing Windows tag, e.g. windows-v1.1.24'
+        description: 'Existing shared release tag, e.g. v1.1.25'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
         required: true
         type: string
 permissions:
@@ -42,16 +47,20 @@ jobs:
         shell: pwsh
         run: ./scripts/windows/test-release.ps1
       - name: Build and verify release packages
+        id: package
         shell: pwsh
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: ./scripts/release-windows.ps1 prepare -Tag $env:RELEASE_TAG
+        run: |
+          ./scripts/release-windows.ps1 prepare -Tag $env:RELEASE_TAG
+          $version=(& ./scripts/windows/version.ps1).Version
+          "delivery_path=dist/windows-release-$version/delivery" >> $env:GITHUB_OUTPUT
       - name: Verify installed SYSTEM service without a VPN connection
         shell: powershell
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          $version=$env:RELEASE_TAG.Substring('windows-v'.Length)
+          $version=(& ./scripts/windows/version.ps1).Version
           $payload="./dist/windows-release-$version/windows-x64"
           try {
             & "$payload/install.ps1"
@@ -63,31 +72,7 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-release
-          path: |
-            dist/windows-release-*/XDVPN-Setup-windows-x64-*.exe
-            dist/windows-release-*/XDVPN-windows-x64-*.zip
-            dist/windows-release-*/XDVPN-windows-x64-*.sha256
-            dist/windows-release-*/release.json
+          name: release-windows
+          path: ${{ steps.package.outputs.delivery_path }}/*
           if-no-files-found: error
-  publish:
-    needs: build
-    runs-on: windows-2025
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-release
-          path: dist
-      - name: Publish verified Windows preview
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: ./scripts/release-windows.ps1 publish -Tag $env:RELEASE_TAG -Repository $env:GITHUB_REPOSITORY
+          retention-days: 14

@@ -1,10 +1,10 @@
 name: Windows
 on:
   pull_request:
-    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
   push:
     branches: [main, codex/windows-support]
-    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,6 +33,9 @@ jobs:
       - name: Build pinned OpenConnect with Windows control bridge
         shell: msys2 {0}
         run: bash Apps/Windows/scripts/build-engine.sh
+      - name: Test release guards
+        shell: pwsh
+        run: ./scripts/windows/test-release.ps1
       - name: Test and package Windows app
         shell: pwsh
         run: ./Apps/Windows/scripts/build.ps1

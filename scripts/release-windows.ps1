@@ -18,14 +18,17 @@ function Gh-Value([string[]]$Arguments) {
 }
 $metadata=& "$PSScriptRoot/windows/version.ps1"
 $version=$metadata.Version
-if($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or $Tag -cne "windows-v$version"){throw 'Windows tag must match Resources/Info.plist (windows-vMAJOR.MINOR.PATCH).'}
+if($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' -or $Tag -cnotin @("v$version","windows-v$version")){throw 'Windows tag must match Resources/Info.plist (vMAJOR.MINOR.PATCH).'}
 if($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$'){throw 'Invalid GitHub repository'}
 if(Git-Value @('status','--porcelain','--untracked-files=normal')){throw 'Release requires a clean working tree.'}
 $revision=Git-Value @('rev-parse','HEAD')
 if($revision -ne (Git-Value @('rev-parse',"$Tag^{commit}"))){throw 'Release tag must point to HEAD.'}
+if($Action -eq 'publish' -and $Tag -ceq "v$version"){throw 'Stable releases must be published together with macOS and Android using scripts/github-release.py.'}
 $root=Join-Path $repo "dist/windows-release-$version"
 $names=@("XDVPN-Setup-windows-x64-$version.exe","XDVPN-windows-x64-$version.zip")
 $checksum="XDVPN-windows-x64-$version.sha256"
+$stable=$Tag -ceq "v$version"
+if($stable){$names=@("XD-VPN-$version-Windows-x64.exe","XD-VPN-$version-Windows-x64.zip")}
 $record=Join-Path $root 'release.json'
 if($Action -eq 'prepare') {
     & "$repo/Apps/Windows/scripts/build.ps1" -OutputRoot $root
@@ -37,7 +40,15 @@ if($Action -eq 'prepare') {
     $lines=@($names | ForEach-Object { "{0}  {1}" -f (Get-FileHash (Join-Path $root $_) -Algorithm SHA256).Hash.ToLowerInvariant(),$_ })
     [IO.File]::WriteAllText((Join-Path $root $checksum),($lines -join "`n")+"`n",(New-Object Text.UTF8Encoding($false)))
     $assets=@($names + $checksum | ForEach-Object { @{name=$_; sha256=(Get-FileHash (Join-Path $root $_) -Algorithm SHA256).Hash.ToLowerInvariant(); size=(Get-Item (Join-Path $root $_)).Length} })
-    @{tag=$Tag;revision=$revision;assets=$assets} | ConvertTo-Json -Depth 5 | Set-Content $record -Encoding utf8
+    @{tag=$Tag;version=$version;build=$metadata.Build;revision=$revision;assets=$assets} | ConvertTo-Json -Depth 5 | Set-Content $record -Encoding utf8
+    if($stable){
+        $delivery=Join-Path $root 'delivery'
+        New-Item $delivery -ItemType Directory -Force | Out-Null
+        Copy-Item (Join-Path $root $names[0]) $delivery
+        $line="{0}  {1}`n" -f (Get-FileHash (Join-Path $root $names[0])).Hash.ToLowerInvariant(),$names[0]
+        [IO.File]::WriteAllText((Join-Path $delivery ($names[0]+'.sha256')),$line,(New-Object Text.UTF8Encoding($false)))
+        Copy-Item $record (Join-Path $delivery 'windows-release.json')
+    }
     Write-Output "Prepared $Tag at $revision in $root"
     return
 }

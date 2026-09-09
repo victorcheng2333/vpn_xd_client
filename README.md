@@ -18,14 +18,16 @@
 
 ## 直接使用
 
-**当前源码的目标正式版本为 1.1.22（build 31）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
+**当前源码的目标正式版本为 1.1.25（build 36）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
+
+Windows 下载 `XD-VPN-1.1.25-Windows-x64.exe`，Android 下载 `XD-VPN-1.1.25-Android.apk`；三端安装包位于同一个 Release。iOS 仍通过 TestFlight 分发。
 
 按 Mac 芯片选择对应产物；打开 DMG 后，将应用拖到旁边的「Applications」文件夹：
 
 | Mac 芯片 | 默认输出 |
 | --- | --- |
-| Intel | `build/XD-VPN-1.1.22-macOS-x86_64.dmg` |
-| Apple Silicon（M 系列） | `build/XD VPN 1.1.22-arm64.app`、`build/XD-VPN-1.1.22-macOS-arm64.dmg` |
+| Intel | `build/XD-VPN-1.1.25-macOS-x86_64.dmg` |
+| Apple Silicon（M 系列） | `build/XD VPN 1.1.25-arm64.app`、`build/XD-VPN-1.1.25-macOS-arm64.dmg` |
 
 1. 在「VPN 配置」中填写服务器、用户名、VPN 密码。预填地址为 `vpn.xindong.com:8443`；已保存密码时输入框显示 `******`。
 2. 点击「保存配置」。密码存入 macOS 登录钥匙串，普通配置中不包含密码。
@@ -105,7 +107,7 @@ bash scripts/test-packaging.sh
 BUILD_NUMBER=32 bash scripts/package.sh
 ```
 
-正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.22`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.22` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
+正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.25`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.25` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
 
 客户端菜单「检查更新…」及侧栏版本号可打开更新窗口，正式版启动时按 24 小时间隔检查 GitHub Latest。私有仓库使用只存本机钥匙串的只读 Token；下载包通过大小和 SHA-256 校验后才可用于安装。升级前断开并退出，拖入 Applications，按提示升级系统助手；不自动替换运行中的应用或助手。
 
@@ -148,6 +150,6 @@ OpenConnect 在助手中以前台子进程运行。密码经双向验证的 XPC 
 
 开发参考：[公司示例脚本](https://git.tapsvc.com/-/snippets/92/raw/master/bin/xd-vpn)、[OpenConnect 官方手册](https://www.infradead.org/openconnect/manual.html)。
 
-内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "build/XD VPN 1.1.22-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
+内置引擎的独立验收：`python3 scripts/verify-bundled-engine.py "build/XD VPN 1.1.25-arm64.app" --arch arm64`（Intel 对应改为 `x86_64`）。它将引擎移动到带空格的临时目录，禁止读取 Homebrew 与工作区，验证本机 TLS 信任链／主机名校验及连接失败路径，不建立 VPN。需要允许启动子沙箱和本机回环通信。
 
 应用内保留第三方许可证；分发 DMG 不附带源码归档和重建脚本，构建用源码仍缓存在 `.build/openconnect/downloads/`。构建选项依据 [OpenConnect 官方构建说明](https://www.infradead.org/openconnect/building.html)，许可证见 [OpenConnect 官方许可证](https://www.infradead.org/openconnect/licence.html)。

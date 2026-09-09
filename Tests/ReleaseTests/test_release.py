@@ -65,7 +65,7 @@ class VersionTests(unittest.TestCase):
     def test_publish_is_last_and_requires_matching_remote_digests(self):
         data = version.metadata('development')
         names = release.asset_names(data['version'])
-        self.assertEqual(names[-1], f'XD-VPN-{data["version"]}-Android.apk')
+        self.assertEqual(names[-2:], [f'XD-VPN-{data["version"]}-Android.apk', f'XD-VPN-{data["version"]}-Windows-x64.exe'])
         with tempfile.TemporaryDirectory() as folder:
             old = os.getcwd()
             os.chdir(folder)
@@ -80,7 +80,7 @@ class VersionTests(unittest.TestCase):
                 (root / 'release-notes.md').write_text('Release notes')
                 assets = [dict(name=file.name, size=file.stat().st_size,
                                digest='sha256:' + hashlib.sha256(file.read_bytes()).hexdigest())
-                          for file in root.iterdir() if file.suffix in ('.dmg', '.apk')]
+                          for file in root.iterdir() if file.suffix in ('.dmg', '.apk', '.exe')]
                 draft = dict(tag_name=data['tag'], draft=True, prerelease=False, assets=assets)
                 for valid in (True, False):
                     if not valid:
@@ -105,6 +105,27 @@ class VersionTests(unittest.TestCase):
                             with self.assertRaises(ValueError):
                                 release.main()
                             self.assertNotIn('edit', [call.args[1] for call in gh.call_args_list])
+            finally:
+                os.chdir(old)
+
+    def test_missing_windows_installer_blocks_all_publication(self):
+        data = version.metadata('development')
+        with tempfile.TemporaryDirectory() as folder:
+            old = os.getcwd()
+            os.chdir(folder)
+            try:
+                root = Path('build')
+                root.mkdir()
+                for name in release.asset_names(data['version'])[:-1]:
+                    (root / name).write_bytes(b'existing-platform')
+                    (root / (name + '.sha256')).write_text('checksum')
+                with patch.dict(os.environ, {'RELEASE_TAG': data['tag']}), \
+                     patch.object(sys, 'argv', ['github-release.py', 'publish']), \
+                     patch.object(release, 'validate', return_value=None), \
+                     patch.object(release, 'gh') as gh:
+                    with self.assertRaisesRegex(ValueError, 'Windows installer'):
+                        release.main()
+                    gh.assert_not_called()
             finally:
                 os.chdir(old)
 
