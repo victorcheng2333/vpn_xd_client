@@ -47,7 +47,7 @@ internal static class Program
                 var desktop = new FakeDesktop { Current = State(ConnectionState.Connected) with { Health = new(healthState, healthState == TunnelHealthState.ConfigurationError ? "VPN 网卡或实际路由验证失败，请查看诊断。" : "VPN 通道已建立，数据通路验证结果与业务访问需分别确认。", 4096, 2048) } };
                 using var model = new VpnModel(desktop); model.Poll().GetAwaiter().GetResult();
                 Check(model.DataVerified == (healthState == TunnelHealthState.Verified), "only observed inbound data yields verified UI: " + healthState);
-                Check(model.ActionTitle == "断开连接" && (model.DataVerified ? model.Title == "工作网络已连接" && model.StatusLabel == "已连接" && model.Subtitle == "VPN 通道已建立，可以访问工作网络" : model.Subtitle == model.ConnectivityMessage && model.StatusLabel != "已连接"), "healthy connected copy matches macOS; other health states retain diagnostic feedback: " + healthState);
+                Check(model.ActionTitle == "断开连接" && (healthState == TunnelHealthState.ConfigurationError ? !model.ConnectionReady && model.Title == "VPN 网络配置异常" && model.StatusLabel == "配置异常" && model.Subtitle == model.ConnectivityMessage : model.ConnectionReady && model.Title == "工作网络已连接" && model.StatusLabel == "已连接" && model.Subtitle == "VPN 已连接" && model.StatusColor == "#227858"), "connected UI skips verification phase and retains configuration errors: " + healthState);
                 var window = new MainWindow(model, false); Render(window, output, "health-" + healthState, 780, 560); window.EndSession(); window.Close();
             }
             var configured = new FakeDesktop { Password = "test-only", Current = State(ConnectionState.Idle) };

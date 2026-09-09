@@ -59,20 +59,21 @@ public sealed class VpnModel : INotifyPropertyChanged, IDisposable
     public string ServiceSummary => ServiceReady ? "系统服务就绪" : "系统服务待检查";
     public bool HasConnectivity => IsConnected;
     public bool DataVerified => IsConnected && status.Health?.State == TunnelHealthState.Verified;
+    public bool ConnectionReady => IsConnected && !DataConfigurationError;
     public bool DataConfigurationError => IsConnected && status.Health?.State == TunnelHealthState.ConfigurationError;
     public string ConnectivityMessage => status.Health?.Message ?? "通道已建立，但当前服务尚未提供数据通路验证结果。";
     public string TrafficSummary => DataConfigurationError ? "流量统计暂不可用" : status.Health is { State: TunnelHealthState.Verified or TunnelHealthState.Unconfirmed } h ? $"隧道接收 {FormatBytes(h.ReceivedBytes)} · 发送 {FormatBytes(h.SentBytes)}" : "等待隧道流量统计";
     private static string FormatBytes(long bytes) => bytes >= 1048576 ? $"{bytes / 1048576.0:0.0} MB" : bytes >= 1024 ? $"{bytes / 1024.0:0.0} KB" : $"{Math.Max(0, bytes)} B";
     public string Title => State switch
     {
-        ConnectionState.Connected => DataVerified ? "工作网络已连接" : DataConfigurationError ? "VPN 网络配置异常" : "VPN 通道已建立", ConnectionState.Connecting => "正在连接工作网络",
+        ConnectionState.Connected => DataConfigurationError ? "VPN 网络配置异常" : "工作网络已连接", ConnectionState.Connecting => "正在连接工作网络",
         ConnectionState.Recovering => "正在恢复连接", ConnectionState.WaitingNetwork => "等待网络恢复",
         ConnectionState.WaitingRetry => "等待自动重连", ConnectionState.Disconnecting => "正在断开连接",
         ConnectionState.Failed => "VPN 连接失败", _ => "VPN 未连接"
     };
     public string Subtitle => State switch
     {
-        ConnectionState.Connected => DataVerified ? "VPN 通道已建立，可以访问工作网络" : ConnectivityMessage,
+        ConnectionState.Connected => DataConfigurationError ? ConnectivityMessage : "VPN 已连接",
         ConnectionState.Connecting => "正在与工作网络建立联系，请稍候",
         ConnectionState.Recovering => "连接暂时中断，正在恢复工作网络",
         ConnectionState.WaitingNetwork => "网络不可用，恢复后继续连接",
@@ -95,23 +96,23 @@ public sealed class VpnModel : INotifyPropertyChanged, IDisposable
     }
     public string StatusLabel => State switch
     {
-        ConnectionState.Connected => DataVerified ? "已连接" : DataConfigurationError ? "配置异常" : "待验证", ConnectionState.Connecting => "连接中", ConnectionState.Recovering => "恢复中",
+        ConnectionState.Connected => DataConfigurationError ? "配置异常" : "已连接", ConnectionState.Connecting => "连接中", ConnectionState.Recovering => "恢复中",
         ConnectionState.WaitingNetwork => "等待网络", ConnectionState.WaitingRetry => "等待重连",
         ConnectionState.Disconnecting => "断开中", ConnectionState.Failed => "连接失败", _ => "未连接"
     };
     public string StatusColor => State switch
     {
-        ConnectionState.Connected => DataVerified ? "#227858" : "#946B37", ConnectionState.Connecting or ConnectionState.Recovering => "#326CB0",
+        ConnectionState.Connected => ConnectionReady ? "#227858" : "#946B37", ConnectionState.Connecting or ConnectionState.Recovering => "#326CB0",
         ConnectionState.Failed => "#B44538", _ => "#626D7A"
     };
     public string StatusSurface => State switch
     {
-        ConnectionState.Connected => DataVerified ? "#F0F8F3" : "#FFF9EE", ConnectionState.Connecting or ConnectionState.Recovering => "#F1F6FC",
+        ConnectionState.Connected => ConnectionReady ? "#F0F8F3" : "#FFF9EE", ConnectionState.Connecting or ConnectionState.Recovering => "#F1F6FC",
         ConnectionState.Failed => "#FFF5F3", _ => "#F5F6F8"
     };
     public string StatusGlyph => State switch
     {
-        ConnectionState.Connected => DataVerified ? Icons.Check : Icons.Warning, ConnectionState.Connecting or ConnectionState.Recovering => Icons.Refresh,
+        ConnectionState.Connected => ConnectionReady ? Icons.Check : Icons.Warning, ConnectionState.Connecting or ConnectionState.Recovering => Icons.Refresh,
         ConnectionState.WaitingNetwork or ConnectionState.WaitingRetry => Icons.Pause,
         ConnectionState.Failed => Icons.Warning, _ => Icons.Power
     };

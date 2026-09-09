@@ -19,7 +19,7 @@ public partial class MainWindow : Window
     private readonly Forms.NotifyIcon? tray;
     private readonly Forms.ToolStripMenuItem? action, trayAuto;
     private ConnectionState? previousState;
-    private bool? previousDataVerified;
+    private bool? previousConnectionReady;
     private bool quitting, ended, reveal, syncingPassword;
     private int ticks;
     private string page = "Connection";
@@ -39,7 +39,7 @@ public partial class MainWindow : Window
             Height = Math.Min(Height, SystemParameters.WorkArea.Height);
             MinWidth = Math.Min(MinWidth, SystemParameters.WorkArea.Width);
             MinHeight = Math.Min(MinHeight, SystemParameters.WorkArea.Height);
-            tray = new Forms.NotifyIcon { Text = "XD VPN", Icon = CreateIcon(model.State, model.DataVerified), Visible = true, ContextMenuStrip = new Forms.ContextMenuStrip() };
+            tray = new Forms.NotifyIcon { Text = "XD VPN", Icon = CreateIcon(model.State, model.ConnectionReady), Visible = true, ContextMenuStrip = new Forms.ContextMenuStrip() };
             tray.DoubleClick += (_, _) => ShowMain();
             tray.ContextMenuStrip.Items.Add("打开 XD VPN", null, (_, _) => ShowMain());
             action = new Forms.ToolStripMenuItem(model.ActionTitle, null, async (_, _) => await model.Act());
@@ -130,11 +130,11 @@ public partial class MainWindow : Window
         if (action is not null) { action.Text = model.ActionTitle; action.Enabled = model.CanAct; }
         if (trayAuto is not null) { trayAuto.Checked = model.AutoConnect; trayAuto.Enabled = model.CanChangePreferences; }
         if (tray is not null) tray.Text = "XD VPN · " + model.Title;
-        if (previousState != model.State || previousDataVerified != model.DataVerified)
+        if (previousState != model.State || previousConnectionReady != model.ConnectionReady)
         {
             previousState = model.State;
-            previousDataVerified = model.DataVerified;
-            if (tray is not null) { var old = tray.Icon; tray.Icon = CreateIcon(model.State, model.DataVerified); old?.Dispose(); }
+            previousConnectionReady = model.ConnectionReady;
+            if (tray is not null) { var old = tray.Icon; tray.Icon = CreateIcon(model.State, model.ConnectionReady); old?.Dispose(); }
             OrbitRotation.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, model.IsProgress && SystemParameters.ClientAreaAnimation
                 ? new DoubleAnimation(0, 360, TimeSpan.FromSeconds(2)) { RepeatBehavior = RepeatBehavior.Forever } : null);
         }
@@ -225,15 +225,15 @@ public partial class MainWindow : Window
         try { var dir = Path.Combine(Paths.UserData, "logs"); Directory.CreateDirectory(dir); Process.Start(new ProcessStartInfo(dir) { UseShellExecute = true }); }
         catch (Exception ex) when (IsUiError(ex)) { model.Report("无法打开日志目录：" + ex.Message); }
     }
-    private static Icon CreateIcon(ConnectionState state, bool verified)
+    private static Icon CreateIcon(ConnectionState state, bool connectionReady)
     {
         using var bitmap = new Bitmap(32, 32); using var graphics = Graphics.FromImage(bitmap);
         graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        var color = state switch { ConnectionState.Connected => verified ? Color.FromArgb(34, 120, 88) : Color.FromArgb(148, 107, 55), ConnectionState.Connecting or ConnectionState.Recovering => Color.FromArgb(50, 108, 176), ConnectionState.Failed => Color.FromArgb(180, 69, 56), _ => Color.FromArgb(98, 109, 122) };
+        var color = state switch { ConnectionState.Connected => connectionReady ? Color.FromArgb(34, 120, 88) : Color.FromArgb(148, 107, 55), ConnectionState.Connecting or ConnectionState.Recovering => Color.FromArgb(50, 108, 176), ConnectionState.Failed => Color.FromArgb(180, 69, 56), _ => Color.FromArgb(98, 109, 122) };
         using var brush = new SolidBrush(color);
         graphics.FillPolygon(brush, [new PointF(16, 2), new PointF(29, 7), new PointF(27, 22), new PointF(16, 30), new PointF(5, 22), new PointF(3, 7)]);
         using var pen = new Pen(Color.White, 2.7f);
-        if (state == ConnectionState.Connected && verified) graphics.DrawLines(pen, [new PointF(9, 16), new PointF(14, 21), new PointF(23, 11)]);
+        if (state == ConnectionState.Connected && connectionReady) graphics.DrawLines(pen, [new PointF(9, 16), new PointF(14, 21), new PointF(23, 11)]);
         else if (state is ConnectionState.Failed or ConnectionState.Connected) { graphics.DrawLine(pen, 16, 9, 16, 17); graphics.DrawEllipse(pen, 15, 21, 1, 1); }
         else if (state is ConnectionState.WaitingNetwork or ConnectionState.WaitingRetry) { graphics.DrawLine(pen, 12, 10, 12, 22); graphics.DrawLine(pen, 20, 10, 20, 22); }
         else if (state is ConnectionState.Connecting or ConnectionState.Recovering) graphics.DrawArc(pen, 9, 9, 14, 14, 20, 280);
