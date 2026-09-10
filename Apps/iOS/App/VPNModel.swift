@@ -22,6 +22,7 @@ final class VPNModel: ObservableObject {
     @Published private(set) var recoveryBlockedReason: String?
     private var didLoadQualityPreview = false
     private var didLoadProfile = false
+    private var didCheckInitialConfiguration = false
     private var loading = false
     private var autoConnectUpdate: Task<Void, Never>?
     private var manager: NETunnelProviderManager?
@@ -92,6 +93,9 @@ final class VPNModel: ObservableObject {
         if ProcessInfo.processInfo.arguments.contains("--preview-connecting") { status = .connecting }
         if ProcessInfo.processInfo.arguments.contains("--preview-connected") { status = .connected }
         message = "当前模拟器用于界面检查，真实 VPN 请在 iPhone 上验证。"
+        if !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--preview-") }) {
+            promptForInitialConfigurationIfNeeded()
+        }
         return
         #else
         guard !busy, !savingAutoConnect, !loading else { return }
@@ -107,6 +111,7 @@ final class VPNModel: ObservableObject {
             }
             refreshStatus()
             await refreshDiagnostics()
+            promptForInitialConfigurationIfNeeded()
         } catch { message = error.localizedDescription }
         #endif
     }
@@ -122,11 +127,19 @@ final class VPNModel: ObservableObject {
             || profile.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || password.isEmpty
     }
+    private func promptForInitialConfigurationIfNeeded() {
+        guard !didCheckInitialConfiguration else { return }
+        didCheckInitialConfiguration = true
+        if needsConfiguration { showConfigurationAlert() }
+    }
+    private func showConfigurationAlert() {
+        configurationAlert = "请先在「设置」中填写服务器地址、用户名和密码并保存，再连接 VPN。"
+    }
     func connect() async {
         await autoConnectUpdate?.value
         guard !busy else { return }
         if needsConfiguration {
-            configurationAlert = "请先在「设置」中填写服务器地址、用户名和密码并保存，再连接 VPN。"
+            showConfigurationAlert()
             return
         }
         startingConnection = true
