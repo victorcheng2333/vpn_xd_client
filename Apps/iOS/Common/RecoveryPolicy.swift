@@ -32,11 +32,13 @@ struct RecoveryPolicy: Codable {
     }
 }
 
-struct DiagnosticSnapshot: Codable {
+struct DiagnosticSnapshot: Codable, Equatable {
     var qualityStorageIssue: String?
     var phase = "尚未连接"
     var address = "—"
     var transport = "—"
+    // Observation time, not a tunnel heartbeat. An IPC reply is sampled now;
+    // the file retains the time of its last persisted observation.
     var updatedAt = Date()
     var events: [String] = []
     var packetsToTunnel: UInt64 = 0

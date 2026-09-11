@@ -204,6 +204,40 @@ private actor ControlledRecoverySleep {
         }
     }
 
+    func testQualityAlertExpiresWithoutNewEventsAndCannotRestartAfterQuit() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("xdvpn-quality-expiry-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let previous = RollingActivityLog(directory: folder)
+        let date = Date().addingTimeInterval(-598)
+        for index in 0..<3 {
+            let event = QualityEvent(kind: .attemptFailed, connection: "previous-\(index)", date: date)
+            previous.append("sample", date: date, source: .quality, event: "quality.attemptFailed", state: "failed",
+                            connection: event.connection, autoConnect: false, isError: true, quality: event)
+        }
+        previous.append("quit", date: Date(), source: .lifecycle, event: "app.quitting", state: "idle",
+                        connection: "", autoConnect: false, isError: false)
+        previous.flush()
+        let log = RollingActivityLog(directory: folder)
+        model = VPNModel(defaults: defaults, bridge: helper, credentials: credentials, startMonitoring: false,
+                         resumeAutomatically: false, activityLog: log, engineLocator: { "/fake/openconnect" })
+        model.startQualityAlertMonitoring()
+        // A repeated start must replace the pending task, not create two loops.
+        model.startQualityAlertMonitoring()
+        await waitUntil { model.qualityHistoryLoaded }
+        XCTAssertEqual(model.entries.filter { $0.message.contains("连续连接失败：") }.count, 1)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(6))
+        while !model.entries.contains(where: { $0.message.contains("本地告警已解除") }), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(model.entries.filter { $0.message.contains("本地告警已解除") }.count, 1)
+        XCTAssertTrue(helper.commands.isEmpty, "Quality scheduling must never drive the tunnel")
+        await withCheckedContinuation { continuation in model.quit { continuation.resume() } }
+        let count = model.entries.count
+        model.startQualityAlertMonitoring()
+        model.refreshQualityAlerts(now: date)
+        XCTAssertEqual(model.entries.count, count)
+    }
+
     func testRepeatedUnchangedLinkEventsAcrossRecoveryWindowsNeverReconnect() async {
         let values: NSDictionary = ["State:/Network/Interface/en0/Link": ["Active": true],
             "State:/Network/Interface/en0/IPv4": ["Addresses": ["192.168.1.8"], "Router": "192.168.1.1"]]

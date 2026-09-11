@@ -73,7 +73,7 @@ enum class Appearance(val color: Color, val icon: ImageVector, val progress: Boo
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () -> Unit, save: (Profile, String) -> Unit,
-    autoConnect: (Boolean) -> Unit, share: () -> Unit) {
+    autoConnect: (Boolean) -> Unit, share: () -> Unit, observeStats: () -> AutoCloseable = { AutoCloseable {} }) {
     val dark = isSystemInDarkTheme()
     val scheme = if (dark) darkColorScheme(primary = Color(0xFF79D9AD), background = Color(0xFF121815), surface = Color(0xFF1D2721))
         else lightColorScheme(primary = Brand, background = Color(0xFFF2F4F3), surface = Color.White)
@@ -100,7 +100,7 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
                     when (tab) {
                         0 -> Home(state, hold, connect = { if (needsConfiguration) configurationAlert = true else connect() }, disconnect, autoConnect)
                         1 -> SettingsPage(state, hold, save)
-                        2 -> QualityPage(state, share)
+                        2 -> QualityPage(state, share, observeStats)
                     }
                     Spacer(Modifier.height(4.dp))
                 }
@@ -253,12 +253,16 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
         Text("$count", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = color)
     }
 }
-@Composable private fun QualityPage(state: ViewState, share: () -> Unit) {
+@Composable private fun QualityPage(state: ViewState, share: () -> Unit, observeStats: () -> AutoCloseable) {
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     val lifecycle = LocalLifecycleOwner.current
+    val currentObserveStats by rememberUpdatedState(observeStats)
     LaunchedEffect(lifecycle) {
         lifecycle.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) { now = SystemClock.elapsedRealtime(); delay(1_000) }
+            val subscription = currentObserveStats()
+            try {
+                while (true) { now = SystemClock.elapsedRealtime(); delay(1_000) }
+            } finally { subscription.close() }
         }
     }
     val summary = Quality.summarize(state.events, System.currentTimeMillis(), state.incomplete)
@@ -322,7 +326,8 @@ fun VPNApp(state: ViewState, busy: Boolean, connect: () -> Unit, disconnect: () 
             Text(if (expanded) "收起详细事件" else "查看详细事件"); Spacer(Modifier.weight(1f)); Icon(if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore, null)
         }
         if (expanded) {
-            Detail("上行 / 下行包", "${snapshot.txPackets} / ${snapshot.rxPackets}")
+            Detail("最近采样 · 上行 / 下行包", snapshot.statsAt?.let { "${snapshot.txPackets} / ${snapshot.rxPackets}" } ?: "尚未采样")
+            snapshot.statsAt?.let { Note("采样时间：${clock.format(Date(it))}；缓存样本不代表最终流量。") }
             if (state.events.isEmpty()) Note("暂无连接事件。")
             val date = remember { SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT) }
             state.events.takeLast(64).asReversed().forEach { Note("${date.format(Date(it.wall))}  ${it.kind.label}") }

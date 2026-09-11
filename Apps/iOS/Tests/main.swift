@@ -263,4 +263,73 @@ for index in 0..<1100 {
 expect(bounded.events.count <= 2048 && bounded.incomplete, "persisted history has a bounded size and discloses truncation")
 expect(ConnectionQuality().events.isEmpty && ConnectionQuality().lastRecovery(at: Date()) == nil, "empty install has no fabricated quality samples")
 
-print("Passed \(checks) iOS configuration, routing, packet and recovery checks.")
+// Diagnostics are observations, not liveness heartbeats. Frequent live queries
+// and an idle tunnel must not force storage writes; events remain immediately durable.
+var diagnosticPersistence = DiagnosticPersistence()
+var diagnostic = DiagnosticSnapshot()
+diagnostic.updatedAt = Date(timeIntervalSince1970: 100)
+var diagnosticWrites: [DiagnosticSnapshot] = []
+expect(diagnosticPersistence.save(diagnostic, uptime: 0) { diagnosticWrites.append($0) }, "initial diagnostics are persisted")
+diagnostic.updatedAt = Date(timeIntervalSince1970: 105)
+expect(!diagnosticPersistence.save(diagnostic, uptime: 5) { diagnosticWrites.append($0) }, "observation time alone does not dirty diagnostics")
+diagnostic.packetsToTunnel = 42
+expect(!diagnosticPersistence.save(diagnostic, checkpoint: true, uptime: 59) { diagnosticWrites.append($0) }, "counter-only checkpoint respects the interval")
+expect(diagnosticPersistence.save(diagnostic, checkpoint: true, uptime: 60) { diagnosticWrites.append($0) }, "changed counters checkpoint after one minute")
+diagnostic.phase = "正在恢复连接"
+diagnostic.events.append("恢复事件")
+expect(diagnosticPersistence.save(diagnostic, uptime: 61) { diagnosticWrites.append($0) }, "recovery event bypasses counter cadence")
+diagnostic.phase = "已连接"
+expect(diagnosticPersistence.save(diagnostic, uptime: 119) { diagnosticWrites.append($0) }, "connection event is persisted immediately")
+diagnostic.packetsFromTunnel = 7
+expect(diagnosticPersistence.save(diagnostic, checkpoint: true, uptime: 120) { diagnosticWrites.append($0) }, "events do not postpone the next regular checkpoint")
+diagnostic.updatedAt = Date(timeIntervalSince1970: 80)
+expect(!diagnosticPersistence.save(diagnostic, checkpoint: true, uptime: 180) { diagnosticWrites.append($0) }, "wall-clock changes do not produce idle writes")
+diagnostic.qualityStorageIssue = "连接统计保存失败"
+expect(diagnosticPersistence.save(diagnostic, uptime: 181) { diagnosticWrites.append($0) }, "quality storage errors are meaningful diagnostic changes")
+diagnostic.qualityStorageIssue = nil
+expect(diagnosticPersistence.save(diagnostic, uptime: 182) { diagnosticWrites.append($0) }, "resolved quality storage issue is persisted")
+diagnostic.phase = "系统停止隧道"
+diagnostic.packetsToTunnel = 99
+diagnostic.droppedPackets = 3
+expect(diagnosticPersistence.save(diagnostic, uptime: 183) { diagnosticWrites.append($0) }, "stop flushes final state and counters without waiting")
+expect(diagnosticWrites.last?.packetsToTunnel == 99 && diagnosticWrites.last?.droppedPackets == 3, "final durable diagnostics retain packet counts")
+diagnostic.updatedAt = Date(timeIntervalSince1970: 190)
+expect(!diagnosticPersistence.save(diagnostic, uptime: 184) { diagnosticWrites.append($0) }, "repeated stop completion does not rewrite unchanged state")
+
+enum DiagnosticWriteFailure: Error { case simulated }
+var retryingDiagnostics = DiagnosticPersistence()
+rejects("failed initial diagnostic write") {
+    try retryingDiagnostics.save(diagnostic, uptime: 0) { _ in throw DiagnosticWriteFailure.simulated }
+}
+expect(retryingDiagnostics.save(diagnostic, uptime: 1) { diagnosticWrites.append($0) }, "failed initial write is retried with unchanged content")
+diagnostic.packetsFromTunnel = 10
+rejects("failed counter checkpoint") {
+    try retryingDiagnostics.save(diagnostic, checkpoint: true, uptime: 61) { _ in throw DiagnosticWriteFailure.simulated }
+}
+expect(retryingDiagnostics.save(diagnostic, checkpoint: true, uptime: 62) { diagnosticWrites.append($0) }, "failed checkpoint does not advance success state or delay retry")
+var nextSessionDiagnostics = DiagnosticPersistence()
+expect(nextSessionDiagnostics.save(diagnostic, uptime: 63) { diagnosticWrites.append($0) }, "new provider session persists its initial observation independently")
+let diagnosticRoundTrip = try JSONDecoder().decode(DiagnosticSnapshot.self, from: JSONEncoder().encode(diagnostic))
+expect(diagnosticRoundTrip == diagnostic, "diagnostic persistence preserves the existing wire and file format")
+
+var diagnosticRequests = DiagnosticRequestGate()
+let firstDiagnosticRequest = diagnosticRequests.begin()
+let secondDiagnosticRequest = diagnosticRequests.begin()
+expect(!diagnosticRequests.accept(firstDiagnosticRequest), "a late previous refresh cannot overwrite newer diagnostics")
+expect(diagnosticRequests.accept(secondDiagnosticRequest), "current live response is accepted")
+expect(!diagnosticRequests.accept(secondDiagnosticRequest, fallback: true), "timeout cannot replace an already delivered live response")
+let timedOutDiagnosticRequest = diagnosticRequests.begin()
+expect(diagnosticRequests.accept(timedOutDiagnosticRequest, fallback: true), "a silent provider can show cached timeout fallback")
+expect(!diagnosticRequests.accept(timedOutDiagnosticRequest, fallback: true), "duplicate fallback cannot repeatedly replace displayed diagnostics")
+expect(diagnosticRequests.accept(timedOutDiagnosticRequest), "a four-second live reply can improve the three-second fallback before the next refresh")
+expect(!diagnosticRequests.accept(timedOutDiagnosticRequest, fallback: true), "fallback cannot replace the slow live reply once it arrives")
+let beforeDisconnectDiagnosticRequest = diagnosticRequests.begin()
+_ = diagnosticRequests.begin() // The disconnected status refresh invalidates the IPC request.
+expect(!diagnosticRequests.accept(beforeDisconnectDiagnosticRequest), "disconnect refresh invalidates in-flight diagnostics")
+let oldSessionDiagnosticRequest = diagnosticRequests.begin()
+let newSessionDiagnosticRequest = diagnosticRequests.begin()
+expect(!diagnosticRequests.accept(oldSessionDiagnosticRequest), "old session diagnostics cannot overwrite a new session refresh")
+expect(!diagnosticRequests.accept(oldSessionDiagnosticRequest, fallback: true), "old timeout cannot overwrite a new session refresh")
+expect(diagnosticRequests.accept(newSessionDiagnosticRequest), "new session diagnostics remain eligible after old callback")
+
+print("Passed \(checks) iOS configuration, routing, packet, recovery and diagnostic checks.")

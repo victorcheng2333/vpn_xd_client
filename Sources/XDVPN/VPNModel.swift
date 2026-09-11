@@ -48,6 +48,8 @@ struct ActivityEntry: Identifiable {
     private var quality = ConnectionQuality()
     private var qualityAlertIDs = Set<String>()
     private var qualityAlertTask: Task<Void, Never>?
+    private var qualityAlertMonitoring = false
+    private var qualityClockObserver: NSObjectProtocol?
     // Cancellation invalidates tasks, but must not change the tunnel's log ID.
     private var connectionID = ""
     let activityLog: RollingActivityLog?
@@ -153,11 +155,10 @@ struct ActivityEntry: Identifiable {
             }
         } else { qualityHistoryLoaded = true }
         if startMonitoring {
-        qualityAlertTask = Task { [weak self] in
-            while !Task.isCancelled {
-                do { try await Task.sleep(for: .seconds(30)) } catch { return }
-                guard let self, !self.isQuitting else { return }
-                self.refreshQualityAlerts()
+        startQualityAlertMonitoring()
+        qualityClockObserver = NotificationCenter.default.addObserver(forName: .NSSystemClockDidChange, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshQualityAlerts()
             }
         }
         Task { [weak self] in await self?.refreshPrivileges() }
@@ -562,6 +563,7 @@ struct ActivityEntry: Identifiable {
 
     func systemDidWake() {
         sleeping = false
+        refreshQualityAlerts()
         log("系统已唤醒。", source: .lifecycle, event: "system.wake")
         guard desiredConnection, !isQuitting else { return }
         recoveryReasons.insert("系统唤醒")
@@ -607,7 +609,13 @@ struct ActivityEntry: Identifiable {
         }
         refreshQualityAlerts()
     }
+    func startQualityAlertMonitoring() {
+        guard !isQuitting else { return }
+        qualityAlertMonitoring = true
+        refreshQualityAlerts()
+    }
     func refreshQualityAlerts(now: Date = Date()) {
+        qualityAlertTask?.cancel(); qualityAlertTask = nil
         guard qualityHistoryLoaded, !isQuitting else { return }
         let alerts = QualitySnapshot(events: qualityEvents, now: now).alerts
         let nextIDs = Set(alerts.map(\.id))
@@ -618,6 +626,16 @@ struct ActivityEntry: Identifiable {
             log("本地告警已解除（\(id)），当前窗口未再触发该规则。", source: .quality, event: "alert.resolved." + id)
         }
         qualityAlertIDs = nextIDs
+        guard qualityAlertMonitoring,
+              let next = QualitySnapshot.nextAlertRefresh(events: qualityEvents, now: now) else { return }
+        // A clock change or wake reschedules from wall time. Bound the duration
+        // even for a corrupt/far-future imported timestamp. No events means no task.
+        let delay = min(86401, max(0, next.timeIntervalSince(now)))
+        qualityAlertTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay), tolerance: .seconds(1)) } catch { return }
+            guard !Task.isCancelled, let self, !self.isQuitting else { return }
+            self.refreshQualityAlerts()
+        }
     }
     private func qualityFailureReason(_ message: String) -> QualityEvent.Reason {
         // Version 4 helpers carry normalized messages, not structured codes.
@@ -652,6 +670,9 @@ struct ActivityEntry: Identifiable {
         // receiving shutdown/EOF, so a lost stopped event cannot hang the app.
         isQuitting = true; desiredConnection = false; generation = UUID()
         qualityAlertTask?.cancel()
+        qualityAlertTask = nil; qualityAlertMonitoring = false
+        if let qualityClockObserver { NotificationCenter.default.removeObserver(qualityClockObserver) }
+        qualityClockObserver = nil
         retryTask?.cancel(); connectTask?.cancel(); retryAt = nil
         cancelRecovery()
         monitor.cancel(); physicalMonitor?.stop()

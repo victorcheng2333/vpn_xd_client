@@ -38,4 +38,5 @@ object Quality {
     }
 }
 data class Snapshot(val phase: Phase = Phase.IDLE, val address: String = "—", val transport: String = "—", val connectedAt: Long? = null,
-    val txPackets: Long = 0, val rxPackets: Long = 0, val txBytes: Long = 0, val rxBytes: Long = 0, val message: String? = null)
+    val txPackets: Long = 0, val rxPackets: Long = 0, val txBytes: Long = 0, val rxBytes: Long = 0, val message: String? = null,
+    val statsAt: Long? = null)

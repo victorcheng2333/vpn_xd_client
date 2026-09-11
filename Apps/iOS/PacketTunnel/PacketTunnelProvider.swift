@@ -39,6 +39,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var profile: VPNProfile?
     private var passwordReference: Data?
     private var snapshot = DiagnosticSnapshot()
+    private var diagnosticPersistence = DiagnosticPersistence()
     private var timer: DispatchSourceTimer?
     private let store = SharedStore()
     private var lastSettingsError: Error?
@@ -54,6 +55,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             self.stopping = false
             self.sessionSerial += 1
             let session = self.sessionSerial
+            self.diagnosticPersistence = DiagnosticPersistence()
             self.pathSignature = nil
             self.lastSettingsError = nil
             self.startReply = completionHandler
@@ -72,10 +74,17 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 monitor.pathUpdateHandler = { [weak self] path in self?.pathChanged(path) }
                 self.monitor = monitor; monitor.start(queue: self.queue)
                 self.startAttempt()
+                // startAttempt may fail synchronously; never rearm cancelled work.
+                guard !self.stopping else { return }
                 let timer = DispatchSource.makeTimerSource(queue: self.queue)
-                timer.schedule(deadline: .now() + 5, repeating: 5)
-                timer.setEventHandler { [weak self] in self?.saveSnapshot() }
-                self.timer = timer; timer.resume()
+                timer.setEventHandler { [weak self] in
+                    guard let self, !self.stopping, self.sessionSerial == session else { return }
+                    self.saveSnapshot(checkpoint: true)
+                    self.scheduleDiagnosticCheckpoint()
+                }
+                self.timer = timer
+                self.scheduleDiagnosticCheckpoint()
+                timer.resume()
                 self.queue.asyncAfter(deadline: .now() + 90) { [weak self] in
                     guard let self, self.sessionSerial == session, self.startReply != nil else { return }
                     self.finish(ConfigurationError.invalid("首次连接超时，请检查网络、网关和认证方式。"), qualityReason: .timeout)
@@ -368,18 +377,31 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         if snapshot.events.last?.hasSuffix(event) != true { snapshot.events.append("\(stamp)  \(event)") }
         snapshot.events = Array(snapshot.events.suffix(64)); saveSnapshot()
     }
-    private func saveSnapshot() {
-        persistQuality()
+    private func currentSnapshot() -> DiagnosticSnapshot {
         snapshot.updatedAt = Date()
         if let pump {
             snapshot.packetsToTunnel = pump.sent; snapshot.packetsFromTunnel = pump.received; snapshot.droppedPackets = pump.dropped
         }
-        try? store.write(snapshot, name: "diagnostics")
+        return snapshot
+    }
+    private func saveSnapshot(checkpoint: Bool = false) {
+        persistQuality()
+        let current = currentSnapshot()
+        _ = try? diagnosticPersistence.save(current, checkpoint: checkpoint, uptime: ProcessInfo.processInfo.systemUptime) {
+            try store.write($0, name: "diagnostics")
+        }
+    }
+    private func scheduleDiagnosticCheckpoint() {
+        // Rearm from delivery time so coalescing cannot make the next tick arrive
+        // just before the persistence interval and skip an entire checkpoint.
+        timer?.schedule(deadline: .now() + DiagnosticPersistence.checkpointInterval, leeway: .seconds(5))
     }
     override func handleAppMessage(_ messageData: Data, completionHandler: ((Data?) -> Void)?) {
         queue.async {
             guard messageData == Data("status".utf8) else { completionHandler?(nil); return }
-            self.saveSnapshot(); completionHandler?(try? JSONEncoder().encode(self.snapshot))
+            // A visible diagnostics page may query frequently; it needs fresh
+            // counters, not a filesystem checkpoint on every request.
+            completionHandler?(try? JSONEncoder().encode(self.currentSnapshot()))
         }
     }
 }

@@ -27,6 +27,8 @@ final class VPNModel: ObservableObject {
     private var autoConnectUpdate: Task<Void, Never>?
     private var manager: NETunnelProviderManager?
     private var observer: AnyCancellable?
+    private var diagnosticRequests = DiagnosticRequestGate()
+    private var diagnosticTimeout: Task<Void, Never>?
     private let store = SharedStore()
 
     var active: Bool { [.connecting, .connected, .reasserting, .disconnecting].contains(status) }
@@ -280,20 +282,46 @@ final class VPNModel: ObservableObject {
         message = "配置已保存，点击连接开始验证。"
     }
     func refreshDiagnostics() async {
+        diagnosticTimeout?.cancel(); diagnosticTimeout = nil
+        let request = diagnosticRequests.begin()
         refreshQuality()
         recoveryBlockedReason = nil
-        if let saved = try? store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot()) { snapshot = saved }
+        let saved = try? store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot())
         if let policy = try? store.read(RecoveryPolicy.self, name: "recovery", fallback: RecoveryPolicy()), let reason = policy.blockedReason {
             recoveryBlockedReason = reason
             message = "自动连接已暂停：" + reason
         }
-        guard let session = manager?.connection as? NETunnelProviderSession, [.connected, .reasserting].contains(session.status) else { return }
+        guard let session = manager?.connection as? NETunnelProviderSession, [.connected, .reasserting].contains(session.status) else {
+            if let saved { snapshot = saved }
+            return
+        }
+        let connectedDate = session.connectedDate
+        diagnosticTimeout = Task { @MainActor [weak self, weak session] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled, let self, let session else { return }
+            self.receiveDiagnostics(saved, request: request, session: session, connectedDate: connectedDate, fallback: true)
+        }
         do {
-            try session.sendProviderMessage(Data("status".utf8)) { [weak self] data in
-                guard let data, let snapshot = try? JSONDecoder().decode(DiagnosticSnapshot.self, from: data) else { return }
-                Task { @MainActor in self?.snapshot = snapshot }
+            try session.sendProviderMessage(Data("status".utf8)) { [weak self, weak session] data in
+                let live = data.flatMap { try? JSONDecoder().decode(DiagnosticSnapshot.self, from: $0) }
+                Task { @MainActor in
+                    guard let self, let session else { return }
+                    // A minute-old checkpoint must not replace live counters on
+                    // every refresh. It is only a fallback if IPC is unavailable.
+                    self.receiveDiagnostics(live ?? saved, request: request, session: session, connectedDate: connectedDate, fallback: live == nil)
+                }
             }
-        } catch { /* Persisted diagnostics remain available if IPC is interrupted. */ }
+        } catch {
+            receiveDiagnostics(saved, request: request, session: session, connectedDate: connectedDate, fallback: true)
+        }
+    }
+
+    private func receiveDiagnostics(_ value: DiagnosticSnapshot?, request: Int,
+                                    session: NETunnelProviderSession, connectedDate: Date?, fallback: Bool) {
+        guard manager?.connection === session, session.connectedDate == connectedDate,
+              [.connected, .reasserting].contains(session.status), diagnosticRequests.accept(request, fallback: fallback) else { return }
+        diagnosticTimeout?.cancel(); diagnosticTimeout = nil
+        if let value { snapshot = value }
     }
 
     private func writeQualityIntent(connecting: Bool) {

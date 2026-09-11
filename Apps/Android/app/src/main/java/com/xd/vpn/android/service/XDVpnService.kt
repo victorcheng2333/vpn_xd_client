@@ -14,6 +14,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.Semaphore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.*
 
 class XDVpnService : VpnService(), NativeCallbacks {
     private val repo get() = (application as VPNApplication).repository
@@ -35,8 +36,22 @@ class XDVpnService : VpnService(), NativeCallbacks {
     private val notifications by lazy { getSystemService(NotificationManager::class.java) }
     private var refreshRequired = false
     private val chooseNetwork = Runnable { val force = refreshRequired; refreshRequired = false; selectNetwork(force) }
-    private val statsTick = object : Runnable {
-        override fun run() { if (running && !cancelled.get()) { engine?.stats(); main.postDelayed(this, 5_000) } }
+    private val observationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val statsPoller = StatsPoller<NativeEngine>(
+        schedule = { task, delay -> main.postDelayed(task, delay) },
+        cancel = { main.removeCallbacks(it) },
+        request = { current ->
+            if (running && !cancelled.get() && engine === current && repo.statsDemand.active.value &&
+                repo.state.value.snapshot.phase == Phase.CONNECTED) current.stats()
+        },
+    )
+    override fun onCreate() {
+        super.onCreate()
+        observationScope.launch { repo.statsDemand.active.collect { updateStatsPolling() } }
+    }
+    private fun updateStatsPolling() {
+        statsPoller.update(repo.statsDemand.active.value,
+            engine.takeIf { running && !cancelled.get() && repo.state.value.snapshot.phase == Phase.CONNECTED })
     }
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
@@ -74,7 +89,6 @@ class XDVpnService : VpnService(), NativeCallbacks {
             val request = NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build()
             connectivity.registerNetworkCallback(request, callback, main); registered = true
-            main.post(statsTick)
             worker.execute { runSession(manual) }
         } catch (_: Exception) {
             cancelled.set(true)
@@ -108,7 +122,10 @@ class XDVpnService : VpnService(), NativeCallbacks {
                     current.network(selected?.networkHandle ?: 0)
                     if (cancelled.get()) current.cancel()
                 }
-                val result = try { current.start(this) } finally { synchronized(networkLock) { if (engine === current) engine = null } }
+                val result = try { current.start(this) } finally {
+                    synchronized(networkLock) { if (engine === current) engine = null }
+                    main.post { updateStatsPolling() }
+                }
                 if (cancelled.get()) break
                 failure = RecoveryPolicy.classify(result[0], result[1] != 0, result[2] != 0, result[3] != 0, result[4] != 0)
                 if (failure.blocks || !repo.mayResume()) break
@@ -171,9 +188,11 @@ class XDVpnService : VpnService(), NativeCallbacks {
         }
         if (repo.state.value.snapshot.phase == Phase.CONNECTED) { repo.recovering(); refreshNotification() }
         if (next == null) repo.record(EventKind.OFFLINE)
+        updateStatsPolling()
     }
     private fun stopByUser() {
         cancelled.set(true)
+        updateStatsPolling()
         repo.stopIntent() // durable intent first, command pipe second
         if (running) { repo.update { it.copy(phase = Phase.STOPPING) }; refreshNotification() }
         synchronized(networkLock) { engine?.cancel(); networkLock.notifyAll() }
@@ -185,13 +204,15 @@ class XDVpnService : VpnService(), NativeCallbacks {
         cancelled.set(true)
         synchronized(networkLock) { engine?.cancel(); networkLock.notifyAll() }
         if (registered) { connectivity.unregisterNetworkCallback(callback); registered = false }
-        main.removeCallbacks(chooseNetwork); main.removeCallbacks(statsTick)
+        main.removeCallbacks(chooseNetwork)
+        statsPoller.close(); observationScope.cancel()
         worker.shutdown()
         super.onDestroy()
     }
     private fun cleanup() {
         running = false
-        main.removeCallbacks(chooseNetwork); main.removeCallbacks(statsTick)
+        main.removeCallbacks(chooseNetwork)
+        updateStatsPolling()
         if (registered) { connectivity.unregisterNetworkCallback(callback); registered = false }
         synchronized(tunLock) { tunnel?.close(); tunnel = null; appliedPlan = null }
         networks.clear(); addresses.clear(); selected = null
@@ -233,10 +254,11 @@ class XDVpnService : VpnService(), NativeCallbacks {
             NativeEvent.TLS, NativeEvent.DTLS -> { repo.update { it.copy(transport = event.name) }; event.kind?.let(repo::record) }
             else -> event.kind?.let(repo::record)
         }
-        main.post { refreshNotification() }
+        main.post { refreshNotification(); updateStatsPolling() }
     }
     override fun onStats(txPackets: Long, rxPackets: Long, txBytes: Long, rxBytes: Long) {
-        if (!cancelled.get()) repo.update { it.copy(txPackets = txPackets, rxPackets = rxPackets, txBytes = txBytes, rxBytes = rxBytes) }
+        if (!cancelled.get()) repo.update { it.copy(txPackets = txPackets, rxPackets = rxPackets, txBytes = txBytes, rxBytes = rxBytes,
+            statsAt = System.currentTimeMillis()) }
     }
     private fun openAppIntent(): PendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     private fun notification(): Notification = NotificationCompat.Builder(this, CHANNEL)

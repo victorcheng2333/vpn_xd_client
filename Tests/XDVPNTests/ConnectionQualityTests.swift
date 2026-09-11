@@ -87,4 +87,54 @@ final class ConnectionQualityTests: XCTestCase {
         events.append(QualityEvent(kind: .observationEnded, connection: "direct-exit", reason: .helperUnavailable, date: now))
         XCTAssertEqual(QualitySnapshot(events: events, now: now).alerts.map(\.id), ["unstable-tunnel"])
     }
+
+    func testAlertScheduleIsIdleWithoutHistoryAndSkipsExpiredHistory() {
+        let now = Date(timeIntervalSince1970: 100_000)
+        XCTAssertNil(QualitySnapshot.nextAlertRefresh(events: [], now: now))
+        let old = QualityEvent(kind: .uncleanExit, connection: "", date: now.addingTimeInterval(-86401))
+        XCTAssertNil(QualitySnapshot.nextAlertRefresh(events: [old], now: now))
+        let current = QualityEvent(kind: .attemptSucceeded, connection: "a", date: now)
+        XCTAssertEqual(QualitySnapshot.nextAlertRefresh(events: [current], now: now), now.addingTimeInterval(601))
+    }
+
+    func testAlertScheduleExpiresInclusiveWindowsAndHandlesFutureEvents() throws {
+        let now = Date(timeIntervalSince1970: 100_000)
+        let events = (0..<3).map { QualityEvent(kind: .attemptFailed, connection: "\($0)", date: now.addingTimeInterval(-600)) }
+        XCTAssertEqual(QualitySnapshot(events: events, now: now).alerts.map(\.id), ["consecutive-failures"])
+        let next = try XCTUnwrap(QualitySnapshot.nextAlertRefresh(events: events, now: now))
+        XCTAssertEqual(next, now.addingTimeInterval(1))
+        XCTAssertTrue(QualitySnapshot(events: events, now: next).alerts.isEmpty)
+        let future = QualityEvent(kind: .uncleanExit, connection: "", date: now.addingTimeInterval(30))
+        let entry = try XCTUnwrap(QualitySnapshot.nextAlertRefresh(events: [future], now: now))
+        XCTAssertTrue(QualitySnapshot(events: [future], now: now).alerts.isEmpty)
+        XCTAssertEqual(entry, now.addingTimeInterval(31))
+        XCTAssertEqual(QualitySnapshot(events: [future], now: entry).alerts.map(\.id), ["unclean-exit"])
+        XCTAssertEqual(QualitySnapshot.nextAlertRefresh(events: [future], now: now.addingTimeInterval(-30)), entry)
+    }
+
+    func testWindowExpiryCanTriggerAnAlertWithoutNewEvents() throws {
+        let now = Date(timeIntervalSince1970: 100_000)
+        var events = (0..<4).map { QualityEvent(kind: .attemptSucceeded, connection: "old-\($0)", date: now.addingTimeInterval(-599)) }
+        events += (0..<4).map { QualityEvent(kind: .attemptSucceeded, connection: "success-\($0)", date: now.addingTimeInterval(-100)) }
+        events += (0..<2).map { QualityEvent(kind: .attemptFailed, connection: "failure-\($0)", date: now.addingTimeInterval(-100)) }
+        // Removing older successes crosses 80% even with no incoming events.
+        XCTAssertTrue(QualitySnapshot(events: events, now: now).alerts.isEmpty)
+        let next = try XCTUnwrap(QualitySnapshot.nextAlertRefresh(events: events, now: now))
+        XCTAssertEqual(QualitySnapshot(events: events, now: next).alerts.map(\.id), ["success-rate"])
+    }
+
+    func testWiderEpisodeHistoryAndUncleanExitScheduleTheir24HourExpiry() throws {
+        let now = Date(timeIntervalSince1970: 100_000)
+        let start = QualityEvent(kind: .recoveryStarted, connection: "old", reason: .transport, date: now.addingTimeInterval(-86399))
+        let events = [start] + ["old", "b", "c"].map {
+            QualityEvent(kind: .observationEnded, connection: $0, reason: .transport, date: now.addingTimeInterval(-100))
+        }
+        XCTAssertTrue(QualitySnapshot(events: events, now: now).alerts.isEmpty)
+        let next = try XCTUnwrap(QualitySnapshot.nextAlertRefresh(events: events, now: now))
+        XCTAssertEqual(next, now.addingTimeInterval(2))
+        XCTAssertEqual(QualitySnapshot(events: events, now: next).alerts.map(\.id), ["unstable-tunnel"])
+        let unclean = QualityEvent(kind: .uncleanExit, connection: "", date: Date(timeIntervalSince1970: start.timestamp))
+        XCTAssertEqual(QualitySnapshot.nextAlertRefresh(events: [unclean], now: now), next)
+        XCTAssertTrue(QualitySnapshot(events: [unclean], now: next).alerts.isEmpty)
+    }
 }

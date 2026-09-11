@@ -1,0 +1,42 @@
+{
+  "assessment_date": "2026-09-11",
+  "timezone": "Asia/Shanghai",
+  "source_commit": "ac0fde39724545b5df3a442e87286ba17c07d233",
+  "source_mac_version": "1.1.25",
+  "source_mac_build": "36",
+  "installed_mac_version": "1.1.19",
+  "installed_mac_build": "28",
+  "host_os": "macOS 26.6.2 (25G83)",
+  "observations": {
+    "method": "Two read-only filtered process snapshots; one battery and sleep assertion snapshot. Not a controlled energy measurement.",
+    "vpn_main_app_seen": false,
+    "openconnect_process_seen": false,
+    "helper_seen": true,
+    "helper_cpu_percent_displayed_both_snapshots": 0.0,
+    "helper_cumulative_cpu_seconds_displayed_both_snapshots": 1.75,
+    "helper_rss_kib": 15120,
+    "power_source": "AC Power",
+    "battery_percent_displayed": 100,
+    "sleep_prevention_assertions_owned_by_xd_vpn_seen": false
+  },
+  "code_frequencies_seconds": {
+    "mac_dpd": 20,
+    "mac_quality_alert_evaluation": 30,
+    "mac_old_session_recovery_budget": 3,
+    "ios_dpd": 30,
+    "ios_diagnostics_persistence_timer": 5,
+    "ios_visible_active_quality_page_status_request": 5,
+    "android_dpd": 30,
+    "android_service_stats_timer": 5,
+    "mobile_dtls_attempt_period_not_dpd": 30
+  },
+  "constraints": [
+    "CPU snapshots are not power readings and concern an inactive helper only.",
+    "Source findings do not establish the versions installed on the mobile devices.",
+    "Timer rates assume continued scheduling; they are not deep-sleep wake counts.",
+    "Atomic write requests are not a count of physical flash flushes.",
+    "DPD scheduling depends on channel receive activity, server keepalives and protocol state.",
+    "Android setMetered(false) inherits underlying meteredness; it is not an unmetered override.",
+    "No VPN setting, connection, app binary or device battery-stat history was changed."
+  ]
+}

@@ -2,13 +2,13 @@
 
 ## 版本约定
 
-唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.25 / build 36**；Android 的 versionName / versionCode 也直接读取同一文件。
+唯一版本来源是 `Resources/Info.plist`：`CFBundleShortVersionString` 使用无前导零的 `主.次.修订`，`CFBundleVersion` 使用正整数。当前目标为 **1.1.26 / build 37**；Android 的 versionName / versionCode 也直接读取同一文件。
 
 | 渠道 | 界面版本示例 | DMG | GitHub Release / 自动更新 |
 | --- | --- | --- | --- |
-| development | `1.1.25-dev.36` | 默认不打包 | 不发布、不参与正式更新 |
-| test | `1.1.25-test.37` | 文件名含 `-test.37` | 不发布、不参与正式更新 |
-| release | `1.1.25` | 文件名只含正式版本与芯片 | 仅 `v1.1.25` 正式标签 |
+| development | `1.1.26-dev.37` | 默认不打包 | 不发布、不参与正式更新 |
+| test | `1.1.26-test.38` | 文件名含 `-test.38` | 不发布、不参与正式更新 |
+| release | `1.1.26` | 文件名只含正式版本与芯片 | 仅 `v1.1.26` 正式标签 |
 
 开发／测试的构建号不占用正式版本，也不与正式版本比较大小。测试分发应显式使用新的构建号。正式版必须同时满足：标签匹配 plist、标签指向 HEAD、工作区干净、构建号匹配版本文件，且版本大于所有已发布的正式版本。不会回写或自动递增源文件。已发布版本禁止覆盖或降级；修复必须使用新版本。失败时仅能恢复尚未发布的同名草稿。
 
@@ -68,21 +68,21 @@ BUILD_CHANNEL=test BUILD_NUMBER=32 ARCHS=arm64 \
 
 ## 本地打包、公证后上传 GitHub Release（默认流程）
 
-先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.25`；正式发布必须递增版本，不能把旧测试包重命名发布。
+先将版本文件和代码提交，保持工作区干净，并在该提交创建匹配标签。当前目标为 `v1.1.26`；正式发布必须递增版本，不能把旧测试包重命名发布。
 
 ```bash
 # 在已提交的版本提交上创建标签
-git tag -a v1.1.25 -m 'XD VPN 1.1.25'
+git tag -a v1.1.26 -m 'XD VPN 1.1.26'
 
 # 本地构建、测试、签名、公证、打包和复核，不上传 GitHub Release
-bash scripts/release.sh prepare v1.1.25
+bash scripts/release.sh prepare v1.1.26
 
 # 确保版本提交和标签均已推送到源仓库
 git push origin main
-git push origin v1.1.25
+git push origin v1.1.26
 
 # 仅上传已验证的产物，再将草稿发布为正式 Latest
-bash scripts/release.sh publish v1.1.25
+bash scripts/release.sh publish v1.1.26
 ```
 
 `prepare` 在两份 DMG 之后调用 `scripts/release-android.sh` 构建、校验并暂存 Android APK（见下文「Android 安装包」）；使用本机钥匙串的公司 Developer ID 和公证 profile `xdvpn-notary`；如需指定其他 profile，设置 `NOTARY_KEYCHAIN_PROFILE`。两种架构都会实际执行 Swift 测试与隔离引擎验收，因此完整本地流程需要 Apple Silicon Mac 和 Rosetta。Intel Mac 可使用下面的云端原生 runner 流程。
@@ -119,7 +119,7 @@ Actions → Release → Run workflow，输入已有并已推送的正式标签�
 ## 单独本机正式打包
 
 ```bash
-BUILD_CHANNEL=release RELEASE_TAG=v1.1.25 \
+BUILD_CHANNEL=release RELEASE_TAG=v1.1.26 \
   NOTARY_KEYCHAIN_PROFILE=xdvpn-notary bash scripts/package.sh
 ```
 
@@ -162,7 +162,7 @@ Actions 的 **Release** 调用 **Windows Release Build**，重建引擎，执行
 本地联合发布前，手动运行 **Windows Release Build**，输入同一标签，将该次 `release-windows` artifact 解压到本机 `build/`。也可在干净且 HEAD 等于标签的 Windows 工作区运行：
 
 ```powershell
-./scripts/release-windows.ps1 prepare -Tag v1.1.25
+./scripts/release-windows.ps1 prepare -Tag v1.1.26
 ```
 
 将 `dist/windows-release-<version>/delivery/` 内全部文件复制到 macOS 工作区的 `build/`，再执行联合 `release.sh prepare` / `publish`。校验记录必须与当前标签、build 和提交完全匹配；缺失 Windows 包或记录时不会发布。macOS 无法本地构建 Windows 安装器。

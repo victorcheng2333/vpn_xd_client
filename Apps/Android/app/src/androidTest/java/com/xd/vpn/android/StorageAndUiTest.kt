@@ -2,6 +2,12 @@ package com.xd.vpn.android
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xd.vpn.android.core.*
 import com.xd.vpn.android.data.*
@@ -40,6 +46,57 @@ class StorageAndUiTest {
         compose.onNodeWithText("设置").performClick()
         compose.onNodeWithText("用户名").assertIsNotEnabled()
         compose.onNodeWithText("保存配置").performScrollTo().assertIsNotEnabled()
+    }
+    @Test fun qualityObservationTracksPageLifecycleAndCompositionWithoutStartingVpn() {
+        val demand = StatsDemand()
+        val visible = mutableStateOf(true)
+        var connects = 0
+        lateinit var owner: LifecycleOwner
+        lateinit var registry: LifecycleRegistry
+        compose.runOnIdle {
+            owner = object : LifecycleOwner { override val lifecycle get() = registry }
+            registry = LifecycleRegistry(owner)
+            registry.currentState = Lifecycle.State.STARTED
+        }
+        compose.setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                if (visible.value) VPNApp(ViewState(Profile(username = "test-only"), false), false,
+                    { connects++ }, {}, { _, _ -> }, {}, {}, observeStats = demand::acquire)
+            }
+        }
+        compose.runOnIdle { assertFalse(demand.active.value) }
+        compose.onNodeWithText("连接质量").performClick()
+        compose.waitUntil { demand.active.value }
+        compose.runOnIdle { registry.currentState = Lifecycle.State.CREATED }
+        compose.waitUntil { !demand.active.value }
+        compose.runOnIdle { registry.currentState = Lifecycle.State.STARTED }
+        compose.waitUntil { demand.active.value }
+        compose.onNodeWithText("连接").performClick()
+        compose.waitUntil { !demand.active.value }
+        compose.onNodeWithText("连接质量").performClick()
+        compose.waitUntil { demand.active.value }
+        compose.runOnIdle { visible.value = false }
+        compose.waitUntil { !demand.active.value }
+        compose.runOnIdle { assertEquals(0, connects) }
+    }
+    @Test fun diagnosticsDistinguishUnsampledCountersAndObservationLeavesSessionUntouched() {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        val context = object : android.content.ContextWrapper(base) {
+            override fun getNoBackupFilesDir() = java.io.File(base.cacheDir, "stats-report-test").apply { mkdirs() }
+        }
+        try {
+            val repo = VPNRepository(context)
+            assertTrue(repo.report().contains("包计数尚未采样"))
+            repo.update { it.copy(phase = Phase.FAILED, txPackets = 12, rxPackets = 34, statsAt = 1_700_000_000_000) }
+            val before = repo.state.value
+            val subscription = repo.statsDemand.acquire()
+            subscription.close()
+            assertEquals(before, repo.state.value)
+            assertFalse(repo.mayResume())
+            assertTrue(repo.report().contains("上行包 12 / 下行包 34"))
+            assertTrue(repo.report().contains("最近采样："))
+            assertTrue(repo.report().contains("缓存样本不代表最终流量"))
+        } finally { context.noBackupFilesDir.deleteRecursively() }
     }
     @Test fun encryptedPasswordRoundTripsWithoutPlaintextAndSurvivesStoreReload() {
         // Isolated context directory, never modifies a user's profile.

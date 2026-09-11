@@ -35,7 +35,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val state by repo.state.collectAsStateWithLifecycle()
-            VPNApp(state, awaitingConsent, connect = ::connect, disconnect = ::disconnect, save = ::save, autoConnect = ::setAutoConnect, share = ::share)
+            VPNApp(state, awaitingConsent, connect = ::connect, disconnect = ::disconnect, save = ::save,
+                autoConnect = ::setAutoConnect, share = ::share, observeStats = repo.statsDemand::acquire)
         }
     }
     private fun connect() {

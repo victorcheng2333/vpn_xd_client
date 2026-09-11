@@ -32,6 +32,7 @@ data class ViewState(val profile: Profile, val hasPassword: Boolean, val snapsho
     }
 }
 class VPNRepository(context: Context) {
+    val statsDemand = StatsDemand()
     private val store = SecureStore(context)
     private val boot = Settings.Global.getInt(context.contentResolver, Settings.Global.BOOT_COUNT, -1)
     private var gate = store.loadGate()
@@ -138,7 +139,9 @@ class VPNRepository(context: Context) {
             appendLine("最近 24 小时恢复：成功 ${summary.successes} 次 / 失败 ${summary.failures} 次")
             appendLine("最近恢复耗时：${summary.lastDurationMs?.let(Quality::duration) ?: if (summary.last == null) "暂无记录" else "未完整记录"}")
             appendLine("自动恢复：${s.recoveryStatus}")
-            appendLine("上行包 ${s.snapshot.txPackets} / 下行包 ${s.snapshot.rxPackets}")
+            appendLine(s.snapshot.statsAt?.let { "最近采样：${date.format(Date(it))}；上行包 ${s.snapshot.txPackets} / 下行包 ${s.snapshot.rxPackets}" }
+                ?: "包计数尚未采样")
+            appendLine("包计数仅在连接质量页可见且隧道已连接时刷新；缓存样本不代表最终流量。")
             if (summary.incomplete) appendLine("历史记录不完整")
             appendLine("以下最多 64 条；不包含服务器、用户名、密码、Cookie 或原始引擎日志。")
             s.events.takeLast(64).forEach { appendLine("${date.format(Date(it.wall))} ${it.kind.label}") }

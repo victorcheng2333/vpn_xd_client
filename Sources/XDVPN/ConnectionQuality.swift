@@ -86,6 +86,26 @@ struct ConnectionQuality {
 
 /// All figures describe retained, completed observations, never a fleet SLA.
 struct QualitySnapshot {
+    /// Alert membership can change when an event enters the clock window, leaves
+    /// the 10-minute window, or leaves the wider episode/unclean-exit history.
+    /// Recheck just after inclusive boundaries; otherwise an exact-boundary
+    /// callback could keep the event and never schedule its removal.
+    static func nextAlertRefresh(events: [QualityEvent], now: Date) -> Date? {
+        let current = now.timeIntervalSince1970
+        var next: TimeInterval?
+        for event in events where event.timestamp.isFinite {
+            for offset in [TimeInterval(0), 600, 86400] {
+                if offset == 0, event.timestamp <= current { continue }
+                let boundary = event.timestamp + offset
+                let candidate = boundary + 1
+                if candidate.isFinite, boundary >= current, next.map({ candidate < $0 }) ?? true {
+                    next = candidate
+                }
+            }
+        }
+        return next.map { Date(timeIntervalSince1970: $0) }
+    }
+
     struct Alert: Identifiable {
         let id: String
         let title: String
