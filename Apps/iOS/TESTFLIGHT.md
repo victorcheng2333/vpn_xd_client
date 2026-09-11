@@ -46,6 +46,7 @@ App 和 PacketTunnel 构建号一致，不修改 macOS 版本。
 
 `--submit-review` 明确允许提交 TestFlight Beta Review；`--notify-testers` 允许启用 Apple 审核通过后的自动通知。
 不带通知参数时保留已有通知设置。脚本复用现有外测组，不创建公开链接或扩大测试员名单。
+关联前分页查询目标测试组的构建列表，仅在缺少当前构建时追加关联；Apple 不支持直接读取 `Build.betaGroups` 的关联资源，该查询会返回 403。
 首个构建仍需要 Apple 审核。返回 `WAITING_FOR_BETA_REVIEW` 表示已提交而非已可测试；
 仅 `IN_BETA_TESTING` 报告 `testable: true`。可追加 `--wait-review 3600` 有限等待，或之后运行 status。
 

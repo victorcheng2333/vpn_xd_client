@@ -129,10 +129,12 @@ def finish(client, config, row, group, notes, locale, submit_review, notify_test
                 'data': {'type': 'buildBetaDetails', 'id': detail['id'],
                          'attributes': {'autoNotifyEnabled': True}}})
     # Associating a group is idempotent. Do not alter public links or tester lists.
-    groups = client.all('/v1/builds/' + row['id'] + '/betaGroups', {'limit': 200})
-    if group['id'] not in [x['id'] for x in groups]:
-        client.request('POST', '/v1/builds/' + row['id'] + '/relationships/betaGroups', body={
-            'data': [{'type': 'betaGroups', 'id': group['id']}]})
+    # Build.betaGroups supports CREATE/DELETE, not GET_RELATED. Read the
+    # selected group's builds (including every page) to make resume idempotent.
+    builds = client.all('/v1/betaGroups/' + group['id'] + '/builds', {'limit': 200})
+    if row['id'] not in [x['id'] for x in builds]:
+        client.request('POST', '/v1/betaGroups/' + group['id'] + '/relationships/builds', body={
+            'data': [{'type': 'builds', 'id': row['id']}]})
     state = client.detail(row['id'])['attributes']['externalBuildState']
     if state == 'READY_FOR_BETA_SUBMISSION' and submit_review:
         client.request('POST', '/v1/betaAppReviewSubmissions', body={'data': {

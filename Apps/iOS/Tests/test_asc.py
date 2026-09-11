@@ -106,7 +106,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_existing_review_not_submitted_twice(self):
         c = Mock(); c.detail.return_value = {'attributes': {'externalBuildState': 'WAITING_FOR_BETA_REVIEW'}}
-        c.all.return_value = [{'id': 'g'}]
+        c.all.return_value = [{'id': 'b'}]
         state = pipeline.finish(c, {}, {'id': 'b', 'attributes': {}}, {'id': 'g'}, 'notes', 'zh-Hans', True)
         self.assertEqual(state, 'WAITING_FOR_BETA_REVIEW')
         c.request.assert_not_called()
@@ -119,7 +119,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_no_review_submission_without_flag(self):
         c = Mock(); c.detail.return_value = {'attributes': {'externalBuildState': 'READY_FOR_BETA_SUBMISSION'}}
-        c.all.return_value = [{'id': 'g'}]
+        c.all.return_value = [{'id': 'b'}]
         with patch.object(pipeline, 'compliance'), patch.object(pipeline, 'set_notes'):
             pipeline.finish(c, {}, {'id': 'b', 'attributes': {}}, {'id': 'g'}, 'notes', 'zh-Hans', False)
         c.request.assert_not_called()
@@ -129,11 +129,45 @@ class PipelineTests(unittest.TestCase):
             {'attributes': {'externalBuildState': 'READY_FOR_BETA_SUBMISSION'}},
             {'attributes': {'externalBuildState': 'READY_FOR_BETA_SUBMISSION'}},
             {'attributes': {'externalBuildState': 'WAITING_FOR_BETA_REVIEW'}}]
-        c.all.return_value = [{'id': 'g'}]
+        c.all.return_value = [{'id': 'exact-build'}]
         with patch.object(pipeline, 'compliance'), patch.object(pipeline, 'set_notes'), patch.object(pipeline, 'review_metadata'):
             state = pipeline.finish(c, {'app_id': 'a'}, {'id': 'exact-build', 'attributes': {}}, {'id': 'g'}, 'notes', 'zh-Hans', True)
         self.assertEqual(state, 'WAITING_FOR_BETA_REVIEW')
         self.assertEqual(c.request.call_args.kwargs['body']['data']['relationships']['build']['data']['id'], 'exact-build')
+
+    def test_group_lookup_paginates_without_unsupported_build_relationship(self):
+        c = asc.Client({'dummy': True})
+        c.detail = Mock(return_value={'attributes': {'externalBuildState': 'WAITING_FOR_BETA_REVIEW'}})
+        next_page = asc.BASE + '/v1/betaGroups/g/builds?cursor=next'
+
+        def request(method, path, params=None, body=None):
+            if method == 'GET' and path == '/v1/betaGroups/g/builds':
+                return {'data': [{'id': 'older'}], 'links': {'next': next_page}}
+            if method == 'GET' and path == next_page:
+                return {'data': [{'id': 'b'}]}
+            self.fail('Unexpected API operation: ' + method + ' ' + path)
+
+        c.request = Mock(side_effect=request)
+        state = pipeline.finish(c, {}, {'id': 'b', 'attributes': {}}, {'id': 'g'}, 'notes', 'zh-Hans', True)
+        self.assertEqual(state, 'WAITING_FOR_BETA_REVIEW')
+        self.assertEqual(c.request.call_count, 2)
+        c.request.assert_any_call('GET', next_page, None)
+
+    def test_missing_build_is_added_without_replacing_other_group_builds(self):
+        c = asc.Client({'dummy': True})
+        c.detail = Mock(return_value={'attributes': {'externalBuildState': 'WAITING_FOR_BETA_REVIEW'}})
+
+        def request(method, path, params=None, body=None):
+            if method == 'GET' and path == '/v1/betaGroups/g/builds':
+                return {'data': [{'id': 'older'}]}
+            if method == 'POST' and path == '/v1/betaGroups/g/relationships/builds':
+                self.assertEqual(body, {'data': [{'type': 'builds', 'id': 'b'}]})
+                return {}
+            self.fail('Unexpected API operation: ' + method + ' ' + path)
+
+        c.request = Mock(side_effect=request)
+        pipeline.finish(c, {}, {'id': 'b', 'attributes': {}}, {'id': 'g'}, 'notes', 'zh-Hans', True)
+        self.assertEqual(c.request.call_count, 2)
 
 
 if __name__ == '__main__':
