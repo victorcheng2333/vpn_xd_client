@@ -16,6 +16,11 @@ on:
         default: release
         type: choice
         options: [release, resume]
+      audience:
+        description: 'Internal testing is the default; external requires explicit authorization'
+        default: internal
+        type: choice
+        options: [internal, external]
       notes:
         description: 'What to test (zh-Hans)'
         required: true
@@ -23,7 +28,7 @@ on:
       submit_review:
         description: 'Submit TestFlight Beta Review'
         type: boolean
-        default: true
+        default: false
       notify_testers:
         description: 'Enable automatic tester notification after approval'
         type: boolean
@@ -44,10 +49,12 @@ jobs:
       IOS_VERSION: ${{ inputs.version }}
       IOS_BUILD: ${{ inputs.build }}
       IOS_ACTION: ${{ inputs.action }}
+      IOS_AUDIENCE: ${{ inputs.audience }}
       IOS_NOTES: ${{ inputs.notes }}
       IOS_SUBMIT_REVIEW: ${{ inputs.submit_review }}
       IOS_NOTIFY_TESTERS: ${{ inputs.notify_testers }}
       ASC_BETA_GROUP_ID: ${{ vars.IOS_BETA_GROUP_ID }}
+      ASC_INTERNAL_BETA_GROUP_ID: ${{ vars.IOS_INTERNAL_BETA_GROUP_ID }}
       ASC_USES_NON_EXEMPT_ENCRYPTION: ${{ vars.IOS_USES_NON_EXEMPT_ENCRYPTION }}
       ASC_ENCRYPTION_DECLARATION_ID: ${{ vars.IOS_ENCRYPTION_DECLARATION_ID }}
       ASC_KEY_ID: ${{ secrets.IOS_ASC_KEY_ID }}
@@ -76,7 +83,7 @@ jobs:
         run: python3 -m pip install -r Apps/iOS/scripts/requirements-testflight.txt
       - name: Validate release inputs and pipeline
         run: |
-          python3 Apps/iOS/scripts/testflight.py check --version "$IOS_VERSION" --build "$IOS_BUILD" --audience external
+          python3 Apps/iOS/scripts/testflight.py check --version "$IOS_VERSION" --build "$IOS_BUILD" --audience "$IOS_AUDIENCE"
           python3 -m unittest discover -s Apps/iOS/Tests -p 'test_*.py' -v
       - name: Prepare App Store Connect key
         env:
@@ -105,6 +112,7 @@ jobs:
           notes.write_text(os.environ['IOS_NOTES'])
           cmd = [sys.executable, 'Apps/iOS/scripts/release-testflight.py', os.environ['IOS_ACTION'],
                  '--version', os.environ['IOS_VERSION'], '--build', os.environ['IOS_BUILD'],
+                 '--audience', os.environ['IOS_AUDIENCE'],
                  '--notes-file', str(notes)]
           if os.environ['IOS_SUBMIT_REVIEW'] == 'true':
               cmd.append('--submit-review')

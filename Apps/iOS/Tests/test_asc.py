@@ -1,5 +1,7 @@
 import base64
 import importlib.util
+import contextlib
+import io
 import json
 from pathlib import Path
 import sys
@@ -68,6 +70,57 @@ class APITests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_default_internal_cli_rejects_external_flags_before_network(self):
+        for flag in ('--submit-review', '--notify-testers', '--wait-review=60'):
+            with self.subTest(flag=flag), patch.object(sys, 'argv', ['release-testflight.py', 'release', flag]), \
+                    patch.object(pipeline, 'Client') as client, contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    pipeline.main()
+                self.assertEqual(error.exception.code, 2)
+                client.assert_not_called()
+
+    def test_internal_preflight_rejects_external_group_even_with_matching_id(self):
+        c = Mock(); c.request.return_value = {'data': {'attributes': {'bundleId': 'expected'}}}
+        config = {'app_id': 'a', 'bundle_id': 'expected', 'internal_group_id': 'g'}
+        c.groups.return_value = [{'id': 'g', 'attributes': {'isInternalGroup': False}}]
+        with self.assertRaises(ValueError):
+            pipeline.preflight(c, config, 'internal')
+        c.groups.return_value[0]['attributes']['isInternalGroup'] = True
+        self.assertEqual(pipeline.preflight(c, config, 'internal')['id'], 'g')
+
+    def test_internal_distribution_cannot_submit_beta_review(self):
+        c = asc.Client({'dummy': True})
+        c.detail = Mock(return_value={'attributes': {'internalBuildState': 'IN_BETA_TESTING',
+                                                     'externalBuildState': 'NOT_APPLICABLE'}})
+        row = {'id': 'b', 'attributes': {'buildAudienceType': 'INTERNAL_ONLY', 'usesNonExemptEncryption': False}}
+        group = {'id': 'g', 'attributes': {'isInternalGroup': True}}
+
+        def request(method, path, params=None, body=None):
+            if method == 'GET' and path == '/v1/betaBuildLocalizations':
+                return {'data': [{'id': 'n', 'attributes': {'locale': 'zh-Hans', 'whatsNew': 'notes'}}]}
+            if method == 'GET' and path == '/v1/betaGroups/g/builds':
+                return {'data': []}
+            if method == 'POST' and path == '/v1/betaGroups/g/relationships/builds':
+                self.assertEqual(body, {'data': [{'type': 'builds', 'id': 'b'}]})
+                return {}
+            self.fail('Unexpected API operation: ' + method + ' ' + path)
+
+        c.request = Mock(side_effect=request)
+        state = pipeline.finish(c, {'uses_non_exempt_encryption': False}, row, group, 'notes', 'zh-Hans', False, audience='internal')
+        self.assertEqual(state, 'IN_BETA_TESTING')
+        self.assertEqual(c.request.call_count, 3)
+
+    def test_internal_distribution_rejects_wrong_build_group_and_review(self):
+        for audience_type, internal_group, review in [('APP_STORE_ELIGIBLE', True, False),
+                                                     ('INTERNAL_ONLY', False, False),
+                                                     ('INTERNAL_ONLY', True, True)]:
+            c = Mock()
+            with self.subTest(audience_type=audience_type, internal_group=internal_group, review=review), self.assertRaises(ValueError):
+                pipeline.finish(c, {}, {'attributes': {'buildAudienceType': audience_type}},
+                                {'attributes': {'isInternalGroup': internal_group}}, 'notes', 'zh-Hans', review, audience='internal')
+            c.request.assert_not_called()
+            c.detail.assert_not_called()
+
     def test_next_number_includes_all_remote_and_local_attempts(self):
         c = Mock(); c.builds.return_value = [{'attributes': {'version': '5'}}, {'attributes': {'version': '12'}}]
         with tempfile.TemporaryDirectory() as d, patch.object(pipeline, 'IOS', Path(d)):

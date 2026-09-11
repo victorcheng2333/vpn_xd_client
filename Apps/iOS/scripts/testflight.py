@@ -114,7 +114,7 @@ def main():
     parser.add_argument("action", choices=("check", "archive", "verify", "upload"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--build", required=True)
-    parser.add_argument("--audience", choices=("external", "internal"), default="external")
+    parser.add_argument("--audience", choices=("external", "internal"), default="internal")
     args = parser.parse_args()
     version, build = release_values(args.version, args.build)
     config = configuration()
