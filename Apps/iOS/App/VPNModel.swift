@@ -399,7 +399,15 @@ final class VPNModel: ObservableObject {
         let last = current.lastRecovery(at: now.date)
         let duration = last?.duration.map { String(format: "%.1f 秒", $0) } ?? (last == nil ? "暂无记录" : "未完整记录")
         let summary = "最近 24 小时恢复：成功 \(success) 次 / 失败 \(failure) 次 / 取消 \(cancelled) 次\n最近恢复耗时：\(duration)\n自动恢复：\(automaticRecoveryStatus)\n"
+        let bridge = snapshot.packetPump.map {
+            "隧道 MTU：\($0.mtu)\n桥接缓冲（发送/接收）：\($0.sendBufferBytes) / \($0.receiveBufferBytes) 字节\n"
+            + "桥接上行/下行字节：\($0.bytesToTunnel) / \($0.bytesFromTunnel)\n"
+            + "上行背压重试：\($0.uploadBackpressureEvents) 当前排队：\($0.queuedPackets) 峰值排队：\($0.peakQueuedPackets)\n"
+            + "丢弃分类：队列超限 \($0.overflowDrops) / 无效或超 MTU \($0.invalidPacketDrops) / IPv6 策略 \($0.policyDrops) / socket 错误 \($0.socketErrorDrops) / 系统写入失败 \($0.deliveryDrops)\n"
+            + "计数仅反映本地桥接，不代表公网丢包率或测速结果。\n"
+        } ?? "桥接性能计数：旧版本未记录\n"
+        let dtls = snapshot.dtlsEnabled.map { $0 ? "启用" : "禁用（沿用保存配置）" } ?? "未记录"
         return "XD VPN iOS 0.1 验证报告\n系统状态：\(title)\n事件时间：\(snapshot.updatedAt)\n传输：\(snapshot.transport)\n上行包：\(snapshot.packetsToTunnel) 下行包：\(snapshot.packetsFromTunnel) 丢弃包：\(snapshot.droppedPackets)\n"
-            + summary + (qualityStorageIssue.map { $0 + "\n" } ?? "") + snapshot.events.joined(separator: "\n")
+            + "DTLS 配置：\(dtls)\n" + bridge + summary + (qualityStorageIssue.map { $0 + "\n" } ?? "") + snapshot.events.joined(separator: "\n")
     }
 }

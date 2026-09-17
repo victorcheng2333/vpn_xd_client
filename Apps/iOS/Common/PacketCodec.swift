@@ -1,6 +1,26 @@
 import Foundation
 import Darwin
 
+/// Local bridge observations, not Internet loss or end-to-end throughput.
+struct PacketPumpStatistics: Codable, Equatable {
+    var mtu = 0
+    var sendBufferBytes = 0
+    var receiveBufferBytes = 0
+    var bytesToTunnel: UInt64 = 0
+    var bytesFromTunnel: UInt64 = 0
+    var uploadBackpressureEvents: UInt64 = 0
+    var queuedPackets = 0
+    var peakQueuedPackets = 0
+    var invalidPacketDrops: UInt64 = 0
+    var policyDrops: UInt64 = 0
+    var overflowDrops: UInt64 = 0
+    var socketErrorDrops: UInt64 = 0
+    var deliveryDrops: UInt64 = 0
+    var droppedPackets: UInt64 {
+        invalidPacketDrops + policyDrops + overflowDrops + socketErrorDrops + deliveryDrops
+    }
+}
+
 enum PacketCodec {
     static func canForward(family: Int32, blocksIPv6: Bool) -> Bool {
         family == AF_INET || (family == AF_INET6 && !blocksIPv6)

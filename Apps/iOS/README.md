@@ -37,6 +37,8 @@ Apps/iOS/scripts/test.sh
 
 切网竞态回归：`bash Apps/iOS/scripts/test-native-session.sh <SIMULATOR_UDID> recovery`。真实引擎在初次网络设置回调期间收到断网/恢复，须合并为一次重连、完成双向 CSTP 数据回送，并在连续健康唤醒后保持连接。仅测试程序信任回环网关的临时证书。
 
+上传性能回归：`scripts/test.sh` 包含真实 datagram socket 背压测试，也可用 `bash Apps/iOS/scripts/test-packet-pump.sh <SIMULATOR_UDID>` 在 iOS 模拟器执行。`bash Apps/iOS/scripts/test-engine-progress.sh <SIMULATOR_UDID>` 验证 DTLS 探测 MTU 后向系统同步设置。2026-09-17 修复满缓冲直接丢弃上传包、桥接缓冲过小和 DTLS MTU 未同步的问题；诊断分享增加 MTU、实际缓冲大小、上/下行字节、背压重试和分类丢弃计数。复现依据和与 AnyConnect 的真机对比步骤见 [上传性能调查](../../docs/design/2026-09-17-ios-upload-performance.md)。
+
 两条 build 命令均为**无签名构建**，不能直接安装到实体 iPhone。默认输出：
 
 ```text

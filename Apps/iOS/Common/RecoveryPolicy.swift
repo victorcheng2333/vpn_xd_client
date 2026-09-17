@@ -34,6 +34,9 @@ struct RecoveryPolicy: Codable {
 
 struct DiagnosticSnapshot: Codable, Equatable {
     var qualityStorageIssue: String?
+    // Optional so diagnostics saved by older versions remain readable.
+    var packetPump: PacketPumpStatistics?
+    var dtlsEnabled: Bool?
     var phase = "尚未连接"
     var address = "—"
     var transport = "—"

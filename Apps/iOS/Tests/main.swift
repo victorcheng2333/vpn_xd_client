@@ -332,4 +332,21 @@ expect(!diagnosticRequests.accept(oldSessionDiagnosticRequest), "old session dia
 expect(!diagnosticRequests.accept(oldSessionDiagnosticRequest, fallback: true), "old timeout cannot overwrite a new session refresh")
 expect(diagnosticRequests.accept(newSessionDiagnosticRequest), "new session diagnostics remain eligible after old callback")
 
+var previousDiagnostics = DiagnosticSnapshot()
+previousDiagnostics.packetsToTunnel = 42
+var previousJSON = try JSONSerialization.jsonObject(with: JSONEncoder().encode(previousDiagnostics)) as! [String: Any]
+previousJSON.removeValue(forKey: "packetPump")
+previousJSON.removeValue(forKey: "dtlsEnabled")
+let decodedPrevious = try JSONDecoder().decode(DiagnosticSnapshot.self, from: JSONSerialization.data(withJSONObject: previousJSON))
+expect(decodedPrevious.packetsToTunnel == 42 && decodedPrevious.packetPump == nil && decodedPrevious.dtlsEnabled == nil,
+       "new bridge metrics preserve existing diagnostic snapshots")
+var withBridgeMetrics = previousDiagnostics
+withBridgeMetrics.packetPump = PacketPumpStatistics()
+withBridgeMetrics.packetPump?.uploadBackpressureEvents = 7
+withBridgeMetrics.packetPump?.policyDrops = 3
+withBridgeMetrics.dtlsEnabled = false
+let restoredBridgeMetrics = try JSONDecoder().decode(DiagnosticSnapshot.self, from: JSONEncoder().encode(withBridgeMetrics))
+expect(restoredBridgeMetrics == withBridgeMetrics, "bridge metrics and saved DTLS preference survive IPC and persistence")
+expect(restoredBridgeMetrics.packetPump?.droppedPackets == 3, "transient backpressure does not count as packet loss")
+
 print("Passed \(checks) iOS configuration, routing, packet, recovery and diagnostic checks.")

@@ -43,6 +43,13 @@ static void progress(void *context, int level, const char *format, ...) {
         [(__bridge OCEngine *)context emit:@"tls"];
     if (strstr(format, "Established DTLS connection"))
         [(__bridge OCEngine *)context emit:@"dtls"];
+    // dtls_detect_mtu() updates ip_info after the external tun fd and NE
+    // settings are already installed. It does not invoke the reconnect callback.
+    // Deliver the new settings on this same worker before it reads more packets.
+    if (strstr(format, "Detected MTU of %d bytes (was %d)")) {
+        OCEngine *engine = (__bridge OCEngine *)context;
+        if (![engine applySettings]) [engine cancel];
+    }
 }
 static void reconnected(void *context) {
     OCEngine *engine = (__bridge OCEngine *)context;
@@ -235,6 +242,12 @@ static NSArray *routes(struct oc_split_include *head) {
             int flags = fcntl(_pair[i], F_GETFL, 0);
             if (flags < 0 || fcntl(_pair[i], F_SETFL, flags | O_NONBLOCK) < 0) { result = -errno; goto finished; }
             int one = 1; setsockopt(_pair[i], SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+            // Darwin's default datagram receive buffer can hold only a couple
+            // of MTU-sized packets. Absorb normal packetFlow bursts in both
+            // directions; PacketPump still retries if the OS caps these sizes.
+            int bufferSize = 256 * 1024;
+            setsockopt(_pair[i], SOL_SOCKET, SO_SNDBUF, &bufferSize, sizeof(bufferSize));
+            setsockopt(_pair[i], SOL_SOCKET, SO_RCVBUF, &bufferSize, sizeof(bufferSize));
         }
         result = openconnect_setup_tun_fd(_vpn, _pair[0]);
         if (result) goto finished;

@@ -68,6 +68,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.passwordReference = reference
                 let previous = try? self.store.read(DiagnosticSnapshot.self, name: "diagnostics", fallback: DiagnosticSnapshot())
                 self.snapshot = DiagnosticSnapshot()
+                self.snapshot.dtlsEnabled = self.profile?.useDTLS
                 self.snapshot.events = previous?.events ?? []
                 self.record("正在准备连接")
                 let monitor = NWPathMonitor()
@@ -381,6 +382,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         snapshot.updatedAt = Date()
         if let pump {
             snapshot.packetsToTunnel = pump.sent; snapshot.packetsFromTunnel = pump.received; snapshot.droppedPackets = pump.dropped
+            snapshot.packetPump = pump.diagnostics
         }
         return snapshot
     }

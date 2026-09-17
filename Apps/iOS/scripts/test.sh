@@ -6,6 +6,7 @@ xcrun swiftc -sdk "$(xcrun --sdk macosx --show-sdk-path)" -module-cache-path "$P
   Common/VPNProfile.swift Common/VPNProfile+AutoConnect.swift Common/NetworkPlan.swift Common/PacketCodec.swift Common/RecoveryPolicy.swift Common/DiagnosticPersistence.swift Common/ConnectionQuality.swift Tests/main.swift \
   -o .build/tests/ios-logic-tests
 .build/tests/ios-logic-tests
+bash scripts/test-packet-pump.sh
 python3 - <<'PY'
 from pathlib import Path
 import plistlib
