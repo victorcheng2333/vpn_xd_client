@@ -33,8 +33,13 @@ static int script_setenv(struct openconnect_info *v, const char *key, const char
 static int command_asprintf(char **out, const char *format, const char *path)
 {
     if (fault == COMMAND_ALLOCATION) return -1;
-    *out = tracked_malloc(128); assert(*out);
-    return snprintf(*out, 128, format, path);
+    static const char command[] = "\"owned-helper.exe\" --network-script";
+    assert(!strcmp(format, "\"%s\" --network-script") && !strcmp(path, "owned-helper.exe"));
+    char *buffer = tracked_malloc(sizeof(command));
+    if (!buffer) return -1;
+    memcpy(buffer, command, sizeof(command));
+    *out = buffer;
+    return (int)sizeof(command) - 1;
 }
 static wchar_t *create_script_env(struct openconnect_info *v)
 { (void)v; if (fault == ENV_ALLOCATION) return NULL; wchar_t *p = tracked_malloc(sizeof(*p)); assert(p); *p = 0; return p; }

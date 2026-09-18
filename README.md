@@ -18,7 +18,7 @@
 
 ## 直接使用
 
-**当前源码的目标正式版本为 1.1.27（build 38）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
+**当前源码的目标正式版本为 1.1.28（build 39）。** 安装包以 [GitHub Releases](https://github.com/victorcheng2333/vpn_xd_client/releases) 实际发布内容为准；当前发布仓库公开，可直接下载和检查更新。1.1.10 已确认存在路由校验和清理回归。
 
 Windows 下载 `XD-VPN-1.1.25-Windows-x64.exe`，Android 下载 `XD-VPN-1.1.25-Android.apk`；三端安装包位于同一个 Release。iOS 仍通过 TestFlight 分发。
 
@@ -107,7 +107,7 @@ bash scripts/test-packaging.sh
 BUILD_NUMBER=32 bash scripts/package.sh
 ```
 
-正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.27`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.27` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
+正式发布默认在本机执行 `bash scripts/release.sh prepare v1.1.28`，完成 ARM／Intel 构建、测试、公司签名和 Apple 公证后，再用 `bash scripts/release.sh publish v1.1.28` 上传 GitHub Release。需要先提交代码并创建匹配标签，发布前推送版本提交和标签。GitHub Actions 保留手动发布入口。两条流程均强制签名与公证，验证实际票据、内嵌版本、渠道和源码提交后才发布；开发／测试包禁止进入正式 Release，已发布版本禁止覆盖。
 
 客户端菜单「检查更新…」及侧栏版本号可打开更新窗口，正式版启动时按 24 小时间隔检查 GitHub Latest。私有仓库使用只存本机钥匙串的只读 Token；下载包通过大小和 SHA-256 校验后才可用于安装。升级前断开并退出，拖入 Applications，按提示升级系统助手；不自动替换运行中的应用或助手。
 

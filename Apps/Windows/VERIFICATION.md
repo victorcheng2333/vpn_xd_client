@@ -6,6 +6,7 @@
 - `test-network.ps1` 增加 12 组回归：初始协商与兼容默认值、后续 MTU 降低/升高、重复通知、TLS reconnect、非法/缺失值、接口归属、外部漂移、设置失败、读回不一致、journal 写入失败和初始配置前通知。Windows 发布构建的现有 `build.ps1` 会运行整个 PowerShell 5.1 隔离测试套件。
 - 本机使用仓库 `.build` 内的隔离 PowerShell 7.6/macOS 对两个脚本做语法解析，并使用生产 `network.ps1`、真实 RouteAudit 和替身网络 cmdlet 跑通上述 12 组。相同测试对修复前脚本在首次 `mtu` 通知处复现 `hook.phase` 失败。这个本地结果不替代 Windows PowerShell 5.1 CI、实际 Wintun 驱动和真实 VPN 上传测速；完整 Windows 发布验证由对应构建流水线执行。
 - 原生 Windows hook 的命令分配失败改为返回 `-ENOMEM`，构建脚本环境失败也中止，不以 NULL 环境启动并继承过期设置；设置 reason 失败同样传播。新增 6 组隔离检查直接编译真实 `script_config_tun` 函数，以本地内存/WinAPI 替身覆盖 `mtu`、`connect`、`reconnect` 各自的三类内存失败和正常成功路径，验证无子进程启动、无内存泄漏或错误 ready 标记。macOS 本机全部通过，修复前函数失败；该检查也接入 Windows 原生发布构建。共享补丁单独变更会触发 Windows CI。
+- 首轮 Windows CI 在测试替身的 `snprintf` 内联处触发 MinGW GCC 的 `-Werror=format-truncation`（null destination pointer），尚未进入生产引擎编译。替身现改为明确检查局部分配结果后复制固定测试命令，并校验收到的格式和路径；保留三种故障注入、分配计数与 ready 断言。本地 6 组重新通过，GCC/完整 Windows 验证由下一次 CI 完成。
 
 ## 2026-09-09 · 0.1.3 安装目录运行时编译回归
 

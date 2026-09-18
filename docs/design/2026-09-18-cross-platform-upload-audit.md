@@ -100,3 +100,5 @@ Android `build-engine.sh:71–106` 对原生库及 JNI 使用 `-O2`；macOS `scr
 发布前本机已完成：共同 native guard 回归（含 Windows 分支）；macOS arm64 引擎完整重建及 238 项 Release Swift 测试；Android 两 ABI 编译、Debug/R8 Release、lint、24 项 JVM 和 API 32 模拟器 10 项原生引擎测试；iOS 138 项逻辑检查、真实包泵回归、模拟器原生设置回调与本地 TLS 双向传包/恢复、iPhoneOS App/Extension 构建；Windows 实际脚本配替身网络接口的新增 12 组回归，以及原生脚本失败注入。Windows 完整编译、PowerShell 5.1 和 SYSTEM 服务由发布 CI 继续验收。
 
 用户追加要求的 Android 真机调试已完成：PKX110 / Android 16 保留配置覆盖安装，首次连接与手动断开重连均成功；两次 TLS 会话的引擎 MTU 和独立内核 ioctl 读数均为 1472，业务 HEAD 返回 HTTP 200，结束恢复未连接状态。详见 `Apps/Android/MTU-VERIFICATION-2026-09-18.md`。此次真机及模拟器/隔离验证不代替真实 DTLS 路径和吞吐验收；切换瞬间已在途的旧尺寸数据仍可能重传。具体安装包是否已发布以 GitHub Release、TestFlight 远端状态及各自产物回执为准。
+
+发布构建补充：`v1.1.27` 的 Windows GCC 检查发现测试替身中的格式化指针触发严格告警；新鲜 Android CI 同时发现既有 Gradle Wrapper SHA-256 多一个字符。已修正测试替身、Wrapper 校验和和 CI SDK 初始化，正式安装包目标递增为 `v1.1.28 / build 39`，不移动旧标签。产品 MTU 修复逻辑不变；Android 上述真机验证针对 `1.1.27-dev.38`，iOS `0.1.0 (10)` 使用同一修复逻辑。
