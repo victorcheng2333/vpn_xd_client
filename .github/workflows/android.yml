@@ -42,10 +42,10 @@ jobs:
         with:
           path: Apps/Android/.build/engine/downloads
           key: android-sources-${{ hashFiles('Apps/Android/scripts/build-engine.sh') }}
-      - name: Build and verify both ABIs
-        run: bash Apps/Android/scripts/check.sh
       - name: Test native engine, service, storage and Compose
         run: bash Apps/Android/scripts/ci-device-test.sh ${{ matrix.api }}
+      - name: Build and verify both ABIs
+        run: bash Apps/Android/scripts/check.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
