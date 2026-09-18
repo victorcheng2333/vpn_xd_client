@@ -1,10 +1,10 @@
 name: Windows
 on:
   pull_request:
-    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', 'scripts/patch-openconnect-mtu.py', 'scripts/test-openconnect-mtu.py', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
   push:
     branches: [main, codex/windows-support]
-    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
+    paths: ['Apps/Windows/**', 'Resources/Info.plist', 'scripts/windows/**', 'scripts/release-windows.ps1', 'scripts/patch-openconnect-mtu.py', 'scripts/test-openconnect-mtu.py', '.github/workflows/windows-release.yml', '.github/workflows/windows.yml']
   workflow_dispatch:
 permissions:
   contents: read

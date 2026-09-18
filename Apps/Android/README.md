@@ -6,6 +6,8 @@
 
 [统计调度节能优化验证 09-11](ENERGY-VERIFICATION-2026-09-11.md)
 
+[MTU 同步修复验证 09-18](MTU-VERIFICATION-2026-09-18.md)
+
 ## 使用
 
 1. 设置页填写 HTTPS 服务器、用户名、密码并保存。默认网关和 iOS 相同；密码留空保留已存密码。
@@ -48,6 +50,8 @@ bash scripts/check.sh
 
 ```sh
 ./gradlew :app:testDebugUnitTest :app:lintDebug
+# Host regression of production JNI settings and descriptor ownership (after native build).
+bash scripts/test-engine-settings.sh
 # 在可丢弃的模拟器中执行；使用合成密码和仅监听127.0.0.1的临时TLS网关。
 ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest
 # Linux CI 的 API28 / API36 系统服务、JNI、存储、UI矩阵
@@ -65,9 +69,11 @@ bash scripts/ci-device-test.sh 36
 - `engine/`、`native/engine.c`：Kotlin JNI契约、系统证书链、单worker库会话。
 - `service/`：VpnService、NOT_VPN物理网络、前台通知、TUN持有与重建、取消清理。
 - `ui/`：原生Compose页面与状态动画。
-- `scripts/patch-openconnect.py`：只作用于固定9.21源码的Android补丁；不启动脚本、只接外部TUN、socket保护失败返回错误。保护回调是**本构建的局部ABI变更**，不可混用上游未修改头文件/二进制。
+- `scripts/patch-openconnect.py`：只作用于固定9.21源码的Android补丁；不启动脚本、只接外部TUN、socket保护失败返回错误。根目录 `scripts/patch-openconnect-mtu.py` 为各端共用的同步 MTU 通知补丁。保护和 MTU 回调是**本构建的局部ABI变更**，不可混用上游未修改头文件/二进制。
 
 Service在冷恢复期间保留系统TUN以避免先放行原全隧道流量；JNI独占复制的fd。网关下发的设置与已应用的相同时（传输层重连、同地址冷恢复）不重建系统接口，只再复制一份描述符，避免每次重连都重置全系统的连接。物理网络只在本机地址变化时强制引擎重连，DNS/路由抖动不触发；引擎侧 DPD 30 秒，换网请求在认证期间也会保留，且同一时刻最多排队一次暂停命令。断开时先撤回持久化意图，再取消命令管道，等worker退出后释放fd、监听器和通知。网关DNS使用选定物理网络，TLS/DTLS新socket先protect再绑定物理Network；整个App不绕过VPN。
+
+初次系统 TUN 由 OpenConnect 的延迟 setup 回调建立，等待首次 DTLS 尝试完成或回退 TLS；只有系统接口设置成功才报告已连接。运行中 MTU 变化在下一次读取 TUN 前同步到 VpnService，涵盖 PSK 开销调整、探测、传输切换与重新协商。相同 MTU 不触发额外更新；变化时按新计划替换接口并切换 JNI fd，设置失败终止会话。Android 的接口重建可能使现有业务连接需要重试，须在真机上回归；隔离测试不代表已验证 DTLS 真机吞吐。
 
 ## 分发准备
 

@@ -73,6 +73,18 @@ s = s.replace(lines[0], '\tif (asprintf(&cmd, "\\"%s\\" --network-script", vpnin
 a = s.index('static const char *script_engine(')
 b = s.index('\nint script_config_tun(', a)
 s = s[:a] + s[b:]
+# A failed hook must never look successful to the MTU synchronization guard.
+# In particular, passing NULL as CreateProcessW's environment would silently
+# inherit the parent's environment instead of the freshly negotiated settings.
+anchor = '\tscript_setenv(vpninfo, "reason", reason, 0, 0);'
+assert s.count(anchor) == 1
+s = s.replace(anchor, '\tret = script_setenv(vpninfo, "reason", reason, 0, 0);\n\tif (ret)\n\t\treturn ret;')
+anchor = '\tif (asprintf(&cmd, "\\"%s\\" --network-script", vpninfo->vpnc_script) == -1)\n\t\treturn 0;'
+assert s.count(anchor) == 1
+s = s.replace(anchor, anchor.replace('return 0;', 'return -ENOMEM;'))
+anchor = '\tscript_env = create_script_env(vpninfo);'
+assert s.count(anchor) == 1
+s = s.replace(anchor, anchor + '\n\tif (!script_env) {\n\t\tret = -ENOMEM;\n\t\tgoto cleanup;\n\t}')
 anchor = '\t\tret = WaitForSingleObject(pi.hProcess,10000);'
 assert s.count(anchor) == 1
 s = s.replace(anchor, anchor.replace('10000', '35000') + '''
@@ -83,8 +95,8 @@ s = s.replace(anchor, anchor.replace('10000', '35000') + '''
 anchor = '\tfree(script_env);'
 assert s.count(anchor) == 1
 s = s.replace(anchor, anchor + '''
-    if (ret == 0 && (!strcmp(reason, "connect") || !strcmp(reason, "reconnect")))
-        vpn_progress(vpninfo, PRG_INFO, "XDVPN_HOOK_READY\\n");''')
+\tif (ret == 0 && (!strcmp(reason, "connect") || !strcmp(reason, "reconnect")))
+\t\tvpn_progress(vpninfo, PRG_INFO, "XDVPN_HOOK_READY\\n");''')
 s = s.replace('Script did not complete within 10 seconds.', 'Script did not complete within 35 seconds.')
 script.write_text(s, encoding='utf-8', newline='\n')
 

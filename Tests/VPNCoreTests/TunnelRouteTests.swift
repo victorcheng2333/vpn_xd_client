@@ -26,12 +26,13 @@ private final class RouteFixture {
                   self.updates.append((action, route))
                   if self.failMutation { throw RouteFailure.system("fixture", EADDRNOTAVAIL) }
                   if !self.ignoreMutation { self.current = action == .delete ? self.routeAfterDelete : route }
-              }))
+              }), interfaces: .init(read: { _ in .init(index: 999, ipv4: ["10.8.0.2"], mtu: 1440) },
+                                    setMTU: { _, _ in XCTFail("Unchanged MTU must not be written") }))
     }
 }
 
 final class TunnelRouteTests: XCTestCase {
-    private let env = ["VPNPID": "42424", "TUNDEV": "utun99999", "INTERNAL_IP4_ADDRESS": "10.8.0.2", "INTERNAL_IP4_DNS": "172.24.4.79", "VPNGATEWAY": "180.169.125.54"]
+    private let env = ["VPNPID": "42424", "TUNDEV": "utun99999", "INTERNAL_IP4_ADDRESS": "10.8.0.2", "INTERNAL_IP4_DNS": "172.24.4.79", "VPNGATEWAY": "180.169.125.54", "INTERNAL_IP4_MTU": "1440"]
     private func session(_ fixture: RouteFixture) throws -> TunnelNetworkSession {
         let session = try TunnelNetworkSession.create(prefix: "/private/tmp/xdvpn-route-unit-", owner: geteuid(), state: fixture.access)
         try session.claim(environment: env)

@@ -229,7 +229,11 @@ class XDVpnService : VpnService(), NativeCallbacks {
                 val existing = tunnel
                 // Re-establishing identical settings replaces the system VPN interface and resets every app's
                 // sockets on each transport reconnect. Hand the worker another descriptor of the live interface instead.
-                if (existing != null && plan == appliedPlan) return ParcelFileDescriptor.dup(existing.fileDescriptor).detachFd()
+                if (existing != null && plan == appliedPlan) {
+                    val duplicate = ParcelFileDescriptor.dup(existing.fileDescriptor).detachFd()
+                    if (BuildConfig.DEBUG) android.util.Log.d("XDVPN-MTU", "Applied engine plan mtu=${plan.mtu} reused=true")
+                    return duplicate
+                }
                 val builder = Builder().setSession("XD VPN").setMtu(plan.mtu).setBlocking(false)
                     .setConfigureIntent(openAppIntent()).setUnderlyingNetworks(selected?.let { arrayOf(it) } ?: emptyArray())
                 if (Build.VERSION.SDK_INT >= 29) builder.setMetered(false)
@@ -241,6 +245,7 @@ class XDVpnService : VpnService(), NativeCallbacks {
                 if (cancelled.get()) { newTun.close(); return -1 }
                 val duplicate = try { ParcelFileDescriptor.dup(newTun.fileDescriptor).detachFd() } catch (error: Exception) { newTun.close(); throw error }
                 existing?.close(); tunnel = newTun; appliedPlan = plan
+                if (BuildConfig.DEBUG) android.util.Log.d("XDVPN-MTU", "Applied engine plan mtu=${plan.mtu} reused=false")
                 repo.update { it.copy(address = plan.addresses.joinToString(" / ") { address -> address.address }) }
                 duplicate // JNI worker closes duplicate; service keeps interface alive across cold recovery.
             }

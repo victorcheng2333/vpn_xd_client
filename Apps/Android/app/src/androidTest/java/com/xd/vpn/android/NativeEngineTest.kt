@@ -2,6 +2,7 @@ package com.xd.vpn.android
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
 import com.xd.vpn.android.core.Profile
 import com.xd.vpn.android.engine.*
@@ -95,7 +96,45 @@ class NativeEngineTest {
             assertEquals(1, gateway.usernameSubmissions.get())
         }
     }
-    inner class Gateway(wrongHost: Boolean = false, private val forms: Boolean = false, private val stall: Boolean = false, private val staged: Boolean = false) : AutoCloseable {
+    @Test fun connectedIsReportedOnlyAfterDeferredTunnelSetup() {
+        Gateway(tunnel = true).use { gateway ->
+            val engine = engine(gateway.port); engine.network(network())
+            val pipe = ParcelFileDescriptor.createPipe()
+            val configurations = AtomicInteger(0); val connections = AtomicInteger(0)
+            try {
+                val result = run(engine, object : Callbacks() {
+                    override fun verifyCertificate(chain: Array<ByteArray>, hostname: String) = true
+                    override fun configureTunnel(fields: Array<String>, dns: Array<String>, includes: Array<String>, excludes: Array<String>, domains: Array<String>, mtu: Int): Int {
+                        assertEquals(1280, mtu); assertEquals(0, connections.get()); configurations.incrementAndGet()
+                        return ParcelFileDescriptor.dup(pipe[0].fileDescriptor).detachFd()
+                    }
+                    override fun onEvent(code: Int) {
+                        if (code == NativeEvent.CONNECTED.code) {
+                            assertEquals(1, configurations.get()); connections.incrementAndGet(); engine.cancel()
+                        }
+                    }
+                })
+                assertEquals(-4, result[0]); assertEquals(0, result[4])
+                assertEquals(1, configurations.get()); assertEquals(1, connections.get())
+            } finally { pipe.forEach { it.close() } }
+        }
+    }
+    @Test fun failedDeferredTunnelSetupNeverReportsConnected() {
+        Gateway(tunnel = true).use { gateway ->
+            val engine = engine(gateway.port); engine.network(network())
+            val configurations = AtomicInteger(0); val connections = AtomicInteger(0)
+            val result = run(engine, object : Callbacks() {
+                override fun verifyCertificate(chain: Array<ByteArray>, hostname: String) = true
+                override fun configureTunnel(fields: Array<String>, dns: Array<String>, includes: Array<String>, excludes: Array<String>, domains: Array<String>, mtu: Int): Int {
+                    assertEquals(1280, mtu); configurations.incrementAndGet(); return -1
+                }
+                override fun onEvent(code: Int) { if (code == NativeEvent.CONNECTED.code) connections.incrementAndGet() }
+            })
+            assertNotEquals(0, result[0]); assertEquals(1, result[4])
+            assertEquals(1, configurations.get()); assertEquals(0, connections.get())
+        }
+    }
+    inner class Gateway(wrongHost: Boolean = false, private val forms: Boolean = false, private val stall: Boolean = false, private val staged: Boolean = false, private val tunnel: Boolean = false) : AutoCloseable {
         val connections = AtomicInteger(0); val requests = AtomicInteger(0); val passwordSubmissions = AtomicInteger(0)
         val usernameSubmissions = AtomicInteger(0)
         private val executor = Executors.newCachedThreadPool()
@@ -139,6 +178,14 @@ class NativeEngineTest {
                 chars.fill(' ')
                 requests.incrementAndGet()
                 if (first.startsWith("CONNECT ")) {
+                    if (tunnel) {
+                        output.write(("HTTP/1.1 200 OK\r\nX-CSTP-Version: 1\r\nX-CSTP-Address: 10.20.0.8\r\n" +
+                            "X-CSTP-Netmask: 255.255.255.255\r\nX-CSTP-MTU: 1280\r\nX-CSTP-DNS: 10.20.0.1\r\n\r\n").toByteArray())
+                        output.flush()
+                        // Keep the synthetic transport alive until native cancellation/cleanup.
+                        while (!closed && input.read() >= 0) { }
+                        return
+                    }
                     output.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray()); output.flush(); return
                 }
                 val stagedInput = if (usernameSubmissions.get() == 0) "text\" name=\"username" else "password\" name=\"password"

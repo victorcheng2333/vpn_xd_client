@@ -47,7 +47,7 @@ if [ ! -x "$TOOLS/bin/pkgconf" ]; then
     make install
   )
 fi
-STAMP="$(shasum -a 256 scripts/build-engine.sh scripts/patch-openconnect.py)-$PWD-$SDKROOT-$(xcrun clang --version)"
+STAMP="$(shasum -a 256 scripts/build-engine.sh scripts/patch-openconnect.py ../../scripts/patch-openconnect-mtu.py)-$PWD-$SDKROOT-$(xcrun clang --version)"
 if [ -s "$TARGET/lib/libopenconnect.a" ] && [ -f "$TARGET/recipe" ] && [ "$(cat "$TARGET/recipe")" = "$STAMP" ]; then
   echo "Engine cached: $SDK"; exit 0
 fi
@@ -58,7 +58,9 @@ mkdir -p "$TARGET/sources" "$TARGET/lib" "$TARGET/include" "$TARGET/licenses"
 tar -xzf "$DOWNLOADS/openconnect-9.21.tar.gz" -C "$TARGET/sources"
 SSL="$TARGET/sources/openssl-3.6.2"
 OC="$TARGET/sources/openconnect-9.21"
+python3 ../../scripts/patch-openconnect-mtu.py "$OC"
 python3 scripts/patch-openconnect.py "$OC"
+python3 ../../scripts/test-openconnect-mtu.py "$OC"
 FLAGS="-target $TRIPLE -isysroot $SDKROOT -O2 -fapplication-extension"
 (
   cd "$SSL"

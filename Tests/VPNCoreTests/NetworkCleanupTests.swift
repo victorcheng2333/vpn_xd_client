@@ -14,7 +14,9 @@ private final class TestNetworkStore {
         .init(read: { self.get($0) }, write: { self.put($0, $1) }, remove: { keys in
             if self.refuseRemoval { return }
             for key in keys { self.put(key, nil) }
-        }, interfaceExists: { _ in self.interfaceProbe?() ?? self.liveInterface })
+        }, interfaceExists: { _ in self.interfaceProbe?() ?? self.liveInterface }, interfaces: .init(
+            read: { _ in .init(index: 999, ipv4: ["10.8.0.2"], mtu: 1440) },
+            setMTU: { _, _ in XCTFail("Unchanged MTU must not be written") }))
     }
     func installTunnel() {
         put("State:/Network/Service/utun99999/IPv4", ["InterfaceName": "utun99999", "Addresses": ["10.8.0.2"], "OverridePrimary": 1])
@@ -25,7 +27,7 @@ private final class TestNetworkStore {
 final class NetworkCleanupTests: XCTestCase {
     private let prefix = "State:/Network/Service/utun99999/"
     private func environment(pid: Int32 = 12345) -> [String: String] {
-        ["VPNPID": String(pid), "TUNDEV": "utun99999", "INTERNAL_IP4_ADDRESS": "10.8.0.2", "INTERNAL_IP4_DNS": "172.24.4.79"]
+        ["VPNPID": String(pid), "TUNDEV": "utun99999", "INTERNAL_IP4_ADDRESS": "10.8.0.2", "INTERNAL_IP4_DNS": "172.24.4.79", "INTERNAL_IP4_MTU": "1440"]
     }
     private func session(_ store: TestNetworkStore) throws -> TunnelNetworkSession {
         try .create(prefix: "/private/tmp/xdvpn-network-test-", owner: geteuid(), state: store.access)

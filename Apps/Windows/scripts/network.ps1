@@ -7,7 +7,7 @@ $statePath = Join-Path $root 'network.json'
 $readyPath = Join-Path $root 'configured'
 $lockPath = Join-Path $root 'lock'
 $reason = if ($Mode -eq 'Hook') { [Environment]::GetEnvironmentVariable('reason') } else { $Mode.ToLowerInvariant() }
-$phase = if ($reason -in @('connect','disconnect','attempt-reconnect','reconnect','pre-init','verify','cleanup')) { $reason } else { 'invalid' }
+$phase = if ($reason -in @('connect','disconnect','attempt-reconnect','reconnect','mtu','pre-init','verify','cleanup')) { $reason } else { 'invalid' }
 $failureCode = 'hook.failed'
 function Diagnostic([string]$outcome, [string]$code, $detail) {
     # Only callers' numeric network fields and fixed codes enter this log. Never log
@@ -136,6 +136,41 @@ try {
         $nic = Get-NetAdapter -IncludeHidden | Where-Object { $_.ifIndex -eq $index } | Select-Object -First 1
         if ($nic -and $nic.InterfaceGuid.ToString() -ne $guid) { Reject 'interface.identity' }
         return $nic
+    }
+    function Negotiated-Mtu([bool]$allowDefault) {
+        $value = [Environment]::GetEnvironmentVariable('INTERNAL_IP4_MTU')
+        if (-not $value -and $allowDefault) { return 1400 }
+        if ($value -notmatch '^\d{3,4}$' -or [int]$value -lt 576 -or [int]$value -gt 9000) { Reject 'input.mtu' }
+        return [int]$value
+    }
+    function Check-OwnedTunnel {
+        if (-not $state.InterfaceGuid -or $state.SchemaVersion -ne 2) { Reject 'journal.version' }
+        $index = [Environment]::GetEnvironmentVariable('TUNIDX')
+        $parsedIndex = 0
+        if ($index -notmatch '^\d{1,10}$' -or -not [int]::TryParse($index, [ref]$parsedIndex) -or $parsedIndex -le 0) { Reject 'input.tunnel-index' }
+        if ($parsedIndex -ne $state.InterfaceIndex) { Reject 'interface.identity' }
+        $nic = Adapter $state.InterfaceIndex $state.InterfaceGuid
+        if (-not $nic -or $nic.Name -ne $owner.adapter -or $nic.Status -ne 'Up') { Reject 'interface.identity' }
+    }
+    function Update-Mtu([int]$mtu) {
+        # The MTU hook must never reconfigure routes, DNS, addresses or a reused
+        # adapter. Reject unexplained drift instead of adopting another writer.
+        $interfaces = @(Get-NetIPInterface -AddressFamily IPv4 | Where-Object InterfaceIndex -eq $state.InterfaceIndex)
+        if ($interfaces.Count -ne 1 -or $interfaces[0].ConnectionState -ne 'Connected' -or
+            $interfaces[0].NlMtu -ne $state.Mtu -or $interfaces[0].InterfaceMetric -ne 3) { Reject 'interface.configuration' }
+        if ($state.Mtu -eq $mtu) { return }
+        $script:failureCode = 'interface.mtu-update'
+        Set-NetIPInterface -InterfaceIndex $state.InterfaceIndex -AddressFamily IPv4 -NlMtuBytes $mtu -PolicyStore ActiveStore
+        $interfaces = @(Get-NetIPInterface -AddressFamily IPv4 | Where-Object InterfaceIndex -eq $state.InterfaceIndex)
+        if ($interfaces.Count -ne 1 -or $interfaces[0].ConnectionState -ne 'Connected' -or
+            $interfaces[0].NlMtu -ne $mtu -or $interfaces[0].InterfaceMetric -ne 3) { Reject 'interface.mtu-readback' }
+        # Publish the new expectation only after the kernel confirms it. Any
+        # write/readback/journal failure revokes readiness and fails the hook.
+        $previous = $state.Mtu
+        $state.Mtu = $mtu
+        $script:failureCode = 'journal.mtu-save'
+        Save-State
+        Diagnostic 'ok' 'interface.mtu-updated' @{ interface=$state.InterfaceIndex; previousMtu=$previous; mtu=$mtu }
     }
     function Matching-Route($r) {
         return @(Get-NetRoute -AddressFamily IPv4 -PolicyStore ActiveStore -ErrorAction Stop | Where-Object {
@@ -286,8 +321,7 @@ try {
         $state.Excludes = @(); for ($i=0; $i -lt (Count 'CISCO_SPLIT_EXC'); $i++) { $state.Excludes += Prefix 'CISCO_SPLIT_EXC' $i }
         $state.Excludes=@($state.Excludes | Select-Object -Unique)
         $state.DnsRoutes=@($state.Dns | Where-Object { -not (In-Prefixes $state.Excludes $_) -and -not (In-Prefixes $state.Includes $_) } | ForEach-Object { $_+'/32' })
-        $mtuValue = [Environment]::GetEnvironmentVariable('INTERNAL_IP4_MTU'); $state.Mtu = 1400
-        if ($mtuValue) { if ($mtuValue -notmatch '^\d{3,4}$' -or [int]$mtuValue -lt 576 -or [int]$mtuValue -gt 9000) { Reject 'input.mtu' }; $state.Mtu = [int]$mtuValue }
+        $state.Mtu = Negotiated-Mtu $true
         $state.Domain = [Environment]::GetEnvironmentVariable('CISCO_DEF_DOMAIN')
         if (-not $state.Domain) { $state.Domain='' }
         if ($state.Domain -and ($state.Domain.Length -gt 253 -or $state.Domain -notmatch '^[A-Za-z0-9.-]+$')) { Reject 'input.dns-suffix' }
@@ -301,9 +335,8 @@ try {
         foreach ($prefix in @($state.Includes)+@($state.DnsRoutes)) { Add-OwnedRoute $prefix $state.InterfaceIndex '0.0.0.0' $false }
         Verify-Network $true
     } elseif ($reason -eq 'attempt-reconnect' -or $reason -eq 'reconnect') {
-        if (-not $state.InterfaceGuid -or $state.SchemaVersion -ne 2) { Reject 'journal.version' }
-        $nic=Adapter $state.InterfaceIndex $state.InterfaceGuid
-        if (-not $nic -or $nic.Name -ne $owner.adapter) { Reject 'interface.identity' }
+        Check-OwnedTunnel
+        if ($reason -eq 'reconnect') { Update-Mtu (Negotiated-Mtu $false) }
         Refresh-Bypass
         Check-KernelRoute $state.Gateway $state.BypassIndex $state.BypassNextHop
         Diagnostic 'ok' 'bypass.refreshed' @{ gateway=$state.Gateway; interface=$state.BypassIndex; nextHop=$state.BypassNextHop }
@@ -311,8 +344,12 @@ try {
             foreach ($prefix in @($state.Includes)+@($state.DnsRoutes)) { Add-OwnedRoute $prefix $state.InterfaceIndex '0.0.0.0' $false }
             Verify-Network $true
         }
+    } elseif ($reason -eq 'mtu') {
+        Check-OwnedTunnel
+        Update-Mtu (Negotiated-Mtu $false)
+        Verify-Network $false
     } elseif ($reason -ne 'pre-init') { Reject 'hook.phase' }
-    if ($Mode -eq 'Hook' -and $reason -in @('connect','reconnect') -and $state.InterfaceGuid) { [IO.File]::WriteAllText($readyPath, $Session.ToString('D')) }
+    if ($Mode -eq 'Hook' -and $reason -in @('connect','reconnect','mtu') -and $state.InterfaceGuid) { [IO.File]::WriteAllText($readyPath, $Session.ToString('D')) }
 } catch {
     Remove-Item -LiteralPath $readyPath -ErrorAction SilentlyContinue
     Diagnostic 'failed' $failureCode @{ errorType=$_.Exception.GetType().FullName; hresult=$_.Exception.HResult; line=$_.InvocationInfo.ScriptLineNumber }

@@ -10,6 +10,7 @@ struct NetworkStateAccess {
     var remove: ([String]) throws -> Void
     var interfaceExists: (String) -> Bool
     var routes: TunnelRouteAccess? = nil
+    var interfaces: TunnelInterfaceAccess? = nil
 
     static func live() throws -> Self {
         guard let store = SCDynamicStoreCreate(nil, "XD VPN Network Cleanup" as CFString, nil, nil) else {
@@ -32,7 +33,7 @@ struct NetworkStateAccess {
             guard SCDynamicStoreSetMultiple(store, nil, keys as CFArray, nil) else {
                 throw VPNError.system(EngineOutput.networkCleanupFailureMessage)
             }
-        }, interfaceExists: { if_nametoindex($0) != 0 }, routes: .live(store: store))
+        }, interfaceExists: { if_nametoindex($0) != 0 }, routes: .live(store: store), interfaces: .live)
     }
 }
 
@@ -179,6 +180,33 @@ public final class TunnelNetworkSession {
         }
         diagnostic("XDVPN route cleanup verified server=\(record.server) external=\(record.external)")
         guard unlink(routePath) == 0 else { throw RouteFailure.invalid }
+    }
+
+    /// The engine waits for this hook before reading another packet. An MTU
+    /// mismatch must fail the hook, never continue with truncated upload data.
+    func synchronizeMTU(environment: [String: String], diagnostic: (String) -> Void) throws {
+        guard let raw = environment["INTERNAL_IP4_MTU"], !raw.isEmpty,
+              raw.utf8.allSatisfy({ (48...57).contains($0) }),
+              let target = Int(raw), (576...9000).contains(target) else { throw TunnelMTUFailure.invalid }
+        guard let record = try readRecord(), let interfaces = state.interfaces,
+              environment["VPNPID"].flatMap(Int32.init) == record.processID,
+              environment["TUNDEV"] == record.interface,
+              environment["INTERNAL_IP4_ADDRESS"] == record.ipv4 else { throw TunnelMTUFailure.identity }
+        let marker = "State:/Network/Service/\(record.interface)/XDVPN"
+        guard try state.read(marker)?["SessionID"] as? String == token else { throw TunnelMTUFailure.identity }
+        let before = try interfaces.read(record.interface)
+        guard before.index != 0, before.ipv4 == [record.ipv4] else { throw TunnelMTUFailure.identity }
+        if before.mtu == target {
+            diagnostic("XDVPN MTU verified unchanged interface=\(record.interface) mtu=\(target)")
+            return
+        }
+        try interfaces.setMTU(record.interface, target)
+        let after = try interfaces.read(record.interface)
+        guard after.index == before.index, after.ipv4 == before.ipv4, after.mtu == target,
+              try state.read(marker)?["SessionID"] as? String == token else {
+            throw TunnelMTUFailure.system("verify interface", EIO)
+        }
+        diagnostic("XDVPN MTU updated interface=\(record.interface) previous=\(before.mtu) mtu=\(target)")
     }
 
     func configureIPv4Service(environment: [String: String]) throws {

@@ -43,13 +43,11 @@ static void progress(void *context, int level, const char *format, ...) {
         [(__bridge OCEngine *)context emit:@"tls"];
     if (strstr(format, "Established DTLS connection"))
         [(__bridge OCEngine *)context emit:@"dtls"];
-    // dtls_detect_mtu() updates ip_info after the external tun fd and NE
-    // settings are already installed. It does not invoke the reconnect callback.
-    // Deliver the new settings on this same worker before it reads more packets.
-    if (strstr(format, "Detected MTU of %d bytes (was %d)")) {
-        OCEngine *engine = (__bridge OCEngine *)context;
-        if (![engine applySettings]) [engine cancel];
-    }
+}
+static int mtu_changed(void *context) {
+    // The shared engine guard observes final state after PSK overhead, probes
+    // and reconnects. A nonzero return stops it before the next TUN read.
+    return [(__bridge OCEngine *)context applySettings] ? 0 : -EIO;
 }
 static void reconnected(void *context) {
     OCEngine *engine = (__bridge OCEngine *)context;
@@ -223,6 +221,7 @@ static NSArray *routes(struct oc_split_include *head) {
         if (openconnect_set_protocol(_vpn, "anyconnect") || openconnect_set_reported_os(_vpn, "apple-ios") ||
             openconnect_parse_url(_vpn, _server.UTF8String)) { result = -EINVAL; goto finished; }
         openconnect_set_reconnected_handler(_vpn, reconnected);
+        openconnect_set_mtu_changed_handler(_vpn, mtu_changed);
         openconnect_set_reqmtu(_vpn, 1400);
         openconnect_set_dpd(_vpn, 30);
         [_control lock];

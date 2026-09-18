@@ -19,7 +19,10 @@ fetch https://www.wintun.net/builds/wintun-0.14.1.zip wintun-0.14.1.zip 07c25618
 rm -rf "$BUILD/source"
 mkdir -p "$BUILD/source"
 tar -xzf "$BUILD/downloads/openconnect-9.21.tar.gz" -C "$BUILD/source" --strip-components=1
+python "$ROOT/scripts/patch-openconnect-mtu.py" "$BUILD/source"
 python "$ROOT/Apps/Windows/native/patch-openconnect.py" "$BUILD/source"
+python "$ROOT/scripts/test-openconnect-mtu.py" "$BUILD/source"
+python "$ROOT/Apps/Windows/scripts/test-native-script.py" "$BUILD/source"
 cd "$BUILD/source"
 ./configure --host=x86_64-w64-mingw32 --disable-shared --enable-static --disable-nls --disable-maintainer-mode \
  --with-gnutls --without-openssl --without-libproxy --without-stoken --without-libpskc --without-gssapi --with-vpnc-script=XDVPN.Service.exe --with-builtin-json
@@ -46,6 +49,7 @@ cp "$BUILD/wintun/wintun/bin/amd64/wintun.dll" "$BUILD/runtime/"
 cp "$BUILD/wintun/wintun/LICENSE.txt" "$BUILD/licenses/Wintun.txt"
 cp COPYING* "$BUILD/licenses/"
 cp "$ROOT/Apps/Windows/native/patch-openconnect.py" "$BUILD/licenses/"
+cp "$ROOT/scripts/patch-openconnect-mtu.py" "$BUILD/licenses/"
 cp "$BUILD/downloads/openconnect-9.21.tar.gz" "$BUILD/licenses/"
 cp "$ROOT/Apps/Windows/scripts/build-engine.sh" "$BUILD/licenses/"
 # Ship MSYS2 package license files alongside the corresponding runtime DLLs.

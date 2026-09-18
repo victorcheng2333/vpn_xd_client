@@ -50,7 +50,7 @@ for ABI in $ABIS; do
   esac
   TARGET="$BUILD/$ABI"
   OUT="$ROOT/.build/jniLibs/$ABI"
-  STAMP="$(shasum -a 256 scripts/build-engine.sh scripts/patch-openconnect.py native/engine.c)-$ROOT-$NDK-$ABI"
+  STAMP="$(shasum -a 256 scripts/build-engine.sh scripts/patch-openconnect.py ../../scripts/patch-openconnect-mtu.py native/engine.c)-$ROOT-$NDK-$ABI"
   if [ -d "$TARGET/licenses" ]; then cp "$TARGET/licenses/"*.txt "$ROOT/.build/assets/licenses/"; fi
   if [ -s "$OUT/libxdvpn.so" ] && [ -f "$TARGET/recipe" ] && [ "$(cat "$TARGET/recipe")" = "$STAMP" ]; then
     echo "Engine cached: $ABI"; continue
@@ -67,7 +67,9 @@ for ABI in $ABIS; do
   rm -rf "$TARGET/src/openconnect-9.21"
   tar -xf "$DOWNLOADS/openconnect-9.21.tar.gz" -C "$TARGET/src"
   SSL="$TARGET/src/openssl-3.6.2"; XML="$TARGET/src/libxml2-2.15.4"; OC="$TARGET/src/openconnect-9.21"
+  python3 ../../scripts/patch-openconnect-mtu.py "$OC"
   python3 scripts/patch-openconnect.py "$OC"
+  python3 ../../scripts/test-openconnect-mtu.py "$OC"
   FLAGS='-O2 -fPIC -fstack-protector-strong -D_FORTIFY_SOURCE=2'
   export AR="$TC/bin/llvm-ar" RANLIB="$TC/bin/llvm-ranlib" STRIP="$TC/bin/llvm-strip"
   (

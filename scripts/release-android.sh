@@ -16,6 +16,7 @@ fi
 [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ] || { echo 'JDK 17 or 21 required; set JAVA_HOME.' >&2; exit 1; }
 # Unit tests, release lint (lintVital also runs inside assembleRelease) and the R8 release APK.
 (cd Apps/Android && ./gradlew --console=plain :app:testDebugUnitTest :app:lintRelease :app:assembleRelease)
+bash Apps/Android/scripts/test-engine-settings.sh
 APK=Apps/Android/app/build/outputs/apk/release/app-release.apk
 [ -s "$APK" ] || { echo 'Release APK is unsigned. Configure Apps/Android/signing.properties, ANDROID_KEYSTORE_* variables, or keep a local debug keystore.' >&2; exit 1; }
 python3 Apps/Android/scripts/verify-apk.py "$APK"

@@ -61,11 +61,13 @@ fi
 
 # Sources, objects and recipe stamps are isolated for each target architecture.
 # Include workspace and toolchain identity because generated files contain paths.
-RECIPE="$(shasum -a 256 scripts/build-openconnect.sh scripts/architectures.sh)-$PWD-$SDKROOT-$(xcrun clang --version)"
+RECIPE="$(shasum -a 256 scripts/build-openconnect.sh scripts/architectures.sh scripts/patch-openconnect-mtu.py)-$PWD-$SDKROOT-$(xcrun clang --version)"
 if [ ! -s "$TARGET_ROOT/openconnect" ] || [ ! -f "$TARGET_ROOT/recipe" ] || [ "$(cat "$TARGET_ROOT/recipe")" != "$RECIPE" ]; then
     rm -rf "$SOURCES/openssl-$OPENSSL_VERSION" "$SOURCES/openconnect-$OPENCONNECT_VERSION"
     tar -xzf "$DOWNLOADS/openssl-$OPENSSL_VERSION.tar.gz" -C "$SOURCES"
     tar -xzf "$DOWNLOADS/openconnect-$OPENCONNECT_VERSION.tar.gz" -C "$SOURCES"
+    python3 scripts/patch-openconnect-mtu.py "$SOURCES/openconnect-$OPENCONNECT_VERSION"
+    python3 scripts/test-openconnect-mtu.py "$SOURCES/openconnect-$OPENCONNECT_VERSION"
     case "$ARCH" in
         arm64) OPENSSL_TARGET=darwin64-arm64-cc ;;
         x86_64) OPENSSL_TARGET=darwin64-x86_64-cc ;;
@@ -119,6 +121,7 @@ cp "$SOURCES/openconnect-$OPENCONNECT_VERSION/www/licence.xml" "$LICENSES/OpenCo
 cp "$SOURCES/openssl-$OPENSSL_VERSION/LICENSE.txt" "$LICENSES/OpenSSL-Apache-2.0.txt"
 cp "$DOWNLOADS/GPL-2.0.txt" "$LICENSES/vpnc-script-GPL-2.0.txt"
 cp "$DOWNLOADS/vpnc-script" "$LICENSES/vpnc-script-source.sh"
+cp scripts/patch-openconnect-mtu.py "$LICENSES/"
 printf 'OpenConnect %s / OpenSSL %s / macOS 14+ / %s\n' "$OPENCONNECT_VERSION" "$OPENSSL_VERSION" "$ARCH" > "$LICENSES/VERSIONS.txt"
 # Cross builds do not require Rosetta or a machine that can execute the target.
 if [ "$ARCH" = "$(uname -m)" ]; then

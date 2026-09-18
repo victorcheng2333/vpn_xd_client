@@ -1,10 +1,10 @@
 name: Android
 on:
   pull_request:
-    paths: ["Apps/Android/**", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
+    paths: ["Apps/Android/**", "scripts/patch-openconnect-mtu.py", "scripts/test-openconnect-mtu.py", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
   push:
     branches: [main, "codex/android-*"]
-    paths: ["Apps/Android/**", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
+    paths: ["Apps/Android/**", "scripts/patch-openconnect-mtu.py", "scripts/test-openconnect-mtu.py", ".github/workflows/android.yml", "docs/design/2026-09-07-android-support.md"]
   workflow_dispatch:
 permissions:
   contents: read

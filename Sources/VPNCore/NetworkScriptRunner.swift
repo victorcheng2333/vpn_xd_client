@@ -58,7 +58,7 @@ enum NetworkScriptRunner {
 }
 
 public enum ManagedNetworkScript {
-    enum Reason: String { case preInit = "pre-init", connect, attemptReconnect = "attempt-reconnect", reconnect, disconnect }
+    enum Reason: String { case preInit = "pre-init", connect, attemptReconnect = "attempt-reconnect", reconnect, mtu, disconnect }
 
     public static func run(environment: [String: String]) -> Int32 {
         do {
@@ -95,6 +95,13 @@ public enum ManagedNetworkScript {
                 return 1
             }
         }
+        if reason == .mtu || reason == .reconnect {
+            do { try session.synchronizeMTU(environment: environment, diagnostic: diagnostic) }
+            catch {
+                diagnostic("XDVPN MTU configuration failed phase=\(reason.rawValue): \(error.localizedDescription)")
+                return 1
+            }
+        }
         if reason == .connect || reason == .attemptReconnect || reason == .reconnect {
             do { try session.prepareServerRoute(environment: environment, diagnostic: diagnostic) }
             catch RouteFailure.unavailable where reason != .connect {
@@ -105,11 +112,12 @@ public enum ManagedNetworkScript {
                 return 1
             }
         }
-        if reason == .attemptReconnect || reason == .reconnect {
+        if reason == .attemptReconnect || reason == .reconnect || reason == .mtu {
             // The bundled script only sets the server route in attempt-reconnect
             // (managedScript overrides that function with a no-op) and only runs
             // the empty /etc/vpnc/reconnect.d hooks in reconnect. Native
-            // preparation above has updated and verified the route. OpenConnect
+            // preparation above has updated and verified the route and MTU.
+            // The MTU-only phase must not rerun route or DNS configuration. OpenConnect
             // blocks its main loop until this hook returns, so never launch a
             // shell here: the old tunnel carries no traffic meanwhile, and the
             // attempt-reconnect shell once consumed the whole recovery deadline.

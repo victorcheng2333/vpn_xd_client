@@ -75,7 +75,12 @@ function Remove-NetIPAddress { [CmdletBinding(SupportsShouldProcess)]param([Para
 function Get-DnsClientServerAddress { [CmdletBinding()]param($InterfaceIndex,$AddressFamily) [pscustomobject]@{ServerAddresses=@($global:dns)} }
 function Set-DnsClientServerAddress { [CmdletBinding()]param($InterfaceIndex,$ServerAddresses,[switch]$ResetServerAddresses) if($ResetServerAddresses){$global:dns=@()}else{$global:dns=@($ServerAddresses)} }
 function Set-DnsClient { [CmdletBinding()]param($InterfaceIndex,$ConnectionSpecificSuffix) $global:domain=$ConnectionSpecificSuffix }
-function Set-NetIPInterface { [CmdletBinding()]param($InterfaceIndex,$AddressFamily,$InterfaceMetric,$NlMtuBytes,$PolicyStore) $global:mtu=$NlMtuBytes; $global:interfaceMetric=$InterfaceMetric }
+function Set-NetIPInterface { [CmdletBinding()]param($InterfaceIndex,$AddressFamily,$InterfaceMetric,$NlMtuBytes,$PolicyStore)
+    $global:mtuWrites++
+    if ($global:failMtu) { throw 'Injected MTU write failure' }
+    if (-not $global:ignoreMtu) { $global:mtu=$NlMtuBytes }
+    if ($PSBoundParameters.ContainsKey('InterfaceMetric')) { $global:interfaceMetric=$InterfaceMetric }
+}
 function Get-DnsClient { [CmdletBinding()]param($InterfaceIndex) [pscustomobject]@{ConnectionSpecificSuffix=$global:domain} }
 function Get-NetIPInterface { [CmdletBinding()]param($AddressFamily)
     foreach($idx in @(3,9,20,31)) { [pscustomobject]@{InterfaceIndex=$idx;NlMtu=$(if($idx -eq 9){$global:mtu}else{1500});InterfaceMetric=$(if($idx -eq 9){$global:interfaceMetric}else{1});ConnectionState=$(if($idx -in $global:disconnected){'Disconnected'}else{'Connected'})} }
@@ -94,13 +99,14 @@ function Find-NetRoute { [CmdletBinding()]param($RemoteIPAddress)
     $r
 }
 function Ready { Test-Path (Join-Path $env:ProgramData ('XDVPN\sessions\'+$session.ToString('D')+'\configured')) }
+function Journal { Get-Content -LiteralPath (Join-Path $env:ProgramData ('XDVPN\sessions\'+$session.ToString('D')+'\network.json')) -Raw | ConvertFrom-Json }
 function Rejects([scriptblock]$action,[string]$code) {
     $caught=$false
     try { & $action } catch { if($_.Exception.Message -notmatch [regex]::Escape($code)){throw}; $caught=$true }
     Assert ($caught -and -not (Ready)) ('Expected failure with no ready marker: '+$code)
 }
 function Reset {
-    $global:routes.Clear();$global:addresses.Clear();$global:dns=@();$global:failRoute=$false; $global:domain=''; $global:mtu=1400; $global:interfaceMetric=3; $global:addressState='Preferred'; $global:dadWait=0; $global:dadReadyAfter=0; $global:kernelWrong=$false; $global:disconnected=@(); $global:otherPhysical=$null; $global:heldLock=$null; $global:lockReleaseAfter=0; $env:CISCO_DEF_DOMAIN=''; $env:INTERNAL_IP4_MTU=''
+    $global:routes.Clear();$global:addresses.Clear();$global:dns=@();$global:failRoute=$false; $global:domain=''; $global:mtu=1400; $global:mtuWrites=0; $global:failMtu=$false; $global:ignoreMtu=$false; $global:interfaceMetric=3; $global:addressState='Preferred'; $global:dadWait=0; $global:dadReadyAfter=0; $global:kernelWrong=$false; $global:disconnected=@(); $global:otherPhysical=$null; $global:heldLock=$null; $global:lockReleaseAfter=0; $env:CISCO_DEF_DOMAIN=''; $env:INTERNAL_IP4_MTU='1400'
     $global:session=[Guid]::NewGuid()
     $global:physical=[pscustomobject]@{ifIndex=3;Name='Wi-Fi';InterfaceGuid=[Guid]::NewGuid();Status='Up'}
     $global:tunnel=[pscustomobject]@{ifIndex=9;Name=('XDVPN-'+$session.ToString('N').Substring(0,12));InterfaceGuid=[Guid]::NewGuid();Status='Up'}
@@ -286,6 +292,98 @@ try{
     Rejects { & $script -Mode Verify -Session $session } 'interface.configuration'
     Assert ($global:mtu -eq 1200) 'Verify changed MTU'
     & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS Verify detects MTU drift without mutation'
+
+    Reset; $env:INTERNAL_IP4_MTU='1280'; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtu -eq 1280 -and (Journal).Mtu -eq 1280) 'Connect ignored the negotiated MTU'
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS connect applies negotiated MTU to interface and journal'
+
+    Reset; $env:INTERNAL_IP4_MTU=''; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtu -eq 1400 -and (Journal).Mtu -eq 1400) 'Legacy connect MTU fallback changed'
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS initial connect retains its explicit legacy MTU fallback'
+
+    Reset; & $script -Mode Hook -Session $session
+    $beforeRoutes=$routes | ConvertTo-Json -Compress; $beforeAddresses=$addresses | ConvertTo-Json -Compress
+    $beforeDns=$dns -join ','; $beforeWrites=$global:mtuWrites
+    $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtu -eq 1280 -and (Journal).Mtu -eq 1280 -and $global:mtuWrites -eq $beforeWrites+1) 'Late DTLS MTU was not synchronized'
+    Assert (($routes | ConvertTo-Json -Compress) -eq $beforeRoutes -and ($addresses | ConvertTo-Json -Compress) -eq $beforeAddresses -and ($dns -join ',') -eq $beforeDns) 'MTU hook changed routes, addresses or DNS'
+    $beforeJournal=Get-Content -LiteralPath (Join-Path $env:ProgramData ('XDVPN\sessions\'+$session.ToString('D')+'\network.json')) -Raw
+    & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtuWrites -eq $beforeWrites+1 -and (Journal).Mtu -eq 1280) 'Identical MTU hook repeated interface mutation'
+    Assert ((Get-Content -LiteralPath (Join-Path $env:ProgramData ('XDVPN\sessions\'+$session.ToString('D')+'\network.json')) -Raw) -eq $beforeJournal) 'Identical MTU rewrote the journal'
+    $env:INTERNAL_IP4_MTU='1360'; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtu -eq 1360 -and (Journal).Mtu -eq 1360 -and $global:mtuWrites -eq $beforeWrites+2) 'Later MTU increase was not synchronized'
+    & $script -Mode Verify -Session $session
+    & $script -Mode Cleanup -Session $session
+    Assert ($routes.Count -eq 1 -and $addresses.Count -eq 0) 'MTU update broke exact cleanup'
+    $passed++; Write-Output 'PASS late MTU decrease/increase reads back and journals without reconfiguring unrelated network state; duplicate is read-only'
+
+    Reset; & $script -Mode Hook -Session $session
+    $env:reason='reconnect'; $env:INTERNAL_IP4_MTU='1320'; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtu -eq 1320 -and (Journal).Mtu -eq 1320) 'TLS reconnect used stale journal MTU'
+    $beforeWrites=$global:mtuWrites; & $script -Mode Hook -Session $session
+    Assert ((Ready) -and $global:mtuWrites -eq $beforeWrites) 'Unchanged reconnect repeated MTU mutation'
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS TLS reconnect adopts refreshed MTU and skips unchanged MTU writes'
+
+    foreach ($hookReason in @('mtu','reconnect')) {
+        foreach ($invalid in @('','575','9001','1280; secret','-1280')) {
+            Reset; & $script -Mode Hook -Session $session
+            $before=$routes | ConvertTo-Json -Compress; $beforeWrites=$global:mtuWrites
+            $env:reason=$hookReason; $env:INTERNAL_IP4_MTU=$invalid
+            Rejects { & $script -Mode Hook -Session $session } 'input.mtu'
+            Assert ($global:mtuWrites -eq $beforeWrites -and $global:mtu -eq 1400 -and (Journal).Mtu -eq 1400 -and ($routes | ConvertTo-Json -Compress) -eq $before) 'Invalid dynamic MTU changed interface, journal or routes'
+            & $script -Mode Cleanup -Session $session
+        }
+        $passed++; Write-Output ('PASS '+$hookReason+' rejects missing, out-of-range and malformed MTU before mutation')
+    }
+
+    foreach ($identityChange in @('index','overflow','guid','name','down')) {
+        Reset; & $script -Mode Hook -Session $session
+        $before=$routes | ConvertTo-Json -Compress; $beforeWrites=$global:mtuWrites
+        $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'; $expected='interface.identity'
+        switch ($identityChange) {
+            'index' { $env:TUNIDX='3' }
+            'overflow' { $env:TUNIDX='9999999999'; $expected='input.tunnel-index' }
+            'guid' { $tunnel.InterfaceGuid=[Guid]::NewGuid() }
+            'name' { $tunnel.Name='Foreign VPN' }
+            'down' { $tunnel.Status='Down' }
+        }
+        Rejects { & $script -Mode Hook -Session $session } $expected
+        Assert ($global:mtuWrites -eq $beforeWrites -and (Journal).Mtu -eq 1400 -and ($routes | ConvertTo-Json -Compress) -eq $before) 'MTU hook modified an unowned or unavailable interface'
+    }
+    $passed++; Write-Output 'PASS MTU hook checks index, GUID, session adapter name and availability before mutation'
+
+    Reset; & $script -Mode Hook -Session $session; $global:mtu=1350
+    $beforeWrites=$global:mtuWrites; $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'
+    Rejects { & $script -Mode Hook -Session $session } 'interface.configuration'
+    Assert ($global:mtu -eq 1350 -and $global:mtuWrites -eq $beforeWrites -and (Journal).Mtu -eq 1400) 'MTU hook adopted unexplained interface drift'
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS dynamic MTU refuses unexplained external interface drift'
+
+    Reset; & $script -Mode Hook -Session $session; $global:failMtu=$true
+    $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'
+    Rejects { & $script -Mode Hook -Session $session } 'interface.mtu-update'
+    Assert ($global:mtu -eq 1400 -and (Journal).Mtu -eq 1400) 'Failed interface write published new MTU'
+    $global:failMtu=$false; & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS rejected MTU write fails hook and keeps old journal expectation'
+
+    Reset; & $script -Mode Hook -Session $session; $global:ignoreMtu=$true
+    $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'
+    Rejects { & $script -Mode Hook -Session $session } 'interface.mtu-readback'
+    Assert ($global:mtu -eq 1400 -and (Journal).Mtu -eq 1400) 'Silent interface write failure published new MTU'
+    $global:ignoreMtu=$false; & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS MTU readback mismatch fails hook instead of falsely publishing consistency'
+
+    Reset; & $script -Mode Hook -Session $session
+    $staging=Join-Path $env:ProgramData ('XDVPN\sessions\'+$session.ToString('D')+'\network.json.new')
+    New-Item -Path $staging -ItemType Directory | Out-Null
+    $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'
+    Rejects { & $script -Mode Hook -Session $session } 'journal.mtu-save'
+    Assert ($global:mtu -eq 1280 -and (Journal).Mtu -eq 1400) 'Injected journal failure did not preserve prior durable state'
+    Remove-Item -LiteralPath $staging -Force
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS journal write failure after kernel MTU update revokes readiness and remains cleanable'
+
+    Reset; $env:reason='mtu'; $env:INTERNAL_IP4_MTU='1280'
+    Rejects { & $script -Mode Hook -Session $session } 'journal.version'
+    Assert ($global:mtuWrites -eq 0 -and $routes.Count -eq 1 -and $addresses.Count -eq 0) 'Pre-connect MTU hook mutated network'
+    & $script -Mode Cleanup -Session $session; $passed++; Write-Output 'PASS MTU hook requires an established owned tunnel'
 
     Reset; & $script -Mode Hook -Session $session; $global:kernelWrong=$true
     Rejects { & $script -Mode Verify -Session $session } 'route.selection'

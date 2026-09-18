@@ -193,7 +193,7 @@ static int apply_settings(struct engine *e) {
     for (int i = 0; i < 5; i++) if (args[i]) (*env)->DeleteLocalRef(env, args[i]);
     if (fd < 0) goto failure;
     int old = e->tun_fd;
-    e->tun_fd = fd; // setup_tun_fd assigns fd even on a nonblock error; worker always closes it.
+    e->tun_fd = fd; // Worker owns this duplicate even if native installation rejects it.
     int result = openconnect_setup_tun_fd(e->vpn, fd);
     if (old >= 0) close(old);
     if (result) goto failure;
@@ -201,8 +201,24 @@ static int apply_settings(struct engine *e) {
 failure:
     e->settings_failed = 1; return -EINVAL;
 }
+static void setup_tun(void *data) {
+    struct engine *e = data;
+    // Let OpenConnect finish the first DTLS attempt before establishing the system
+    // interface. This avoids rebuilding it immediately for the negotiated MTU.
+    if (apply_settings(e)) return;
+    e->connected = 1;
+    event(e, EV_CONNECTED);
+}
+static int mtu_changed(void *data) {
+    // Called synchronously before another TUN read. Failure makes the engine stop;
+    // it must never continue reading packets with a stale system-interface MTU.
+    return apply_settings(data);
+}
 static void reconnected(void *data) {
     struct engine *e = data;
+    // A transport can reconnect while the initial DTLS attempt is still delaying
+    // interface creation. Keep the setup callback in charge of that first TUN.
+    if (e->tun_fd < 0) { event(e, EV_TLS); return; }
     if (apply_settings(e)) { pthread_mutex_lock(&e->lock); e->cancelled = 1; char cmd = OC_CMD_CANCEL; (void)write(e->command_fd, &cmd, 1); pthread_mutex_unlock(&e->lock); }
     else { event(e, EV_TLS); event(e, EV_CONNECTED); }
 }
@@ -255,6 +271,8 @@ JNIEXPORT jintArray JNICALL Java_com_xd_vpn_android_engine_NativeEngine_run(JNIE
     openconnect_set_loglevel(e->vpn, PRG_INFO);
     openconnect_set_protect_socket_handler(e->vpn, protect_socket);
     openconnect_override_getaddrinfo(e->vpn, resolve);
+    openconnect_set_setup_tun_handler(e->vpn, setup_tun);
+    openconnect_set_mtu_changed_handler(e->vpn, mtu_changed);
     openconnect_set_reconnected_handler(e->vpn, reconnected);
     openconnect_set_stats_handler(e->vpn, stats);
     openconnect_set_reqmtu(e->vpn, 1400);
@@ -269,9 +287,8 @@ JNIEXPORT jintArray JNICALL Java_com_xd_vpn_android_engine_NativeEngine_run(JNIE
     pthread_mutex_lock(&e->lock); e->reconnect_pending = 0; pthread_mutex_unlock(&e->lock);
     result = openconnect_make_cstp_connection(e->vpn);
     if (result) goto finished;
-    if (apply_settings(e)) { result = -EINVAL; goto finished; }
+    event(e, EV_TLS);
     openconnect_setup_dtls(e->vpn, 30);
-    e->connected = 1; event(e, EV_TLS); event(e, EV_CONNECTED);
     int fresh = 0; // Set once mainloop must reconnect anyway, so a pending change needs no extra PAUSE.
     do {
         if (await_network(e)) { result = -EINTR; break; }

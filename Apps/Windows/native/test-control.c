@@ -84,6 +84,7 @@ int main(int argc, char **argv)
     /* NULL is a fake already-up TUN handle. Empty queues and max_qlen=0 prevent
      * all TUN I/O. Cleanup may CloseHandle(NULL); it never touches an adapter. */
     vpninfo->tun_fh = NULL;
+    vpninfo->ip_info.mtu = vpninfo->tun_mtu = 1400;
     vpninfo->tun_monitored = 0;
     vpninfo->max_qlen = 0;
     vpninfo->dtls_state = DTLS_DISABLED;
